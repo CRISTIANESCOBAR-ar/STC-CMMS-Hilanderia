@@ -38,7 +38,6 @@ const handleLogout = async () => {
         <router-link to="/jefe" class="hover:text-blue-300 font-medium px-2 py-1 rounded" active-class="bg-gray-900 ring-1 ring-gray-700">Jefe Mantenimiento</router-link>
       </div>
       <div class="flex items-center space-x-4">
-        <router-link to="/init" class="hover:text-amber-300 text-amber-500 text-sm px-2 py-1 font-bold">⚙️ Poblar BD</router-link>
         <span class="text-xs text-gray-400 hidden sm:inline-block">{{ user.isAnonymous ? 'Invitado' : user.email }}</span>
         <button @click="handleLogout" class="text-sm bg-red-600 hover:bg-red-700 px-3 py-1 rounded font-medium transition">Salir</button>
       </div>

@@ -1,5 +1,5 @@
 import { collection, addDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
 
@@ -10,25 +10,65 @@ export const mantenimientoService = {
    * Crea una nueva novedad en Firestore y sube foto si existe.
    * @param {Object} datos - Datos de la novedad (maquina, critico, etc)
    * @param {File} [foto] - Archivo de imagen opcional
+   * @param {Function} [onProgress] - Callback opcional para seguimiento (recibe %)
    */
-  async crearNovedad(datos, foto = null) {
+  async crearNovedad(datos, foto = null, onProgress = null) {
     try {
       let fotoUrl = null;
 
       if (foto) {
         // Generar un nombre único para la imagen
-        const fileName = `${Date.now()}_${foto.name}`;
+        const fileName = `${Date.now()}_${foto.name.replace(/\s+/g, '_')}`;
         const storageRef = ref(storage, `novedades/${fileName}`);
         
-        // Subir a Storage
-        const snapshot = await uploadBytes(storageRef, foto);
-        fotoUrl = await getDownloadURL(snapshot.ref);
+        try {
+          // Subir a Storage con seguimiento de progreso y timeout
+          const uploadTask = uploadBytesResumable(storageRef, foto);
+
+          return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+              uploadTask.cancel();
+              reject(new Error("TIEMPO EXCEDIDO: La subida no inició o la red está bloqueada. Verifica si tienes acceso a Firebase Storage en esta red."));
+            }, 30000);
+
+            uploadTask.on('state_changed', 
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                if (onProgress) onProgress(Math.round(progress));
+              }, 
+              (error) => {
+                clearTimeout(timeoutId);
+                console.error("Error en uploadTask:", error);
+                reject(error);
+              }, 
+              async () => {
+                clearTimeout(timeoutId);
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                fotoUrl = downloadURL;
+                
+                // Una vez obtenida la URL, procedemos a guardar el documento
+                const currentAuthUser = getAuth().currentUser;
+                const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+                  ...datos,
+                  fotoUrl,
+                  estado: 'pendiente', 
+                  createdAt: serverTimestamp(),
+                  creadoPorUid: currentAuthUser ? currentAuthUser.uid : null,
+                  creadoPorNombre: currentAuthUser?.displayName || 'Mecánico Anónimo',
+                  creadoPorEmail: currentAuthUser?.email || null
+                });
+                resolve(docRef.id);
+              }
+            );
+          });
+        } catch (uploadError) {
+          console.error("Error crítico en el flujo de subida:", uploadError);
+          throw uploadError;
+        }
       }
 
-      // Guardar en Firestore
-      // Recuperar usuario actual de firebase auth
+      // Si no hay foto, guardamos directamente
       const currentAuthUser = getAuth().currentUser;
-
       const docRef = await addDoc(collection(db, COLLECTION_NAME), {
         ...datos,
         fotoUrl,

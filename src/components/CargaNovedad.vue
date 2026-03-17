@@ -1,18 +1,25 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
-import { UploadCloud, CheckCircle } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Settings } from 'lucide-vue-next';
+
+import { compressImage, formatSize } from '../utils/imageCompressor';
 
 const maquinas = ref([]);
-const maquinaSeleccionada = ref('');
+const tipoSeleccionado = ref('CARDA'); // Default
+const maquinaSeleccionadaId = ref('');
 const isCritico = ref(false);
 const observaciones = ref('');
 const imagenFile = ref(null);
+const imagenOriginalSize = ref(null);
 const imagenPreview = ref(null);
 const isSubmitting = ref(false);
+const uploadProgress = ref(0);
 const successMessage = ref('');
+const maquinasError = ref(false);
+const isCompressing = ref(false);
 
 // Fetch list of machines from Firestore on mount
 onMounted(async () => {
@@ -22,32 +29,67 @@ onMounted(async () => {
     querySnapshot.forEach((doc) => {
       lista.push({ id: doc.id, ...doc.data() });
     });
-    // Ordenar por número de máquina
-    maquinas.value = lista.sort((a,b) => a.maquina - b.maquina);
+    maquinas.value = lista;
+    maquinasError.value = false;
   } catch (error) {
     console.error("Error al cargar máquinas", error);
+    maquinasError.value = true;
   }
 });
 
-// Computed param for automatically showing the selected machine's details
-const detallesMaquina = computed(() => {
-  if (!maquinaSeleccionada.value) return null;
-  return maquinas.value.find(m => m.id === maquinaSeleccionada.value);
+// Filtrar máquinas por tipo y darles nombre descriptivo
+const maquinasFiltradas = computed(() => {
+  return maquinas.value
+    .filter(m => m.tipo.toUpperCase() === tipoSeleccionado.value)
+    .map(m => ({
+      ...m,
+      nombreDescriptivo: `${m.tipo} ${m.local_fisico}`
+    }))
+    .sort((a, b) => a.local_fisico - b.local_fisico);
 });
 
-const onFileChange = (e) => {
+// Reset machine selection when type changes
+watch(tipoSeleccionado, () => {
+  maquinaSeleccionadaId.value = '';
+});
+
+const detallesMaquina = computed(() => {
+  if (!maquinaSeleccionadaId.value) return null;
+  return maquinas.value.find(m => m.id === maquinaSeleccionadaId.value);
+});
+
+const onFileChange = async (e) => {
   const file = e.target.files[0];
   if (file) {
-    imagenFile.value = file;
-    // Crear preview
-    const reader = new FileReader();
-    reader.onload = e => imagenPreview.value = e.target.result;
-    reader.readAsDataURL(file);
+    try {
+      isCompressing.value = true;
+      imagenOriginalSize.value = file.size;
+      
+      // Limpiar preview anterior si existe para liberar RAM
+      if (imagenPreview.value && imagenPreview.value.startsWith('blob:')) {
+        URL.revokeObjectURL(imagenPreview.value);
+      }
+
+      // Comprimir imagen antes de procesarla
+      const compressed = await compressImage(file, { maxWidth: 1024, quality: 0.7 });
+      
+      imagenFile.value = compressed;
+      
+      // Crear preview eficiente (ObjectURL en lugar de DataURL Base64)
+      imagenPreview.value = URL.createObjectURL(compressed);
+      
+    } catch (err) {
+      console.error("Error comprimiendo imagen:", err);
+      imagenFile.value = file;
+      imagenPreview.value = URL.createObjectURL(file);
+    } finally {
+      isCompressing.value = false;
+    }
   }
 };
 
 const onSubmit = async () => {
-  if (!maquinaSeleccionada.value) {
+  if (!maquinaSeleccionadaId.value) {
     alert("Por favor seleccione una máquina");
     return;
   }
@@ -57,6 +99,7 @@ const onSubmit = async () => {
   }
 
   isSubmitting.value = true;
+  uploadProgress.value = 0;
   successMessage.value = '';
 
   try {
@@ -64,27 +107,36 @@ const onSubmit = async () => {
       maquinaId: detallesMaquina.value.id,
       numeroMaquina: detallesMaquina.value.maquina,
       tipoMaquina: detallesMaquina.value.tipo,
+      local_fisico: detallesMaquina.value.local_fisico,
       lado: detallesMaquina.value.lado,
       critico: isCritico.value,
       observaciones: observaciones.value
     };
 
-    await mantenimientoService.crearNovedad(datosNovedad, imagenFile.value);
+    // Pasamos el callback de progreso al servicio
+    await mantenimientoService.crearNovedad(datosNovedad, imagenFile.value, (prog) => {
+      uploadProgress.value = prog;
+    });
     
-    // Reset form on success
+    uploadProgress.value = 100;
     successMessage.value = "Novedad reportada correctamente.";
-    maquinaSeleccionada.value = '';
+    
+    // Limpiar imagen y liberar memoria
+    if (imagenPreview.value && imagenPreview.value.startsWith('blob:')) {
+      URL.revokeObjectURL(imagenPreview.value);
+    }
+    
+    maquinaSeleccionadaId.value = '';
     isCritico.value = false;
     observaciones.value = '';
     imagenFile.value = null;
     imagenPreview.value = null;
 
-    // Ocultar mensaje luego de unos segundos
     setTimeout(() => { successMessage.value = ''; }, 4000);
 
   } catch (error) {
-    console.error(error);
-    alert("Error al guardar la novedad");
+    console.error("Error detallado en onSubmit:", error);
+    alert("Error al guardar la novedad: " + (error.message || "Error desconocido"));
   } finally {
     isSubmitting.value = false;
   }
@@ -94,9 +146,14 @@ const onSubmit = async () => {
 <template>
   <div class="min-h-screen bg-gray-50 pb-10">
     <!-- Header -->
-    <header class="bg-blue-600 text-white p-5 shadow-md rounded-b-2xl mb-6 sticky top-0 z-10">
-      <h1 class="text-2xl font-bold tracking-tight">Reportar Falla</h1>
-      <p class="text-blue-100 text-sm mt-1">Perfil Mecánico</p>
+    <header class="bg-blue-600 text-white p-5 shadow-md rounded-b-3xl mb-6 sticky top-0 z-10 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Reportar Falla</h1>
+        <p class="text-blue-100 text-sm mt-1">Perfil Mecánico</p>
+      </div>
+      <div class="bg-white/20 p-2 rounded-full">
+        <Settings class="w-6 h-6 text-white" />
+      </div>
     </header>
 
     <main class="px-4 max-w-md mx-auto space-y-6">
@@ -106,30 +163,53 @@ const onSubmit = async () => {
         <span class="font-medium">{{ successMessage }}</span>
       </div>
 
-      <form @submit.prevent="onSubmit" class="space-y-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <!-- Error de Carga -->
+      <div v-if="maquinasError" class="bg-red-100 border border-red-200 text-red-800 p-4 rounded-xl flex items-center shadow-sm">
+        <span class="font-medium">⚠️ Error al conectar con la base de datos. Verifica los permisos de Firestore.</span>
+      </div>
+
+      <form @submit.prevent="onSubmit" class="space-y-6">
         
-        <!-- Seleccion Maquina -->
-        <div class="space-y-2">
+        <!-- Seleccion de Tipo (RadioButtons) -->
+        <div class="space-y-3">
+          <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider pl-1">Tipo de Máquina</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label v-for="tipo in ['CARDA', 'MANUAR', 'OPEN END']" :key="tipo" 
+              class="cursor-pointer group">
+              <input type="radio" v-model="tipoSeleccionado" :value="tipo" class="sr-only" />
+              <div 
+                class="py-3 text-center rounded-xl border-2 transition-all font-bold text-xs"
+                :class="tipoSeleccionado === tipo 
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-105' 
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-blue-200'">
+                {{ tipo }}
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Seleccion Maquina (Filtrado) -->
+        <div class="space-y-2 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
           <label class="block text-sm font-semibold text-gray-700">Seleccionar Máquina</label>
           <select 
-            v-model="maquinaSeleccionada" 
+            v-model="maquinaSeleccionadaId" 
             class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3.5 transition-colors">
-            <option value="" disabled>Seleccione...</option>
-            <option v-for="m in maquinas" :key="m.id" :value="m.id">
-              {{ m.maquina }} ({{ m.lado }})
+            <option value="" disabled>Elegir {{ tipoSeleccionado }}...</option>
+            <option v-for="m in maquinasFiltradas" :key="m.id" :value="m.id">
+              {{ m.nombreDescriptivo }} {{ m.lado !== 'U' ? '(' + m.lado + ')' : '' }}
             </option>
           </select>
         </div>
 
         <!-- Info Automática Máquina -->
-        <div v-if="detallesMaquina" class="bg-blue-50 text-blue-900 p-4 rounded-xl border border-blue-100 flex justify-between items-center text-sm font-medium">
+        <div v-if="detallesMaquina" class="bg-blue-50 text-blue-900 p-4 rounded-xl border border-blue-100 flex justify-between items-center text-sm font-medium animate-in fade-in slide-in-from-top-2">
           <div>
-            <span class="block text-xs text-blue-600/80 uppercase tracking-wide">Tipo</span>
-            <span>{{ detallesMaquina.tipo }}</span>
+            <span class="block text-xs text-blue-600/80 uppercase tracking-wide">ID Interno</span>
+            <span>{{ detallesMaquina.maquina }}</span>
           </div>
           <div class="text-right">
             <span class="block text-xs text-blue-600/80 uppercase tracking-wide">Lado / Físico</span>
-            <span>Lado {{ detallesMaquina.lado }} (Local {{ detallesMaquina.local_fisico }})</span>
+            <span>Local {{ detallesMaquina.local_fisico }}</span>
           </div>
         </div>
 
@@ -139,42 +219,54 @@ const onSubmit = async () => {
           <textarea 
             v-model="observaciones" 
             rows="3" 
-            placeholder="Describa el problema..."
-            class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3.5 transition-colors"></textarea>
+            placeholder="¿Qué está pasando?"
+            class="w-full bg-white border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3.5 shadow-sm"></textarea>
         </div>
 
         <!-- Subida de Imagen -->
         <div class="space-y-2">
            <label class="block text-sm font-semibold text-gray-700">Foto de Evidencia (Opcional)</label>
-           <!-- Capture from camera if on mobile -->
-           <label class="flex flex-col items-center justify-center w-full h-28 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition relative overflow-hidden">
+           <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-2xl cursor-pointer bg-white hover:bg-gray-50 transition relative overflow-hidden">
              
-             <!-- Preview image if exists -->
-             <img v-if="imagenPreview" :src="imagenPreview" class="absolute inset-0 w-full h-full object-cover opacity-60" />
+             <!-- Overlay de carga/compresión -->
+             <div v-if="isCompressing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                <p class="text-xs font-bold text-blue-600">Optimizando Foto...</p>
+             </div>
 
+             <img v-if="imagenPreview" :src="imagenPreview" class="absolute inset-0 w-full h-full object-cover opacity-60" />
              <div class="flex flex-col items-center justify-center pt-5 pb-6 relative z-10" :class="{'opacity-0': imagenPreview}">
-               <UploadCloud class="w-8 h-8 text-gray-400 mb-2" />
-               <p class="text-sm text-gray-500 font-medium">Toque para Tomar Foto</p>
+                <UploadCloud class="w-10 h-10 text-gray-400 mb-2" />
+                <p class="text-sm text-gray-500 font-bold">Capturar Imagen</p>
+                <p class="text-[10px] text-gray-400 mt-1">Se optimizará automáticamente</p>
              </div>
              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onFileChange" />
            </label>
            
-           <div v-if="imagenPreview" class="flex justify-between items-center px-1">
-             <span class="text-xs text-gray-500 truncate mr-2">{{ imagenFile?.name }}</span>
-             <button type="button" @click="imagenPreview=null; imagenFile=null" class="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded">Quitar</button>
+           <div v-if="imagenPreview" class="bg-gray-100 p-3 rounded-xl space-y-2 shadow-inner border border-gray-200">
+             <div class="flex justify-between items-center">
+                <div class="flex flex-col">
+                  <span class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">Tamaño Optimizado</span>
+                  <span class="text-xs font-bold text-green-600">{{ formatSize(imagenFile?.size) }}</span>
+                </div>
+                <div class="flex flex-col text-right">
+                  <span class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter text-right">Original</span>
+                  <span class="text-xs text-gray-400 line-through">{{ formatSize(imagenOriginalSize) }}</span>
+                </div>
+             </div>
+             <button type="button" @click="imagenPreview=null; imagenFile=null" class="w-full py-1 text-xs text-red-600 font-bold bg-white border border-red-100 rounded-lg shadow-sm">QUITAR FOTO</button>
            </div>
         </div>
 
-        <!-- Criticidad (Resaltado Rojo) -->
-        <label class="flex items-center p-4 border border-red-200 bg-red-50 rounded-xl cursor-pointer hover:bg-red-100 transition shadow-sm">
+        <!-- Criticidad -->
+        <label class="flex items-center p-4 border-2 border-red-100 bg-red-50/50 rounded-2xl cursor-pointer hover:bg-red-50 transition">
           <div class="flex-1">
-            <span class="block font-bold text-red-700 text-lg">Reporte Crítico</span>
-            <span class="text-sm text-red-600/80">Marcar si la máquina está parada</span>
+            <span class="block font-bold text-red-700 text-lg uppercase tracking-tight">Reporte Crítico</span>
+            <span class="text-xs text-red-600 font-medium">Urgencia inmediata</span>
           </div>
-          <!-- Toggle CSS Nativo -->
           <div class="relative">
             <input type="checkbox" v-model="isCritico" class="sr-only peer">
-            <div class="w-14 h-8 bg-red-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-7 after:w-7 after:transition-all peer-checked:bg-red-600 shadow-inner"></div>
+            <div class="w-14 h-8 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-7 after:w-7 after:transition-all peer-checked:bg-red-600"></div>
           </div>
         </label>
 
@@ -182,17 +274,15 @@ const onSubmit = async () => {
         <button 
           type="submit" 
           :disabled="isSubmitting"
-          class="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-xl text-lg px-5 py-4 text-center disabled:opacity-60 transition shadow-md active:scale-95 duration-150 flex justify-center items-center">
-          
-          <svg v-if="isSubmitting" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-
-          {{ isSubmitting ? 'Enviando Reporte...' : 'Enviar Reporte' }}
+          class="w-full text-white bg-blue-600 hover:bg-blue-700 py-4 rounded-2xl text-xl font-bold shadow-lg active:scale-95 transition disabled:opacity-50 relative overflow-hidden">
+          <div v-if="isSubmitting" class="absolute inset-0 bg-blue-800/30 transition-all" :style="{ width: uploadProgress + '%' }"></div>
+          <span class="relative z-10">
+            {{ isSubmitting ? `ENVIANDO ${uploadProgress}%...` : 'ENVIAR REPORTE' }}
+          </span>
         </button>
 
       </form>
     </main>
   </div>
 </template>
+

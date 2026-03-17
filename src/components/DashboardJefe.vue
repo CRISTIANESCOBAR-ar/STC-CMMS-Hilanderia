@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { mantenimientoService } from '../services/mantenimientoService';
+import { notificationService } from '../services/notificationService';
+import { auth } from '../firebase/config';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare } from 'lucide-vue-next';
 
 const novedades = ref([]);
@@ -9,11 +11,32 @@ const modalAprobacion = ref(false);
 const novedadActual = ref(null);
 const feedback = ref('');
 
-onMounted(() => {
+onMounted(async () => {
   // Suscripción en tiempo real a las novedades pendientes (estado != resuelto)
   unsubscribe = mantenimientoService.obtenerNovedadesPendientes((data) => {
+    // Detectar si hay una nueva falla crítica para notificar
+    const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
+    const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
+    
+    if (nuevasCriticas.length > antiguasCriticas.length) {
+      const nueva = nuevasCriticas[0]; // Tomamos la última
+      if (Notification.permission === 'granted') {
+        new Notification('¡ALERTA CRÍTICA!', {
+          body: `Máquina ${nueva.numeroMaquina}: ${nueva.observaciones}`,
+          icon: '/icons/icon-192x192.png'
+        });
+      }
+    }
+    
     novedades.value = data;
   });
+
+  // Si hay un usuario logueado (Jefe), registrar token para notificaciones push
+  if (auth.currentUser) {
+    console.log('Usuario detectado en Dashboard, registrando token FCM...');
+    await notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid);
+    notificationService.escucharMensajesEnPrimerPlano();
+  }
 });
 
 onUnmounted(() => {

@@ -146,15 +146,8 @@ const onSubmit = async () => {
 <template>
   <div class="min-h-screen bg-gray-50 pb-10">
     <!-- Header -->
-    <header class="bg-blue-600 text-white p-5 shadow-md rounded-b-3xl mb-6 sticky top-0 z-10 flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Reportar Falla</h1>
-        <p class="text-blue-100 text-sm mt-1">Perfil Mecánico</p>
-      </div>
-      <div class="bg-white/20 p-2 rounded-full">
-        <Settings class="w-6 h-6 text-white" />
-      </div>
-    </header>
+    <!-- El header ahora se maneja globalmente en App.vue -->
+
 
     <main class="px-4 max-w-md mx-auto space-y-6">
       <!-- Success Message -->

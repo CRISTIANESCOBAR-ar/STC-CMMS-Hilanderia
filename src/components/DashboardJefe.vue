@@ -86,16 +86,12 @@ const aprobarNovedad = async (estado) => {
 
 <template>
   <div class="min-h-screen bg-gray-100 pb-10">
-    <!-- Header -->
-    <header class="bg-gray-900 text-white p-5 shadow-lg mb-6 sticky top-0 z-10 flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Panel de Control</h1>
-        <p class="text-gray-300 text-sm mt-1">Jefatura de Mantenimiento</p>
-      </div>
-      <div class="bg-red-600 px-3 py-1 rounded-full text-sm font-bold animate-pulse" v-if="novedades.some(n => n.critico && n.estado === 'pendiente')">
-        ¡ALERTA CRÍTICA!
-      </div>
-    </header>
+    <!-- Alerta Crítica Flotante (Opcional, ahora que el header es global) -->
+    <div v-if="novedades.some(n => n.critico && n.estado === 'pendiente')" 
+      class="bg-red-600 text-white text-[10px] font-black py-1 px-4 text-center uppercase tracking-widest sticky top-16 z-40 shadow-md">
+      ¡HAY FALLAS CRÍTICAS PENDIENTES!
+    </div>
+
 
     <main class="px-4 max-w-5xl mx-auto">
       

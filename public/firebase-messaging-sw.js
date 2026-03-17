@@ -1,14 +1,14 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Configuración de Firebase para el Service Worker
+// Configuración de Firebase para el Service Worker (Restaurada)
 firebase.initializeApp({
-  apiKey: "AIzaSyBvGndw1439F5H67u_fA0iTf54D_rW-e4", 
+  apiKey: "AIzaSyCyLlPtbuzD3zdkKf8tLu6uopM54JUzKFc", 
   authDomain: "stc-cmms-hilanderia.firebaseapp.com",
   projectId: "stc-cmms-hilanderia",
   storageBucket: "stc-cmms-hilanderia.firebasestorage.app",
-  messagingSenderId: "841499540051",
-  appId: "1:841499540051:web:1ec4668f4d96a9cf186da0"
+  messagingSenderId: "261217763477",
+  appId: "1:261217763477:web:5800682e1043e8e7b2db9c"
 });
 
 const messaging = firebase.messaging();

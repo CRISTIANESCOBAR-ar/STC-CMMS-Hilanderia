@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { notificationService } from '../services/notificationService';
 import { auth } from '../firebase/config';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare } from 'lucide-vue-next';
 
 const novedades = ref([]);
@@ -10,37 +11,81 @@ let unsubscribe = null;
 const modalAprobacion = ref(false);
 const novedadActual = ref(null);
 const feedback = ref('');
+const isLoading = ref(true);
+const errorCarga = ref(false);
 
-onMounted(async () => {
-  // Suscripción en tiempo real a las novedades pendientes (estado != resuelto)
-  unsubscribe = mantenimientoService.obtenerNovedadesPendientes((data) => {
-    // Detectar si hay una nueva falla crítica para notificar
-    const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
-    const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
-    
-    if (nuevasCriticas.length > antiguasCriticas.length) {
-      const nueva = nuevasCriticas[0]; // Tomamos la última
-      if (Notification.permission === 'granted') {
-        new Notification('¡ALERTA CRÍTICA!', {
-          body: `Máquina ${nueva.numeroMaquina}: ${nueva.observaciones}`,
-          icon: '/icons/icon-192x192.png'
-        });
-      }
+let authUnsubscribe = null;
+let timeoutId = null;
+
+const cargarDatos = () => {
+  isLoading.value = true;
+  errorCarga.value = false;
+  
+  if (unsubscribe) unsubscribe();
+  if (timeoutId) clearTimeout(timeoutId);
+
+  // Timeout de seguridad: si en 10 segundos no llegan datos, mostrar error
+  timeoutId = setTimeout(() => {
+    if (isLoading.value) {
+      console.warn('Timeout alcanzado, no se recibieron datos de Firestore.');
+      errorCarga.value = true;
+      isLoading.value = false;
     }
-    
-    novedades.value = data;
-  });
+  }, 10000);
 
-  // Si hay un usuario logueado (Jefe), registrar token para notificaciones push
-  if (auth.currentUser) {
-    console.log('Usuario detectado en Dashboard, registrando token FCM...');
-    await notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid);
-    notificationService.escucharMensajesEnPrimerPlano();
-  }
+  unsubscribe = mantenimientoService.obtenerNovedadesPendientes(
+    (data) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
+      const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
+      
+      if (nuevasCriticas.length > antiguasCriticas.length) {
+        const nueva = nuevasCriticas[0];
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification('¡ALERTA CRÍTICA!', {
+            body: `Máquina ${nueva.numeroMaquina}: ${nueva.observaciones}`,
+            icon: '/icons/icon-192x192.png'
+          });
+        }
+      }
+      
+      novedades.value = data;
+      isLoading.value = false;
+    },
+    (err) => {
+      if (timeoutId) clearTimeout(timeoutId);
+      console.error("Error en suscripción de Firestore:", err);
+      errorCarga.value = true;
+      isLoading.value = false;
+    }
+  );
+};
+
+onMounted(() => {
+  // Esperar a que Firebase Auth esté completamente resuelto antes de cargar datos.
+  // Esto previene la race condition en Android/PWA donde el auth state
+  // puede no estar listo cuando el componente se monta.
+  authUnsubscribe = onAuthStateChanged(auth, (user) => {
+    // Desuscribirse después de la primera resolución para no recargar al renovar token
+    if (authUnsubscribe) {
+      authUnsubscribe();
+      authUnsubscribe = null;
+    }
+
+    cargarDatos();
+
+    if (user) {
+      notificationService.solicitarPermisosYRegistrarToken(user.uid)
+        .then(() => notificationService.escucharMensajesEnPrimerPlano())
+        .catch(err => console.warn('FCM no disponible:', err));
+    }
+  });
 });
 
 onUnmounted(() => {
   if (unsubscribe) unsubscribe();
+  if (authUnsubscribe) authUnsubscribe();
+  if (timeoutId) clearTimeout(timeoutId);
 });
 
 const getCardColorClass = (novedad) => {
@@ -93,16 +138,44 @@ const aprobarNovedad = async (estado) => {
     </div>
 
 
-    <main class="px-4 max-w-5xl mx-auto">
+    <main class="px-4 max-w-5xl mx-auto pt-8">
       
-      <div v-if="novedades.length === 0" class="text-center py-20">
+      <!-- Estado de Carga -->
+      <div v-if="isLoading" class="text-center py-20">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p class="text-gray-500 font-medium">Cargando novedades...</p>
+      </div>
+
+      <!-- Error de Carga -->
+      <div v-else-if="errorCarga" class="text-center py-20">
+        <AlertTriangle class="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h2 class="text-2xl font-bold text-gray-800">Error al cargar datos</h2>
+        <p class="text-gray-500 mb-6">Verifica tu conexión o permisos del sistema.</p>
+        <button 
+          @click="cargarDatos" 
+          class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-blue-700 transition">
+          REINTENTAR
+        </button>
+      </div>
+
+      <!-- Sin Novedades -->
+      <div v-else-if="novedades.length === 0" class="text-center py-20">
         <CheckCircle class="w-16 h-16 text-green-400 mx-auto mb-4" />
         <h2 class="text-2xl font-bold text-gray-600">¡Todo en orden!</h2>
         <p class="text-gray-500">No hay novedades mecánicas pendientes.</p>
       </div>
 
-      <!-- Grid de Novedades -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Listado con Título -->
+      <div v-else>
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Novedades de Mecánicos</h2>
+          <span class="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+            {{ novedades.length }} PENDIENTES
+          </span>
+        </div>
+
+        <!-- Grid de Novedades -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div 
           v-for="novedad in novedades" 
           :key="novedad.id" 
@@ -143,7 +216,8 @@ const aprobarNovedad = async (estado) => {
           </div>
         </div>
       </div>
-    </main>
+    </div>
+  </main>
 
     <!-- Modal de Gestión -->
     <div v-if="modalAprobacion" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

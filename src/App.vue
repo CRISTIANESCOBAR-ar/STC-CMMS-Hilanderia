@@ -123,7 +123,7 @@ const pageTitle = computed(() => {
     </nav>
 
     <!-- Vistas dinámicas -->
-    <main :class="{'blur-[2px] pointer-events-none transition-all duration-300': isMenuOpen}">
+    <main :class="{'blur-[2px] pointer-events-none transition-all duration-300': isMenuOpen}" class="pt-4">
       <router-view></router-view>
     </main>
   </div>

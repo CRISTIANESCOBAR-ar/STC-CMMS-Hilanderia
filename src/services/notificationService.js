@@ -13,6 +13,10 @@ export const notificationService = {
     if (!messaging) return;
 
     try {
+      if (typeof Notification === 'undefined') {
+        console.warn('Este navegador no soporta notificaciones de escritorio.');
+        return;
+      }
       console.log('Solicitando permisos de notificación...');
       const permission = await Notification.requestPermission();
       

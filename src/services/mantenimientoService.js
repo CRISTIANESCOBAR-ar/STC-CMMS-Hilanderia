@@ -91,12 +91,10 @@ export const mantenimientoService = {
    * @param {Function} callback - Función que recibe las novedades cada vez que cambian
    * @returns {Function} - Función para desuscribirse (unsubscribe) del snapshot
    */
-  obtenerNovedadesPendientes(callback) {
+  obtenerNovedadesPendientes(callback, onError = null) {
     const q = query(
       collection(db, COLLECTION_NAME),
       where('estado', 'in', ['pendiente', 'en proceso']),
-      // Para usar resuelto necesitaríamos querys sin orderBy si queremos otro campo, pero mantenemos simple:
-      // Note: usar in limits queries, and "where != resuelto" would require index on estado.
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -105,16 +103,16 @@ export const mantenimientoService = {
         novedades.push({ id: doc.id, ...doc.data() });
       });
       
-      // Ordenamiento manual en cliente por fecha de creación (createdAt a veces llega crudo como pending en offline)
       novedades.sort((a, b) => {
         const timeA = a.createdAt?.toMillis() || Date.now();
         const timeB = b.createdAt?.toMillis() || Date.now();
-        return timeB - timeA; // más recientes primero
+        return timeB - timeA;
       });
 
       callback(novedades);
     }, (error) => {
       console.error("Error obteniendo novedades pendientes:", error);
+      if (onError) onError(error);
     });
 
     return unsubscribe;

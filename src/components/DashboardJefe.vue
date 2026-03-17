@@ -5,6 +5,7 @@ import { notificationService } from '../services/notificationService';
 import { auth } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare } from 'lucide-vue-next';
+import Swal from 'sweetalert2';
 
 const novedades = ref([]);
 let unsubscribe = null;
@@ -123,8 +124,9 @@ const aprobarNovedad = async (estado) => {
   try {
     await mantenimientoService.aprobarNovedad(novedadActual.value.id, estado, feedback.value);
     cerrarModal();
+    Swal.fire({ icon: 'success', title: '¡Estado actualizado!', timer: 1800, showConfirmButton: false, toast: true, position: 'top-end' });
   } catch (error) {
-    alert("Error al actualizar la novedad");
+    Swal.fire({ icon: 'error', title: 'Error al actualizar', text: 'No se pudo cambiar el estado de la novedad.' });
   }
 };
 </script>

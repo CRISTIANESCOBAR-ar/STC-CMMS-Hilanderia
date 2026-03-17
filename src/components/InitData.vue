@@ -37,7 +37,12 @@ const maquinasData = [
   { unidad: 5, maquina: 50407, local_fisico: 7, nro_tipo: 4, tipo: "OPEN END", nombre_maquina: "OPEN END R60", lado: "U" },
   { unidad: 5, maquina: 50408, local_fisico: 8, nro_tipo: 4, tipo: "OPEN END", nombre_maquina: "OPEN END RIETER R60", lado: "U" },
   { unidad: 5, maquina: 50409, local_fisico: 9, nro_tipo: 4, tipo: "OPEN END", nombre_maquina: "OPEN END RIETER R60", lado: "U" },
-  { unidad: 5, maquina: 50410, local_fisico: 10, nro_tipo: 4, tipo: "OPEN END", nombre_maquina: "OPEN END RIETER R60", lado: "U" }
+  { unidad: 5, maquina: 50410, local_fisico: 10, nro_tipo: 4, tipo: "OPEN END", nombre_maquina: "OPEN END RIETER R60", lado: "U" },
+  { unidad: 5, maquina: 50101, local_fisico: 2, nro_tipo: 1, tipo: "APERTURA", nombre_maquina: "APERTURA 2", lado: "U" },
+  { unidad: 5, maquina: 50101, local_fisico: 3, nro_tipo: 1, tipo: "APERTURA", nombre_maquina: "APERTURA 3", lado: "U" },
+  { unidad: 5, maquina: 50701, local_fisico: 1, nro_tipo: 7, tipo: "FILTRO", nombre_maquina: "FILTRO 1", lado: "U" },
+  { unidad: 5, maquina: 50702, local_fisico: 2, nro_tipo: 7, tipo: "FILTRO", nombre_maquina: "FILTRO 2", lado: "U" },
+  { unidad: 5, maquina: 50703, local_fisico: 3, nro_tipo: 7, tipo: "FILTRO", nombre_maquina: "FILTRO 3", lado: "U" }
 ];
 
 const inicializarMaquinas = async () => {

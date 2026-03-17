@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck } from 'lucide-vue-next';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2 } from 'lucide-vue-next';
 
 const router = useRouter();
 const isAuthReady = ref(false);
@@ -35,6 +35,8 @@ const pageTitle = computed(() => {
   const path = router.currentRoute.value.path;
   if (path === '/') return 'Reportar Falla';
   if (path === '/jefe') return 'Panel de Control';
+  if (path === '/historico') return 'Historial de Novedades';
+  if (path === '/maquinas') return 'Gestión de Máquinas';
   if (path === '/login') return 'Ingreso al Sistema';
   return 'CMMS Santana';
 });
@@ -101,6 +103,26 @@ const pageTitle = computed(() => {
             >
               <ShieldCheck class="w-5 h-5 mr-4" />
               Jefe de Mantenimiento
+            </router-link>
+
+            <router-link 
+              to="/historico" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+            >
+              <History class="w-5 h-5 mr-4" />
+              Historial de Novedades
+            </router-link>
+
+            <router-link 
+              to="/maquinas" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
+            >
+              <Settings2 class="w-5 h-5 mr-4" />
+              Gestión de Máquinas
             </router-link>
 
             <div class="h-px bg-gray-800 my-4 mx-4"></div>

@@ -4,6 +4,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { UploadCloud, CheckCircle, Settings } from 'lucide-vue-next';
+import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
 
@@ -90,11 +91,11 @@ const onFileChange = async (e) => {
 
 const onSubmit = async () => {
   if (!maquinaSeleccionadaId.value) {
-    alert("Por favor seleccione una máquina");
+    Swal.fire({ icon: 'warning', title: 'Falta seleccionar', text: 'Por favor seleccione una máquina.', confirmButtonColor: '#2563eb' });
     return;
   }
   if (!observaciones.value) {
-    alert("Por favor ingrese las observaciones de la falla");
+    Swal.fire({ icon: 'warning', title: 'Falta descripción', text: 'Por favor ingrese las observaciones de la falla.', confirmButtonColor: '#2563eb' });
     return;
   }
 
@@ -136,7 +137,7 @@ const onSubmit = async () => {
 
   } catch (error) {
     console.error("Error detallado en onSubmit:", error);
-    alert("Error al guardar la novedad: " + (error.message || "Error desconocido"));
+    Swal.fire({ icon: 'error', title: 'Error al guardar', text: error.message || 'Error desconocido' });
   } finally {
     isSubmitting.value = false;
   }
@@ -166,8 +167,8 @@ const onSubmit = async () => {
         <!-- Seleccion de Tipo (RadioButtons) -->
         <div class="space-y-3">
           <label class="block text-sm font-bold text-gray-700 uppercase tracking-wider pl-1">Tipo de Máquina</label>
-          <div class="grid grid-cols-3 gap-2">
-            <label v-for="tipo in ['CARDA', 'MANUAR', 'OPEN END']" :key="tipo" 
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <label v-for="tipo in ['APERTURA', 'CARDA', 'MANUAR', 'OPEN END', 'FILTRO']" :key="tipo" 
               class="cursor-pointer group">
               <input type="radio" v-model="tipoSeleccionado" :value="tipo" class="sr-only" />
               <div 

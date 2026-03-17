@@ -119,6 +119,43 @@ export const mantenimientoService = {
   },
 
   /**
+   * Obtiene TODAS las novedades (histórico)
+   * @param {Function} callback - Función que recibe las novedades
+   */
+  obtenerHistorico(callback, onError = null) {
+    const q = query(
+      collection(db, COLLECTION_NAME)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const novedades = [];
+      snapshot.forEach((doc) => {
+        novedades.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Ordenar por fecha descendente (cliente)
+      novedades.sort((a, b) => {
+        const getTime = (val) => {
+          if (!val) return 0;
+          if (typeof val.toMillis === 'function') return val.toMillis();
+          if (val instanceof Date) return val.getTime();
+          if (typeof val === 'number') return val;
+          if (typeof val === 'string') return new Date(val).getTime();
+          return 0;
+        };
+        return getTime(b.createdAt) - getTime(a.createdAt);
+      });
+
+      callback(novedades);
+    }, (error) => {
+      console.error("Error obteniendo histórico:", error);
+      if (onError) onError(error);
+    });
+
+    return unsubscribe;
+  },
+
+  /**
    * Actualiza el estado de una novedad y agrega feedback del jefe.
    * @param {string} id - ID del documento en Firestore
    * @param {string} estado - Nuevo estado ('en proceso' o 'resuelto')

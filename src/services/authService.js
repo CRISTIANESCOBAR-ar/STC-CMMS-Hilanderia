@@ -62,15 +62,25 @@ export const authService = {
    */
   async getUsuarioRole(uid) {
     if (!uid) return null;
+    
+    // Si Firestore se cuelga (común en móviles/PWA con mala red), 
+    // no podemos dejar al usuario bloqueado para siempre.
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout obteniendo rol")), 10000)
+    );
+
     try {
       const userRef = doc(db, 'usuarios', uid);
-      const userSnap = await getDoc(userRef);
+      const fetchPromise = getDoc(userRef);
+      
+      const userSnap = await Promise.race([fetchPromise, timeoutPromise]);
+      
       if (userSnap.exists()) {
         return userSnap.data().role;
       }
-      return 'mecanico'; // Fallback
+      return 'mecanico'; 
     } catch (e) {
-      console.error("Error obteniendo rol:", e);
+      console.error("Error obteniendo rol (usando fallback):", e);
       return 'mecanico';
     }
   },

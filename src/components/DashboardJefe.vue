@@ -145,9 +145,15 @@ const aprobarNovedad = async (estado) => {
     <main class="px-4 max-w-5xl mx-auto pt-4 lg:pt-8">
       
       <!-- Estado de Carga -->
-      <div v-if="isLoading" class="text-center py-20">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p class="text-gray-500 font-medium">Cargando novedades...</p>
+      <div v-if="isLoading" class="text-center py-20 flex flex-col items-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+        <p class="text-gray-500 font-medium mb-4">Cargando novedades...</p>
+        <div class="space-y-2">
+          <button @click="cargarDatos" class="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all">
+            FORZAR REINTENTO
+          </button>
+          <p class="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Build: 18/03 11:15</p>
+        </div>
       </div>
 
       <!-- Error de Carga -->

@@ -203,7 +203,7 @@ const getStatusClass = (estado) => {
 
 <template>
   <div class="h-[calc(100vh-64px)] bg-gray-50 flex flex-col overflow-hidden">
-    <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-1 lg:pt-4 pb-2 flex flex-col space-y-2 lg:space-y-3 overflow-hidden">
+    <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-0 lg:pt-4 pb-2 flex flex-col space-y-1 lg:space-y-3 overflow-hidden">
       
       <!-- Portal para Navbar (Desktop) -->
       <Teleport to="#navbar-actions">
@@ -253,8 +253,8 @@ const getStatusClass = (estado) => {
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) - Sticky para tener exportar siempre a mano -->
-      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-[65px] z-20">
+      <!-- Header Local (Solo Móvil) - Sticky -->
+      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-0 z-20">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <div class="bg-blue-600 p-1.5 rounded-lg text-white">

@@ -7,11 +7,19 @@ import {
   CheckCircle, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronsLeft,
+  ChevronsRight,
   Search,
   Filter,
   Image as ImageIcon,
-  History
+  History,
+  FileSpreadsheet
 } from 'lucide-vue-next';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/animations/shift-away.css';
 
 const novedades = ref([]);
 const isLoading = ref(true);
@@ -19,7 +27,7 @@ const errorCarga = ref(false);
 let unsubscribe = null;
 
 // Paginación y Filtros
-const itemsPerPage = ref(10);
+const itemsPerPage = ref(25);
 const currentPage = ref(1);
 const searchQuery = ref('');
 const statusFilter = ref('todos');
@@ -33,10 +41,8 @@ const cargarDatos = () => {
   if (unsubscribe) unsubscribe();
   if (timeoutId) clearTimeout(timeoutId);
 
-  // Timeout de seguridad: if in 10s no data arrives, show error
   timeoutId = setTimeout(() => {
     if (isLoading.value) {
-      console.warn('Timeout alcanzado en Histórico');
       errorCarga.value = true;
       isLoading.value = false;
     }
@@ -50,7 +56,6 @@ const cargarDatos = () => {
     },
     (err) => {
       if (timeoutId) clearTimeout(timeoutId);
-      console.error("Error al cargar historial:", err);
       errorCarga.value = true;
       isLoading.value = false;
     }
@@ -59,6 +64,14 @@ const cargarDatos = () => {
 
 onMounted(() => {
   cargarDatos();
+  // Inicializar tooltips con un pequeño delay para asegurar que los elementos Teleport estén listos
+  setTimeout(() => {
+    tippy('[data-tippy-content]', {
+      animation: 'shift-away',
+      theme: 'translucent',
+      duration: [200, 150]
+    });
+  }, 500);
 });
 
 onUnmounted(() => {
@@ -66,68 +79,114 @@ onUnmounted(() => {
   if (timeoutId) clearTimeout(timeoutId);
 });
 
-// Lógica de Filtrado
 const novedadesFiltradas = computed(() => {
   const search = searchQuery.value.toLowerCase();
-  
   return novedades.value.filter(n => {
-    // Aseguramos que los valores sean strings para evitar errores de tipo
     const numMaq = String(n.numeroMaquina || '').toLowerCase();
     const tipoMaq = String(n.tipoMaquina || '').toLowerCase();
     const obs = String(n.observaciones || '').toLowerCase();
-
-    const matchesSearch = 
-      numMaq.includes(search) ||
-      tipoMaq.includes(search) ||
-      obs.includes(search);
-    
+    const matchesSearch = numMaq.includes(search) || tipoMaq.includes(search) || obs.includes(search);
     const matchesStatus = statusFilter.value === 'todos' || n.estado === statusFilter.value;
-    
     return matchesSearch && matchesStatus;
   });
 });
 
-// Resetear a página 1 al filtrar
 watch([searchQuery, statusFilter], () => {
   currentPage.value = 1;
 });
 
-// Lógica de Paginación
-const totalPages = computed(() => Math.ceil(novedadesFiltradas.value.length / itemsPerPage.value));
+const totalPages = computed(() => Math.ceil(novedadesFiltradas.value.length / itemsPerPage.value) || 1);
 const paginatedNovedades = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value;
-  const end = start + itemsPerPage.value;
-  return novedadesFiltradas.value.slice(start, end);
+  return novedadesFiltradas.value.slice(start, start + itemsPerPage.value);
 });
 
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) currentPage.value++;
-};
+const goToFirst = () => { currentPage.value = 1; };
+const goToPrev = () => { if (currentPage.value > 1) currentPage.value--; };
+const goToNext = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
+const goToLast = () => { currentPage.value = totalPages.value; };
 
-const prevPage = () => {
-  if (currentPage.value > 1) currentPage.value--;
+const exportToExcel = async () => {
+  if (novedadesFiltradas.value.length === 0) return;
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Historial Novedades');
+
+  // Configurar Columnas
+  worksheet.columns = [
+    { header: 'FECHA', key: 'fecha', width: 22 },
+    { header: 'TIPO', key: 'tipo', width: 15 },
+    { header: 'MÁQUINA', key: 'maquina', width: 12 },
+    { header: 'LADO', key: 'lado', width: 8 },
+    { header: 'OBSERVACIONES', key: 'observaciones', width: 60 },
+    { header: 'ESTADO', key: 'estado', width: 15 }
+  ];
+
+  // Agregar Datos
+  novedadesFiltradas.value.forEach(n => {
+    worksheet.addRow({
+      fecha: formatDate(n.createdAt),
+      tipo: n.tipoMaquina,
+      maquina: n.numeroMaquina,
+      lado: n.lado,
+      observaciones: n.observaciones,
+      estado: n.estado.toUpperCase()
+    });
+  });
+
+  // Estilo de Encabezado
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF2563EB' } // Blue-600
+  };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Bordes y Zebra Stripes
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+      };
+      if (rowNumber > 1) {
+        cell.font = { size: 10 };
+        cell.alignment = { wrapText: true, vertical: 'middle' };
+        if (rowNumber % 2 === 0) {
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF9FAFB' }
+          };
+        }
+      }
+    });
+  });
+
+  // Filtros Automáticos
+  worksheet.autoFilter = 'A1:F1';
+
+  // Generar y Descargar
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `Historial_STC_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
 const formatDate = (val) => {
   if (!val) return '---';
-  
   let date;
-  if (typeof val.toDate === 'function') {
-    date = val.toDate();
-  } else if (val instanceof Date) {
-    date = val;
-  } else if (typeof val === 'number' || typeof val === 'string') {
-    date = new Date(val);
-  } else {
-    return 'Fecha inválida';
-  }
+  if (typeof val.toDate === 'function') date = val.toDate();
+  else if (val instanceof Date) date = val;
+  else if (typeof val === 'number' || typeof val === 'string') date = new Date(val);
+  else return '---';
 
   return date.toLocaleString('es-AR', { 
-    day: '2-digit', 
-    month: '2-digit', 
-    year: '2-digit', 
-    hour: '2-digit', 
-    minute: '2-digit' 
+    day: '2-digit', month: '2-digit', year: '2-digit', 
+    hour: '2-digit', minute: '2-digit' 
   });
 };
 
@@ -142,198 +201,192 @@ const getStatusClass = (estado) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-20">
-    <main class="max-w-7xl mx-auto px-4 pt-6 space-y-6">
+  <div class="h-[calc(100vh-64px)] bg-gray-50 flex flex-col overflow-hidden">
+    <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-4 pb-2 flex flex-col space-y-3 overflow-hidden">
       
-      <!-- Encabezado con Filtros -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-        <div class="flex items-center space-x-3">
-          <div class="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-200 text-white">
-            <History class="w-6 h-6" />
+      <!-- Portal para Navbar (Desktop) -->
+      <Teleport to="#navbar-actions">
+        <div class="flex items-center w-full gap-4">
+          <!-- Título (Desktop) -->
+          <div class="flex items-center space-x-3 shrink-0">
+            <div class="bg-blue-600 p-1.5 rounded-lg text-white">
+              <History class="w-4 h-4" />
+            </div>
+            <div class="hidden xl:block text-white">
+              <h1 class="text-sm font-black uppercase tracking-tight leading-none">Histórico</h1>
+              <p class="text-[8px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Novedades</p>
+            </div>
           </div>
-          <div>
-            <h1 class="text-xl font-black text-gray-800 uppercase tracking-tight leading-none">Histórico</h1>
-            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Novedades Mecánicas</p>
-          </div>
-        </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <!-- Buscador -->
-          <div class="relative flex-1 min-w-[200px]">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <!-- Buscador (Desktop) -->
+          <div class="relative flex-1 max-w-md mx-auto">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input 
-              v-model="searchQuery"
+              v-model="searchQuery" 
               type="text" 
-              placeholder="Buscar máquina o falla..."
-              class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+              placeholder="Buscar máquina o falla..." 
+              class="w-full pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-700 focus:bg-gray-700 focus:border-blue-500 rounded-lg text-xs text-gray-200 outline-none transition-all placeholder:text-gray-500" 
             />
           </div>
 
-          <!-- Filtro de Estado -->
-          <select 
-            v-model="statusFilter"
-            class="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-          >
-            <option value="todos">Todos los estados</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="en proceso">En proceso</option>
-            <option value="resuelto">Resuelto</option>
-          </select>
+          <!-- Filtro (Desktop) -->
+          <div class="flex items-center gap-2 shrink-0">
+            <select 
+              v-model="statusFilter"
+              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold uppercase rounded-lg px-3 py-1.5 focus:border-blue-500 outline-none transition-all"
+            >
+              <option value="todos">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en proceso">En proceso</option>
+              <option value="resuelto">Resuelto</option>
+            </select>
+            
+            <button 
+              @click="exportToExcel"
+              data-tippy-content="Exportar a Excel"
+              class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-900/40 transition-all active:scale-95"
+            >
+              <FileSpreadsheet class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- Header Local (Solo Móvil) -->
+      <div class="lg:hidden bg-white p-3 rounded-xl shadow-sm border border-gray-100 shrink-0 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <div class="bg-blue-600 p-1.5 rounded-lg text-white">
+              <History class="w-4 h-4" />
+            </div>
+            <h1 class="text-sm font-black text-gray-800 uppercase tracking-tight">Histórico</h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-[10px] font-bold uppercase rounded-lg px-2 py-1 outline-none">
+              <option value="todos">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en proceso">En proceso</option>
+              <option value="resuelto">Resuelto</option>
+            </select>
+            <button 
+              @click="exportToExcel" 
+              data-tippy-content="Exportar a Excel"
+              class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-sm active:scale-95 transition-all"
+            >
+              <FileSpreadsheet class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div class="relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none" />
         </div>
       </div>
 
-      <!-- Estado de Carga / Error -->
-      <div v-if="isLoading" class="flex flex-col items-center justify-center py-20">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p class="text-gray-500 font-medium">Cargando registros...</p>
-      </div>
-
-      <div v-else-if="errorCarga" class="bg-red-50 text-red-700 p-8 rounded-2xl border border-red-100 text-center">
-        <AlertTriangle class="w-12 h-12 mx-auto mb-3 opacity-50" />
-        <h2 class="font-bold text-lg">No se pudo cargar el historial</h2>
-        <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-xl font-bold shadow-md">REINTENTAR</button>
-      </div>
-
-      <div v-else-if="novedadesFiltradas.length === 0" class="bg-white p-20 rounded-2xl border border-gray-100 text-center shadow-sm">
-        <CheckCircle class="w-12 h-12 mx-auto mb-3 text-green-300" />
-        <p class="text-gray-500 font-medium">No se encontraron registros que coincidan con la búsqueda.</p>
-      </div>
-
       <!-- Contenido Principal -->
-      <div v-else class="space-y-4">
-        
-        <!-- VISTA DESKTOP (Tabla con Header Fijo) -->
-        <div class="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div class="max-h-[65vh] overflow-y-auto relative custom-scrollbar">
+      <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+        <p class="font-bold text-xs uppercase tracking-widest text-gray-400">Cargando historial...</p>
+      </div>
+
+      <div v-else-if="errorCarga" class="flex-1 flex flex-col items-center justify-center text-center p-8">
+        <AlertTriangle class="w-12 h-12 text-red-300 mb-3" />
+        <h2 class="font-black text-gray-800 uppercase text-sm">Error de conexión</h2>
+        <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg text-xs font-black shadow-lg">REINTENTAR</button>
+      </div>
+
+      <div v-else-if="novedadesFiltradas.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-lg border border-gray-100">
+        <CheckCircle class="w-12 h-12 text-gray-200 mb-3" />
+        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Sin resultados</p>
+      </div>
+
+      <template v-else>
+        <!-- TABLA DESKTOP -->
+        <div class="hidden md:flex flex-1 flex-col bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden min-h-0">
+          <div class="overflow-auto flex-1 min-h-0">
             <table class="w-full text-left border-collapse">
-              <thead class="sticky top-0 bg-gray-50 z-10 shadow-sm">
-                <tr class="text-[11px] font-bold text-gray-500 uppercase tracking-widest border-b border-gray-100">
-                  <th class="px-6 py-4">Fecha</th>
-                  <th class="px-6 py-4">Máquina</th>
-                  <th class="px-6 py-4">Lado</th>
-                  <th class="px-6 py-4">Observaciones</th>
-                  <th class="px-6 py-4">Estado</th>
-                  <th class="px-6 py-4">Imagen</th>
+              <thead class="sticky top-0 bg-gray-50 z-20 shadow-sm border-b border-gray-100">
+                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                  <th class="px-4 py-3 bg-gray-50">Fecha</th>
+                  <th class="px-4 py-3 bg-gray-50">Máquina</th>
+                  <th class="px-4 py-3 bg-gray-50">Lado</th>
+                  <th class="px-4 py-3 bg-gray-50">Observaciones</th>
+                  <th class="px-4 py-3 bg-gray-50">Estado</th>
+                  <th class="px-4 py-3 bg-gray-50 text-center">Foto</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
-                <tr v-for="n in paginatedNovedades" :key="n.id" class="hover:bg-blue-50/30 transition-colors group">
-                  <td class="px-6 py-4 text-xs font-medium text-gray-500 whitespace-nowrap">
-                    {{ formatDate(n.createdAt) }}
-                  </td>
-                  <td class="px-6 py-4">
+                <tr v-for="n in paginatedNovedades" :key="n.id" class="hover:bg-blue-50/50 transition-colors group">
+                  <td class="px-4 py-3 text-[10px] font-bold text-gray-400 whitespace-nowrap">{{ formatDate(n.createdAt) }}</td>
+                  <td class="px-4 py-3">
                     <div class="flex flex-col">
-                      <span class="text-sm font-bold text-gray-800">{{ n.numeroMaquina }}</span>
-                      <span class="text-[10px] text-gray-400 font-bold uppercase">{{ n.tipoMaquina }}</span>
+                      <span class="text-sm font-black text-gray-800">{{ n.numeroMaquina }}</span>
+                      <span class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{{ n.tipoMaquina }}</span>
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-sm font-bold text-gray-600">
-                    {{ n.lado }}
+                  <td class="px-4 py-3 text-xs font-black text-gray-600">{{ n.lado }}</td>
+                  <td class="px-4 py-3">
+                    <p class="text-xs text-gray-600 line-clamp-2 max-w-sm group-hover:line-clamp-none transition-all">{{ n.observaciones }}</p>
                   </td>
-                  <td class="px-6 py-4">
-                    <p class="text-sm text-gray-600 line-clamp-2 max-w-xs group-hover:line-clamp-none transition-all">
-                      {{ n.observaciones }}
-                    </p>
+                  <td class="px-4 py-3">
+                    <span class="px-2.5 py-1 text-[9px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
                   </td>
-                  <td class="px-6 py-4">
-                    <span 
-                      class="px-3 py-1 text-[10px] font-black uppercase rounded-full border"
-                      :class="getStatusClass(n.estado)"
-                    >
-                      {{ n.estado }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4">
-                    <a 
-                      v-if="n.fotoUrl" 
-                      :href="n.fotoUrl" 
-                      target="_blank"
-                      class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all"
-                    >
-                      <ImageIcon class="w-4 h-4" />
+                  <td class="px-4 py-3 text-center">
+                    <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-1.5 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-md inline-flex transition-all">
+                      <ImageIcon class="w-3.5 h-3.5" />
                     </a>
-                    <span v-else class="text-[10px] text-gray-300 font-bold uppercase">Sin foto</span>
+                    <span v-else class="text-[9px] text-gray-300 font-bold uppercase">---</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
+          
+          <!-- Paginación Desktop -->
+          <div class="px-4 py-2 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
+            <span class="text-[10px] text-gray-400 font-black uppercase tracking-widest">{{ novedadesFiltradas.length }} registros</span>
+            <div class="flex items-center space-x-1">
+              <button @click="goToFirst" :disabled="currentPage === 1" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronsLeft class="w-4 h-4" /></button>
+              <button @click="goToPrev" :disabled="currentPage === 1" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronLeft class="w-4 h-4" /></button>
+              <div class="px-3 text-xs font-black text-gray-600">Pág {{ currentPage }} / {{ totalPages }}</div>
+              <button @click="goToNext" :disabled="currentPage === totalPages" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronRight class="w-4 h-4" /></button>
+              <button @click="goToLast" :disabled="currentPage === totalPages" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronsRight class="w-4 h-4" /></button>
+            </div>
+          </div>
         </div>
 
-        <!-- VISTA MÓVIL (Tarjetas) -->
-        <div class="md:hidden space-y-4">
-          <div v-for="n in paginatedNovedades" :key="n.id" 
-            class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-3 active:scale-[0.98] transition-all"
-          >
+        <!-- TARJETAS MÓVIL (Con Scroll) -->
+        <div class="md:hidden flex-1 overflow-y-auto pr-1 space-y-3">
+          <div v-for="n in paginatedNovedades" :key="n.id" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-2">
             <div class="flex justify-between items-start">
-              <div class="flex items-center space-x-2">
-                <div class="w-2 h-2 rounded-full" :class="n.estado === 'resuelto' ? 'bg-green-500' : (n.estado === 'en proceso' ? 'bg-yellow-500' : 'bg-red-500')"></div>
-                <span class="text-xs font-black text-gray-800 uppercase tracking-tight">{{ n.numeroMaquina }} ({{ n.lado }})</span>
-              </div>
+              <span class="text-xs font-black text-gray-800 uppercase">{{ n.numeroMaquina }} ({{ n.lado }})</span>
               <span class="text-[9px] font-bold text-gray-400 uppercase">{{ formatDate(n.createdAt) }}</span>
             </div>
-            
-            <p class="text-sm text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100 italic">
-              "{{ n.observaciones }}"
-            </p>
-
-            <div class="flex items-center justify-between pt-2">
-              <span 
-                class="px-3 py-1 text-[9px] font-black uppercase rounded-full border"
-                :class="getStatusClass(n.estado)"
-              >
-                {{ n.estado }}
-              </span>
-              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+            <p class="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
+            <div class="flex items-center justify-between pt-1">
+              <span class="px-2 py-0.5 text-[8px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
+              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-[9px] font-black text-blue-600 uppercase tracking-widest">
                 <ImageIcon class="w-3 h-3 mr-1" /> FOTO
               </a>
             </div>
           </div>
-        </div>
-
-        <!-- Paginación -->
-        <div class="flex items-center justify-between bg-white px-4 py-4 rounded-2xl shadow-sm border border-gray-100">
-          <p class="text-xs font-bold text-gray-400 uppercase">
-            {{ (currentPage - 1) * itemsPerPage + 1 }}-{{ Math.min(currentPage * itemsPerPage, novedadesFiltradas.length) }} de {{ novedadesFiltradas.length }}
-          </p>
-          <div class="flex space-x-2">
-            <button 
-              @click="prevPage" 
-              :disabled="currentPage === 1"
-              class="p-2 border border-gray-100 rounded-xl disabled:opacity-20 hover:bg-gray-50 transition"
-            >
-              <ChevronLeft class="w-5 h-5 text-gray-600" />
-            </button>
-            <div class="flex items-center px-4 font-black text-sm text-gray-800">
-              {{ currentPage }} / {{ totalPages || 1 }}
-            </div>
-            <button 
-              @click="nextPage" 
-              :disabled="currentPage === totalPages"
-              class="p-2 border border-gray-100 rounded-xl disabled:opacity-20 hover:bg-gray-50 transition"
-            >
-              <ChevronRight class="w-5 h-5 text-gray-600" />
-            </button>
+          
+          <!-- Paginación Móvil -->
+          <div class="flex items-center justify-center space-x-2 py-2">
+            <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 bg-white rounded-lg border border-gray-200 disabled:opacity-30"><ChevronLeft class="w-4 h-4" /></button>
+            <span class="text-xs font-black text-gray-600">{{ currentPage }} / {{ totalPages }}</span>
+            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 bg-white rounded-lg border border-gray-200 disabled:opacity-30"><ChevronRight class="w-4 h-4" /></button>
           </div>
         </div>
-
-      </div>
+      </template>
     </main>
   </div>
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+/* Elimina scrollbars pero permite scroll si es necesario (o deja el nativo moderno) */
+main {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 </style>

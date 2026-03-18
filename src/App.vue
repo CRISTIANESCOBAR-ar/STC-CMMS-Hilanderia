@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2 } from 'lucide-vue-next';
@@ -9,26 +9,44 @@ const isAuthReady = ref(false);
 const user = ref(null);
 const isMenuOpen = ref(false);
 
+const closeMenu = () => {
+  isMenuOpen.value = false;
+};
+
+// Cerrar con ESC
+const handleKeydown = (e) => {
+  if (e.key === 'Escape' && isMenuOpen.value) {
+    closeMenu();
+  }
+};
+
+watch(isMenuOpen, (val) => {
+  if (val) {
+    window.addEventListener('keydown', handleKeydown);
+  } else {
+    window.removeEventListener('keydown', handleKeydown);
+  }
+});
+
 onMounted(() => {
   authService.observarEstado((currentUser) => {
     user.value = currentUser;
     isAuthReady.value = true;
     
-    // Simple redirect si detectamos cambio de estado
     if (!currentUser && router.currentRoute.value.meta.requiresAuth) {
       router.push('/login');
     }
   });
 });
 
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+});
+
 const handleLogout = async () => {
-  isMenuOpen.value = false;
+  closeMenu();
   await authService.cerrarSesion();
   router.push('/login');
-};
-
-const closeMenu = () => {
-  isMenuOpen.value = false;
 };
 
 const pageTitle = computed(() => {
@@ -52,21 +70,40 @@ const pageTitle = computed(() => {
   </div>
   
   <div v-else class="min-h-screen bg-transparent">
+    <!-- Overlay de cierre (Click-away) -->
+    <transition
+      enter-active-class="transition-opacity duration-300"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition-opacity duration-200"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div 
+        v-if="isMenuOpen" 
+        @click="closeMenu"
+        class="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+      ></div>
+    </transition>
+
     <!-- Barra de Navegación Global con Menú Hamburguesa -->
     <nav v-if="user" class="bg-gray-900 text-white shadow-xl sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
         <!-- Logo y Nombre -->
-        <div class="flex items-center space-x-3">
-          <div class="bg-white p-0.5 rounded-lg overflow-hidden flex items-center justify-center">
+        <div class="flex items-center space-x-3 shrink-0">
+          <div class="bg-white p-0.5 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
             <img src="/LogoSantana.jpg" class="h-8 w-auto object-contain" alt="Logo" />
           </div>
-          <span class="font-bold text-lg tracking-tight truncate max-w-[180px] sm:max-w-none">{{ pageTitle }}</span>
+          <span v-if="!['/maquinas', '/historico'].includes(router.currentRoute.value.path)" class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none">{{ pageTitle }}</span>
         </div>
+
+        <!-- Portales para acciones (Solo Desktop) -->
+        <div id="navbar-actions" class="hidden lg:flex flex-1 mx-6 items-center justify-center"></div>
 
         <!-- Botón Hamburguesa -->
         <button 
           @click="isMenuOpen = !isMenuOpen"
-          class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 transition-all focus:outline-none ring-1 ring-gray-700"
+          class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 transition-all focus:outline-none ring-1 ring-gray-700 shrink-0"
           :aria-label="isMenuOpen ? 'Cerrar menú' : 'Abrir menú'"
         >
           <Menu v-if="!isMenuOpen" class="w-6 h-6" />

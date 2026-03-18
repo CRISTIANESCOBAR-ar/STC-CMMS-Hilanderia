@@ -276,20 +276,24 @@ const exportToExcel = async () => {
       <template v-else>
         <div v-if="viewMode === 'cards'" class="flex-1 overflow-y-auto pr-1">
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-            <div v-for="m in paginatedMaquinas" :key="m.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex justify-between items-start group hover:border-indigo-200 transition-all">
-              <div class="space-y-1">
+            <div v-for="m in paginatedMaquinas" :key="m.id" class="relative bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col group hover:border-indigo-200 transition-all min-h-[90px]">
+              <!-- Cuerpo Principal -->
+              <div class="space-y-1 flex-1 pr-12">
                 <div class="flex items-center space-x-2">
-                  <span class="px-2 py-0.5 bg-gray-100 text-[10px] font-black text-gray-500 rounded uppercase">{{ m.tipo }}</span>
-                  <span class="text-base font-black text-gray-800">{{ m.maquina }}</span>
+                  <span class="px-1.5 py-0.5 bg-gray-100 text-[9px] font-black text-gray-500 rounded uppercase shrink-0">{{ m.tipo }}</span>
+                  <span class="text-sm font-black text-gray-800 truncate">{{ m.maquina }}</span>
                 </div>
-                <p class="text-sm font-bold text-gray-600">{{ m.nombre_maquina || 'Sin nombre' }}</p>
-                <div class="flex space-x-3 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                  <span>Local: {{ m.local_fisico }}</span><span>Lado: {{ m.lado }}</span>
+                <p class="text-xs font-bold text-gray-600 line-clamp-1 italic">{{ m.nombre_maquina || 'Sin nombre' }}</p>
+                <div class="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-gray-400 font-bold uppercase tracking-tight">
+                  <span class="shrink-0">Loc: {{ m.local_fisico }}</span>
+                  <span class="shrink-0">Lado: {{ m.lado }}</span>
                 </div>
               </div>
-              <div v-if="userRole === 'admin'" class="flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                <button @click="openEditModal(m)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-3.5 h-3.5" /></button>
-                <button @click="deleteMaquina(m.id)" class="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-3.5 h-3.5" /></button>
+              
+              <!-- Botones de Acción (Admin) - Posicionamiento controlado -->
+              <div v-if="userRole === 'admin'" class="absolute top-2 right-2 flex flex-col space-y-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                <button @click="openEditModal(m)" class="p-1 text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Edit3 class="w-3.5 h-3.5" /></button>
+                <button @click="deleteMaquina(m.id)" class="p-1 text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Trash2 class="w-3.5 h-3.5" /></button>
               </div>
             </div>
           </div>

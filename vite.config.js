@@ -8,4 +8,8 @@ export default defineConfig({
     vue(),
     tailwindcss(),
   ],
+  server: {
+    // Para desarrollo mobile
+    host: true,
+  },
 })

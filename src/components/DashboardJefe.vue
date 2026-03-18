@@ -17,26 +17,55 @@ const errorCarga = ref(false);
 
 let authUnsubscribe = null;
 let timeoutId = null;
+let reintentos = 0;
+const MAX_REINTENTOS = 2;
 
 const cargarDatos = () => {
   isLoading.value = true;
   errorCarga.value = false;
-  
-  if (unsubscribe) unsubscribe();
-  if (timeoutId) clearTimeout(timeoutId);
+  reintentos = 0;
+  _cargarDatos();
+};
 
-  // Timeout de seguridad: si en 10 segundos no llegan datos, mostrar error
+const _cargarDatos = () => {
+  // Limpiar suscripción anterior y timeout
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  }
+
+  // Timeout aumentado a 20 segundos para mobile y conexiones más lentas
   timeoutId = setTimeout(() => {
-    if (isLoading.value) {
-      console.warn('Timeout alcanzado, no se recibieron datos de Firestore.');
-      errorCarga.value = true;
-      isLoading.value = false;
+    if (isLoading.value && !novedades.value.length) {
+      console.warn('Timeout alcanzado (20s), no se recibieron datos de Firestore.');
+      
+      // Reintentar automáticamente hasta MAX_REINTENTOS
+      if (reintentos < MAX_REINTENTOS) {
+        reintentos++;
+        console.log(`Reintentando... (${reintentos}/${MAX_REINTENTOS})`);
+        setTimeout(_cargarDatos, 2000); // Esperar 2 segundos antes de reintentar
+      } else {
+        errorCarga.value = true;
+        isLoading.value = false;
+      }
     }
-  }, 10000);
+  }, 20000);
 
   unsubscribe = mantenimientoService.obtenerNovedadesPendientes(
     (data) => {
-      if (timeoutId) clearTimeout(timeoutId);
+      // Limpiar timeout solo si este callback es válido
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
+      // Reset reintentos si cargó correctamente
+      reintentos = 0;
+      
       const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
       const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
       
@@ -54,10 +83,21 @@ const cargarDatos = () => {
       isLoading.value = false;
     },
     (err) => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       console.error("Error en suscripción de Firestore:", err);
-      errorCarga.value = true;
-      isLoading.value = false;
+      
+      // Reintentar automáticamente hasta MAX_REINTENTOS
+      if (reintentos < MAX_REINTENTOS) {
+        reintentos++;
+        console.log(`Reintentando por error... (${reintentos}/${MAX_REINTENTOS})`);
+        setTimeout(_cargarDatos, 2000); // Esperar 2 segundos antes de reintentar
+      } else {
+        errorCarga.value = true;
+        isLoading.value = false;
+      }
     }
   );
 };
@@ -76,9 +116,19 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (unsubscribe) unsubscribe();
-  if (authUnsubscribe) authUnsubscribe();
-  if (timeoutId) clearTimeout(timeoutId);
+  // Limpieza completa de recursos
+  if (unsubscribe && typeof unsubscribe === 'function') {
+    unsubscribe();
+    unsubscribe = null;
+  }
+  if (authUnsubscribe && typeof authUnsubscribe === 'function') {
+    authUnsubscribe();
+    authUnsubscribe = null;
+  }
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  }
 });
 
 const getCardColorClass = (novedad) => {

@@ -63,24 +63,16 @@ const cargarDatos = () => {
 };
 
 onMounted(() => {
-  // Esperar a que Firebase Auth esté completamente resuelto antes de cargar datos.
-  // Esto previene la race condition en Android/PWA donde el auth state
-  // puede no estar listo cuando el componente se monta.
-  authUnsubscribe = onAuthStateChanged(auth, (user) => {
-    // Desuscribirse después de la primera resolución para no recargar al renovar token
-    if (authUnsubscribe) {
-      authUnsubscribe();
-      authUnsubscribe = null;
-    }
+  // Cargamos los datos directamente. Al estar protegida por el router y tener el delay 
+  // en el router guard, el usuario y su rol ya deberían estar listos.
+  cargarDatos();
 
-    cargarDatos();
-
-    if (user) {
-      notificationService.solicitarPermisosYRegistrarToken(user.uid)
-        .then(() => notificationService.escucharMensajesEnPrimerPlano())
-        .catch(err => console.warn('FCM no disponible:', err));
-    }
-  });
+  // Registrar servicios de notificación si hay usuario
+  if (auth.currentUser) {
+    notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid)
+      .then(() => notificationService.escucharMensajesEnPrimerPlano())
+      .catch(err => console.warn('FCM no disponible:', err));
+  }
 });
 
 onUnmounted(() => {

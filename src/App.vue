@@ -91,11 +91,20 @@ const pageTitle = computed(() => {
     <nav v-if="user" class="bg-gray-900 text-white shadow-xl sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
         <!-- Logo y Nombre -->
-        <div class="flex items-center space-x-3 shrink-0">
+        <div class="flex items-center space-x-3 shrink-0 overflow-hidden">
           <div class="bg-white p-0.5 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
             <img src="/LogoSantana.jpg" class="h-8 w-auto object-contain" alt="Logo" />
           </div>
-          <span v-if="!['/maquinas', '/historico'].includes(router.currentRoute.value.path)" class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none">{{ pageTitle }}</span>
+          <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
+          <span 
+            v-if="!['/maquinas', '/historico', '/usuarios'].includes(router.currentRoute.value.path)" 
+            class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none"
+          >
+            {{ pageTitle }}
+          </span>
+          
+          <!-- Portal para Contenido Mobile (Título + Botones rápidos) -->
+          <div id="navbar-mobile-portal" class="lg:hidden flex items-center space-x-2 overflow-hidden"></div>
         </div>
 
         <!-- Portales para acciones (Solo Desktop) -->

@@ -252,35 +252,30 @@ const getStatusClass = (estado) => {
           </div>
         </div>
       </Teleport>
-
-      <!-- Header Local (Solo Móvil) - Sticky -->
-      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-0 z-20">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <div class="bg-blue-600 p-1.5 rounded-lg text-white">
-              <History class="w-4 h-4" />
-            </div>
-            <h1 class="text-sm font-black text-gray-800 uppercase tracking-tight">Histórico</h1>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <select v-model="statusFilter" class="bg-gray-50 border border-gray-200 text-[10px] font-black uppercase rounded-lg px-2 py-1.5 outline-none focus:border-blue-500">
-              <option value="todos">Todos</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="en proceso">En proceso</option>
-              <option value="resuelto">Resuelto</option>
-            </select>
-            <button 
-              @click="exportToExcel" 
-              class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-lg shadow-emerald-900/20 active:scale-90 transition-all"
-              title="Exportar Excel"
-            >
-              <FileSpreadsheet class="w-4 h-4" />
-            </button>
+      
+      <!-- Portal para Navbar (Mobile) -->
+      <Teleport to="#navbar-mobile-portal">
+        <div class="flex items-center gap-2">
+          <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Histórico</h1>
+          <div class="flex items-center gap-1">
+             <button @click="exportToExcel" class="bg-emerald-600 text-white p-1 rounded-md active:scale-90 transition-all"><FileSpreadsheet class="w-3.5 h-3.5" /></button>
           </div>
         </div>
-        <div class="relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none" />
+      </Teleport>
+
+      <!-- Header Local (Solo Móvil) - Compacto -->
+      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-1.5 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500/20" />
+          </div>
+          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-[10px] font-black uppercase rounded-lg px-2 py-1.5 outline-none focus:border-blue-500">
+            <option value="todos">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="en proceso">En proceso</option>
+            <option value="resuelto">Resuelto</option>
+          </select>
         </div>
       </div>
 

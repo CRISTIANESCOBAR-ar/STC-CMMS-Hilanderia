@@ -243,33 +243,28 @@ const exportToExcel = async () => {
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) - Sticky -->
-      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-0 z-20">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2">
-            <div class="bg-indigo-600 p-1.5 rounded-lg text-white">
-              <Settings2 class="w-4 h-4" />
-            </div>
-            <h1 class="text-sm font-black text-gray-800 uppercase tracking-tight">Gestión</h1>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-lg shadow-emerald-900/20 active:scale-90 transition-all"><FileSpreadsheet class="w-4 h-4" /></button>
-            <button v-if="userRole === 'admin'" @click="openAddModal" class="bg-indigo-600 text-white p-1.5 rounded-lg shadow-lg shadow-indigo-900/20 active:scale-90 transition-all"><Plus class="w-4 h-4" /></button>
+      <!-- Portal para Navbar (Mobile) - Maximizar espacio vertical -->
+      <Teleport to="#navbar-mobile-portal">
+        <div class="flex items-center gap-2">
+          <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Gestión</h1>
+          <div class="flex items-center gap-1">
+            <button @click="exportToExcel" class="bg-emerald-600 text-white p-1 rounded-md active:scale-90 transition-all"><FileSpreadsheet class="w-3.5 h-3.5" /></button>
+            <button v-if="userRole === 'admin'" @click="openAddModal" class="bg-indigo-600 text-white p-1 rounded-md active:scale-90 transition-all"><Plus class="w-3.5 h-3.5" /></button>
           </div>
         </div>
-        
-        <div class="relative">
-          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none" />
-        </div>
+      </Teleport>
 
-        <div class="flex border border-gray-200 rounded-md overflow-hidden h-9">
-          <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-500 bg-white'" class="flex-1 flex items-center justify-center gap-2 text-[10px] font-bold italic transition-colors">
-            <LayoutGrid class="w-4 h-4" />TARJETAS
-          </button>
-          <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-500 bg-white'" class="flex-1 flex items-center justify-center gap-2 text-[10px] font-bold italic transition-colors border-l border-gray-200">
-            <Table2 class="w-4 h-4" />TABLA
-          </button>
+      <!-- Header Local (Solo Móvil) - Muy compacto -->
+      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-1.5 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500/20" />
+          </div>
+          <div class="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
+            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-400'" class="p-1.5 transition-all"><LayoutGrid class="w-3.5 h-3.5" /></button>
+            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-400'" class="p-1.5 border-l border-gray-200 transition-all"><Table2 class="w-3.5 h-3.5" /></button>
+          </div>
         </div>
       </div>
 

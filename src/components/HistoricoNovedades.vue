@@ -256,25 +256,25 @@ const getStatusClass = (estado) => {
       <!-- Portal para Navbar (Mobile) -->
       <Teleport to="#navbar-mobile-portal">
         <div class="flex items-center gap-2">
-          <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Histórico</h1>
+          <h1 class="text-sm font-black text-white uppercase tracking-tighter shrink-0">Histórico</h1>
           <div class="flex items-center gap-1">
-             <button @click="exportToExcel" class="bg-emerald-600 text-white p-1 rounded-md active:scale-90 transition-all"><FileSpreadsheet class="w-3.5 h-3.5" /></button>
+             <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-md active:scale-90 transition-all shadow-sm"><FileSpreadsheet class="w-4 h-4" /></button>
           </div>
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) - Compacto -->
-      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-1.5 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
+      <!-- Header Local (Solo Móvil) - Espacioso -->
+      <div class="md:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
         <div class="flex items-center gap-2">
-          <div class="relative flex-1">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500/20" />
+          <div class="relative flex-[1.2]">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500/20" />
           </div>
-          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-[10px] font-black uppercase rounded-lg px-2 py-1.5 outline-none focus:border-blue-500">
+          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-xs font-black uppercase rounded-lg px-2 py-2 outline-none focus:border-blue-500 flex-[0.8] text-center">
             <option value="todos">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="en proceso">En proceso</option>
-            <option value="resuelto">Resuelto</option>
+            <option value="pendiente">Pen.</option>
+            <option value="en proceso">En Proc.</option>
+            <option value="resuelto">Res.</option>
           </select>
         </div>
       </div>
@@ -302,33 +302,33 @@ const getStatusClass = (estado) => {
           <div class="overflow-auto flex-1 min-h-0">
             <table class="w-full text-left border-collapse">
               <thead class="sticky top-0 bg-gray-50 z-20 shadow-sm border-b border-gray-100">
-                <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                  <th class="px-4 py-3 bg-gray-50">Fecha</th>
-                  <th class="px-4 py-3 bg-gray-50">Máquina</th>
-                  <th class="px-4 py-3 bg-gray-50">Lado</th>
-                  <th class="px-4 py-3 bg-gray-50">Observaciones</th>
-                  <th class="px-4 py-3 bg-gray-50">Estado</th>
-                  <th class="px-4 py-3 bg-gray-50 text-center">Foto</th>
+                <tr class="text-xs font-black text-gray-500 uppercase tracking-widest">
+                  <th class="px-5 py-4 bg-gray-50">Fecha</th>
+                  <th class="px-5 py-4 bg-gray-50">Máquina</th>
+                  <th class="px-5 py-4 bg-gray-50">Lado</th>
+                  <th class="px-5 py-4 bg-gray-50">Observaciones</th>
+                  <th class="px-5 py-4 bg-gray-50">Estado</th>
+                  <th class="px-5 py-4 bg-gray-50 text-center">Foto</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
                 <tr v-for="n in paginatedNovedades" :key="n.id" class="hover:bg-blue-50/50 transition-colors group">
-                  <td class="px-4 py-3 text-[10px] font-bold text-gray-400 whitespace-nowrap">{{ formatDate(n.createdAt) }}</td>
-                  <td class="px-4 py-3">
+                  <td class="px-5 py-4 text-xs font-bold text-gray-500 whitespace-nowrap">{{ formatDate(n.createdAt) }}</td>
+                  <td class="px-5 py-4">
                     <div class="flex flex-col">
-                      <span class="text-sm font-black text-gray-800">{{ n.numeroMaquina }}</span>
-                      <span class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">{{ n.tipoMaquina }}</span>
+                      <span class="text-base font-black text-gray-800">{{ n.numeroMaquina }}</span>
+                      <span class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{{ n.tipoMaquina }}</span>
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-xs font-black text-gray-600">{{ n.lado }}</td>
-                  <td class="px-4 py-3">
-                    <p class="text-xs text-gray-600 line-clamp-2 max-w-sm group-hover:line-clamp-none transition-all">{{ n.observaciones }}</p>
+                  <td class="px-5 py-4 text-sm font-black text-gray-600">{{ n.lado }}</td>
+                  <td class="px-5 py-4 max-w-sm">
+                    <p class="text-sm text-gray-700 font-medium whitespace-normal">{{ n.observaciones }}</p>
                   </td>
-                  <td class="px-4 py-3">
-                    <div class="flex items-center space-x-1">
+                  <td class="px-5 py-4">
+                    <div class="flex items-center space-x-2">
                       <span 
                         :class="getStatusClass(n.estado)"
-                        class="px-2.5 py-1 rounded text-[9px] font-black uppercase border whitespace-nowrap"
+                        class="px-2.5 py-1 rounded text-[10px] font-black uppercase border whitespace-nowrap"
                       >
                         {{ n.estado }}
                       </span>
@@ -336,17 +336,17 @@ const getStatusClass = (estado) => {
                       <button 
                         v-if="userRole === 'admin'"
                         @click="cambiarEstado(n)" 
-                        class="p-1 hover:bg-gray-100 rounded-md transition-colors"
+                        class="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
                       >
-                        <RefreshCw class="w-3 h-3 text-gray-400" />
+                        <RefreshCw class="w-4 h-4 text-gray-400" />
                       </button>
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-center">
-                    <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-1.5 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-md inline-flex transition-all">
-                      <ImageIcon class="w-3.5 h-3.5" />
+                  <td class="px-5 py-4 text-center">
+                    <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all">
+                      <ImageIcon class="w-4 h-4" />
                     </a>
-                    <span v-else class="text-[9px] text-gray-300 font-bold uppercase">---</span>
+                    <span v-else class="text-xs text-gray-300 font-bold uppercase">---</span>
                   </td>
                 </tr>
               </tbody>
@@ -354,39 +354,39 @@ const getStatusClass = (estado) => {
           </div>
           
           <!-- Paginación Desktop -->
-          <div class="px-4 py-2 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
-            <span class="text-[10px] text-gray-400 font-black uppercase tracking-widest">{{ novedadesFiltradas.length }} registros</span>
-            <div class="flex items-center space-x-1">
-              <button @click="goToFirst" :disabled="currentPage === 1" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronsLeft class="w-4 h-4" /></button>
-              <button @click="goToPrev" :disabled="currentPage === 1" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronLeft class="w-4 h-4" /></button>
-              <div class="px-3 text-xs font-black text-gray-600">Pág {{ currentPage }} / {{ totalPages }}</div>
-              <button @click="goToNext" :disabled="currentPage === totalPages" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronRight class="w-4 h-4" /></button>
-              <button @click="goToLast" :disabled="currentPage === totalPages" class="p-1.5 rounded-md hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all"><ChevronsRight class="w-4 h-4" /></button>
+          <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
+            <span class="text-xs text-gray-400 font-black uppercase tracking-widest">{{ novedadesFiltradas.length }} registros</span>
+            <div class="flex items-center space-x-1.5">
+              <button @click="goToFirst" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronsLeft class="w-4 h-4" /></button>
+              <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronLeft class="w-4 h-4" /></button>
+              <div class="px-4 py-1.5 text-sm font-black text-gray-700 bg-white rounded-lg border border-gray-200">Pág {{ currentPage }} / {{ totalPages }}</div>
+              <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronRight class="w-4 h-4" /></button>
+              <button @click="goToLast" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronsRight class="w-4 h-4" /></button>
             </div>
           </div>
         </div>
 
         <!-- TARJETAS MÓVIL (Con Scroll) -->
-        <div class="md:hidden flex-1 overflow-y-auto pr-1 space-y-3">
-          <div v-for="n in paginatedNovedades" :key="n.id" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-2">
+        <div class="md:hidden flex-1 overflow-y-auto pr-1 space-y-4">
+          <div v-for="n in paginatedNovedades" :key="n.id" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
             <div class="flex justify-between items-start">
-              <span class="text-xs font-black text-gray-800 uppercase">{{ n.numeroMaquina }} ({{ n.lado }})</span>
-              <span class="text-[9px] font-bold text-gray-400 uppercase">{{ formatDate(n.createdAt) }}</span>
+              <span class="text-sm font-black text-gray-800 uppercase">{{ n.numeroMaquina }} ({{ n.lado }})</span>
+              <span class="text-xs font-bold text-gray-400 uppercase mt-0.5">{{ formatDate(n.createdAt) }}</span>
             </div>
-            <p class="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
-            <div class="flex items-center justify-between pt-1">
-              <span class="px-2 py-0.5 text-[8px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
-              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-[9px] font-black text-blue-600 uppercase tracking-widest">
-                <ImageIcon class="w-3 h-3 mr-1" /> FOTO
+            <p class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
+            <div class="flex items-center justify-between pt-2">
+              <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
+              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
+                <ImageIcon class="w-4 h-4 mr-1.5" /> FOTO
               </a>
             </div>
           </div>
           
           <!-- Paginación Móvil -->
-          <div class="flex items-center justify-center space-x-2 py-2">
-            <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 bg-white rounded-lg border border-gray-200 disabled:opacity-30"><ChevronLeft class="w-4 h-4" /></button>
-            <span class="text-xs font-black text-gray-600">{{ currentPage }} / {{ totalPages }}</span>
-            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 bg-white rounded-lg border border-gray-200 disabled:opacity-30"><ChevronRight class="w-4 h-4" /></button>
+          <div class="flex items-center justify-center space-x-3 py-3">
+            <button @click="goToPrev" :disabled="currentPage === 1" class="p-3 bg-white rounded-lg border border-gray-200 disabled:opacity-30 shadow-sm active:scale-95"><ChevronLeft class="w-5 h-5" /></button>
+            <span class="text-sm font-black text-gray-600 bg-white px-4 py-2.5 rounded-lg border border-gray-100">{{ currentPage }} / {{ totalPages }}</span>
+            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-3 bg-white rounded-lg border border-gray-200 disabled:opacity-30 shadow-sm active:scale-95"><ChevronRight class="w-5 h-5" /></button>
           </div>
         </div>
       </template>

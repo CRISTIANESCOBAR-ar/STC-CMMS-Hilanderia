@@ -139,10 +139,10 @@ const pageTitle = computed(() => {
             <router-link 
               to="/" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
-              <Wrench class="w-5 h-5 mr-4" />
+              <Wrench class="w-6 h-6 mr-4" />
               Mecánico (Carga Novedad)
             </router-link>
             
@@ -150,30 +150,30 @@ const pageTitle = computed(() => {
               v-if="userRole === 'admin'"
               to="/jefe" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
-              <ShieldCheck class="w-5 h-5 mr-4" />
+              <ShieldCheck class="w-6 h-6 mr-4" />
               Jefe de Mantenimiento
             </router-link>
 
             <router-link 
               to="/historico" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
-              <History class="w-5 h-5 mr-4" />
+              <History class="w-6 h-6 mr-4" />
               Historial de Novedades
             </router-link>
 
             <router-link 
               to="/maquinas" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
               active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
             >
-              <Settings2 class="w-5 h-5 mr-4" />
+              <Settings2 class="w-6 h-6 mr-4" />
               Gestión de Máquinas
             </router-link>
 
@@ -181,24 +181,24 @@ const pageTitle = computed(() => {
               v-if="userRole === 'admin'"
               to="/usuarios" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
               active-class="bg-amber-600 text-white shadow-lg shadow-amber-900/20"
             >
-              <Users class="w-5 h-5 mr-4" />
+              <Users class="w-6 h-6 mr-4" />
               Gestión de Usuarios
             </router-link>
 
             <div class="h-px bg-gray-800 my-4 mx-4"></div>
             
-            <div class="px-4 py-2 flex flex-col space-y-1">
-               <div class="flex items-center text-[10px] text-gray-500 uppercase tracking-widest font-bold">
-                 <User class="w-3.5 h-3.5 mr-2" />
+            <div class="px-4 py-2 flex flex-col space-y-2">
+               <div class="flex items-center text-xs text-gray-500 uppercase tracking-widest font-bold">
+                 <User class="w-4 h-4 mr-2" />
                  {{ user.isAnonymous ? 'Usuario Invitado' : user.email }}
                </div>
                <div v-if="userRole" class="flex items-center">
                  <span 
                    :class="userRole === 'admin' ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 'bg-blue-500/20 text-blue-500 border-blue-500/30'"
-                   class="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border"
+                   class="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-tighter border"
                  >
                    Rol: {{ userRole }}
                  </span>
@@ -207,9 +207,9 @@ const pageTitle = computed(() => {
 
             <button 
               @click="handleLogout"
-              class="w-full flex items-center px-4 py-4 rounded-2xl text-xl font-bold text-red-400 transition-all hover:bg-red-950/30 active:bg-red-950/50"
+              class="w-full flex items-center px-4 py-4 rounded-2xl text-xl font-bold text-red-400 transition-all hover:bg-red-950/30 active:bg-red-950/50 mt-2"
             >
-              <LogOut class="w-5 h-5 mr-4" />
+              <LogOut class="w-6 h-6 mr-4" />
               Cerrar Sesión
             </button>
           </div>

@@ -219,38 +219,38 @@ const aprobarNovedad = async (estado) => {
         <div 
           v-for="novedad in novedades" 
           :key="novedad.id" 
-          class="rounded-2xl border p-5 shadow-md flex flex-col justify-between transition-transform transform hover:-translate-y-1"
+          class="rounded-3xl border p-6 shadow-md flex flex-col justify-between transition-transform transform hover:-translate-y-1"
           :class="getCardColorClass(novedad)">
           
           <div>
-            <div class="flex justify-between items-start mb-3">
+            <div class="flex justify-between items-start mb-4">
               <div>
-                <h3 class="text-xl font-extrabold flex items-center">
-                  <AlertTriangle v-if="novedad.critico" class="w-5 h-5 mr-2" />
+                <h3 class="text-3xl font-black flex items-center">
+                  <AlertTriangle v-if="novedad.critico" class="w-6 h-6 mr-2" />
                   ID: {{ novedad.numeroMaquina }}
                 </h3>
-                <p class="text-sm font-medium opacity-80 uppercase tracking-widest mt-1">{{ novedad.tipoMaquina }} (Lado {{ novedad.lado }})</p>
+                <p class="text-base font-bold opacity-80 uppercase tracking-widest mt-1">{{ novedad.tipoMaquina }} (Lado {{ novedad.lado }})</p>
               </div>
-              <span class="text-xs font-bold px-2 py-1 rounded bg-black/10 uppercase">{{ novedad.estado }}</span>
+              <span class="text-sm font-black px-3 py-1.5 rounded-lg bg-black/10 uppercase">{{ novedad.estado }}</span>
             </div>
             
-            <p class="text-base font-medium my-4 p-3 bg-black/5 rounded-xl border border-black/5">
+            <p class="text-lg font-bold my-5 p-4 bg-black/5 rounded-2xl border border-black/5 leading-snug">
               "{{ novedad.observaciones }}"
             </p>
 
-            <a v-if="novedad.fotoUrl" :href="novedad.fotoUrl" target="_blank" class="inline-flex items-center text-sm font-semibold underline underline-offset-4 mb-4 hover:opacity-70 transition">
-              <ImageIcon class="w-4 h-4 mr-1" /> Ver Foto Evidencia
+            <a v-if="novedad.fotoUrl" :href="novedad.fotoUrl" target="_blank" class="inline-flex items-center text-base font-black underline underline-offset-4 mb-4 hover:opacity-70 transition p-2 bg-black/5 rounded-xl">
+              <ImageIcon class="w-5 h-5 mr-2" /> Ver Foto Evidencia
             </a>
           </div>
 
-          <div class="mt-4 flex flex-col gap-3">
-            <span class="text-xs font-medium flex items-center opacity-70">
-              <Clock class="w-3 h-3 mr-1" /> {{ formatDate(novedad.createdAt) }}
+          <div class="mt-4 flex flex-col gap-4">
+            <span class="text-sm font-bold flex items-center opacity-70">
+              <Clock class="w-4 h-4 mr-1.5" /> {{ formatDate(novedad.createdAt) }}
             </span>
             <button 
               @click="abrirModal(novedad)"
-              class="w-full bg-black/10 hover:bg-black/20 text-current font-bold py-3 rounded-xl transition border border-black/10 flex items-center justify-center">
-              <CheckSquare class="w-5 h-5 mr-2" />
+              class="w-full bg-black/10 hover:bg-black/20 text-current font-black text-lg py-4 rounded-xl transition border border-black/10 flex items-center justify-center active:scale-95 shadow-sm">
+              <CheckSquare class="w-6 h-6 mr-2" />
               GESTIONAR
             </button>
           </div>
@@ -261,34 +261,34 @@ const aprobarNovedad = async (estado) => {
 
     <!-- Modal de Gestión -->
     <div v-if="modalAprobacion" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-        <h3 class="text-2xl font-bold text-gray-900 mb-2">Gestionar Novedad</h3>
-        <p class="text-gray-500 mb-6">Máquina: <span class="font-bold border-b-2 border-orange-400">{{ novedadActual.numeroMaquina }}</span></p>
+      <div class="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+        <h3 class="text-3xl font-black text-gray-900 mb-2">Gestionar Novedad</h3>
+        <p class="text-xl text-gray-500 mb-6">Máquina: <span class="font-black border-b-4 border-orange-400 text-gray-800">{{ novedadActual.numeroMaquina }}</span></p>
         
-        <div class="space-y-4">
+        <div class="space-y-6">
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-2">Instrucciones / Feedback (Opcional)</label>
+            <label class="block text-base font-bold text-gray-700 mb-2 uppercase tracking-tight">Instrucciones / Feedback (Opcional)</label>
             <textarea 
               v-model="feedback" 
-              rows="3" 
-              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-base rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 transition" 
+              rows="4" 
+              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-2xl focus:ring-blue-500 focus:border-blue-500 block p-4 transition shadow-inner" 
               placeholder="Ej: Repuestos en pañol, proceder con reparación..."></textarea>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 pt-4">
+          <div class="grid grid-cols-2 gap-4 pt-4">
             <button 
               @click="aprobarNovedad('en proceso')"
-              class="py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-xl transition shadow-sm">
-              En Proceso
+              class="py-4 px-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-black text-lg rounded-2xl transition shadow-md active:scale-95">
+              EN PROCESO
             </button>
             <button 
               @click="aprobarNovedad('resuelto')"
-              class="py-3 px-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition shadow-sm">
-              Resuelto
+              class="py-4 px-4 bg-green-500 hover:bg-green-600 text-white font-black text-lg rounded-2xl transition shadow-md active:scale-95">
+              RESUELTO
             </button>
           </div>
-          <button @click="cerrarModal" class="w-full mt-2 py-3 text-gray-500 hover:text-gray-700 font-medium transition">
-            Cancelar
+          <button @click="cerrarModal" class="w-full mt-4 py-4 text-gray-500 hover:bg-gray-100 font-bold text-lg rounded-2xl transition">
+            CANCELAR
           </button>
         </div>
       </div>

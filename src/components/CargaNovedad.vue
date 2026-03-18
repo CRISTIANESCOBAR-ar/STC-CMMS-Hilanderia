@@ -167,11 +167,11 @@ const onSubmit = async () => {
         <!-- Selección de Máquina (En una sola fila para mobile) -->
         <div class="flex gap-2">
           <!-- Selector de Tipo -->
-          <div class="flex-1 space-y-1 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
-            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-tight pl-1">Tipo</label>
+          <div class="flex-[0.8] space-y-1 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-tight px-1">Tipo</label>
             <select 
               v-model="tipoSeleccionado" 
-              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 transition-colors">
+              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-colors">
               <option v-for="tipo in ['APERTURA', 'CARDA', 'MANUAR', 'OPEN END', 'FILTRO']" :key="tipo" :value="tipo">
                 {{ tipo }}
               </option>
@@ -179,12 +179,13 @@ const onSubmit = async () => {
           </div>
 
           <!-- Selector de ID/Puesto -->
-          <div class="flex-[1.8] space-y-1 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
-            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-tight pl-1">ID Máquina / Puesto</label>
+          <div class="flex-[1.2] space-y-1 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-tight px-1">ID Máquina / Puesto</label>
             <select 
               v-model="maquinaSeleccionadaId" 
-              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 transition-colors">
-              <option value="" disabled>ID / Puesto...</option>
+              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-colors"
+              style="min-width: 0;">
+              <option value="" disabled>Seleccionar...</option>
               <option v-for="m in maquinasFiltradas" :key="m.id" :value="m.id">
                 {{ m.nombreDescriptivo }} {{ m.lado !== 'U' ? '(' + m.lado + ')' : '' }}
               </option>
@@ -193,72 +194,73 @@ const onSubmit = async () => {
         </div>
 
         <!-- Info Automática Máquina -->
-        <div v-if="detallesMaquina" class="bg-blue-50 text-blue-900 p-2 rounded-xl border border-blue-100 flex justify-between items-center text-[10px] font-medium animate-in fade-in slide-in-from-top-2">
+        <div v-if="detallesMaquina" class="bg-blue-50 text-blue-900 p-3 rounded-xl border border-blue-100 flex justify-between items-center text-sm font-medium animate-in fade-in slide-in-from-top-2">
           <div>
-            <span class="block text-xs text-blue-600/80 uppercase tracking-wide">ID Interno</span>
-            <span>{{ detallesMaquina.maquina }}</span>
+            <span class="block text-[11px] font-bold text-blue-500 uppercase tracking-widest mb-0.5">ID Interno</span>
+            <span class="text-base font-black px-1">{{ detallesMaquina.maquina }}</span>
           </div>
           <div class="text-right">
-            <span class="block text-xs text-blue-600/80 uppercase tracking-wide">Lado / Físico</span>
-            <span>Local {{ detallesMaquina.local_fisico }}</span>
+            <span class="block text-[11px] font-bold text-blue-500 uppercase tracking-widest mb-0.5">Lado / Físico</span>
+            <span class="text-base font-black px-1">Local {{ detallesMaquina.local_fisico }}</span>
           </div>
         </div>
 
         <!-- Observaciones -->
         <div class="space-y-2">
-          <label class="block text-sm font-semibold text-gray-700">Observaciones del Problema</label>
+          <label class="block text-sm font-bold text-gray-700 ml-1">Observaciones del Problema</label>
           <textarea 
             v-model="observaciones" 
-            rows="2" 
-            placeholder="¿Qué está pasando?"
-            class="w-full bg-white border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm"></textarea>
+            rows="3" 
+            placeholder="Describa qué está pasando de forma clara..."
+            class="w-full bg-white border border-gray-300 text-gray-900 text-base rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm"></textarea>
         </div>
 
         <!-- Subida de Imagen -->
         <div class="space-y-1">
-           <label class="block text-[10px] font-bold text-gray-500 uppercase pl-1">Foto de Evidencia (Opcional)</label>
-           <label class="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-white hover:bg-gray-50 transition relative overflow-hidden">
+           <label class="block text-xs font-bold text-gray-500 uppercase px-1">Foto de Evidencia (Opcional)</label>
+           <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-white hover:bg-gray-50 transition relative overflow-hidden mt-1">
              
              <!-- Overlay de carga/compresión -->
-             <div v-if="isCompressing" class="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center">
+             <div v-if="isCompressing" class="absolute inset-0 bg-white/90 z-20 flex flex-col items-center justify-center">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                <p class="text-xs font-bold text-blue-600">Optimizando Foto...</p>
+                <p class="text-sm font-bold text-blue-600">Optimizando Foto...</p>
              </div>
 
-             <img v-if="imagenPreview" :src="imagenPreview" class="absolute inset-0 w-full h-full object-cover opacity-60" />
+             <img v-if="imagenPreview" :src="imagenPreview" class="absolute inset-0 w-full h-full object-cover opacity-50" />
               <div class="flex flex-col items-center justify-center pt-2 pb-2 relative z-10" :class="{'opacity-0': imagenPreview}">
-                <UploadCloud class="w-8 h-8 text-gray-400 mb-1" />
-                <p class="text-xs text-gray-500 font-bold uppercase">Capturar</p>
-                <p class="text-[8px] text-gray-400 mt-0.5">Automático</p>
+                <UploadCloud class="w-10 h-10 text-gray-400 mb-2 drop-shadow-sm" />
+                <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">Capturar Foto</p>
+                <p class="text-[10px] sm:text-xs text-gray-400 mt-1 uppercase tracking-widest font-semibold">Tocar aquí</p>
               </div>
              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onFileChange" />
            </label>
            
-           <div v-if="imagenPreview" class="bg-gray-100 p-3 rounded-xl space-y-2 shadow-inner border border-gray-200">
-             <div class="flex justify-between items-center">
+           <div v-if="imagenPreview" class="bg-gray-50 p-3 rounded-xl space-y-2 shadow-inner border border-gray-200 mt-2">
+             <div class="flex justify-between items-center mb-2 px-1">
                 <div class="flex flex-col">
-                  <span class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">Tamaño Optimizado</span>
-                  <span class="text-xs font-bold text-green-600">{{ formatSize(imagenFile?.size) }}</span>
+                  <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wide">Tamaño</span>
+                  <span class="text-sm font-black text-green-600">{{ formatSize(imagenFile?.size) }}</span>
                 </div>
                 <div class="flex flex-col text-right">
-                  <span class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter text-right">Original</span>
-                  <span class="text-xs text-gray-400 line-through">{{ formatSize(imagenOriginalSize) }}</span>
+                  <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wide">Original</span>
+                  <span class="text-sm font-medium text-gray-400 line-through">{{ formatSize(imagenOriginalSize) }}</span>
                 </div>
              </div>
-             <button type="button" @click="imagenPreview=null; imagenFile=null" class="w-full py-1 text-xs text-red-600 font-bold bg-white border border-red-100 rounded-lg shadow-sm">QUITAR FOTO</button>
+             <button type="button" @click="imagenPreview=null; imagenFile=null" class="w-full py-2.5 text-sm text-red-600 font-bold bg-white border border-red-200 hover:bg-red-50 rounded-xl shadow-sm transition">QUITAR FOTO</button>
            </div>
         </div>
 
         <!-- Acciones Fijas (Bottom Bar) -->
-        <div class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-200 p-3 z-30 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]">
+        <div class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-200 p-4 z-30 shadow-[0_-4px_25px_rgba(0,0,0,0.08)]">
           <div class="max-w-sm mx-auto flex items-center gap-3">
             
-            <!-- Criticidad (Compacta) -->
-            <label class="flex items-center space-x-2 bg-red-50 p-2 rounded-xl border border-red-100 cursor-pointer h-12 shrink-0">
-              <span class="text-[10px] font-black text-red-700 leading-none">CRÍTICO</span>
-              <div class="relative">
+            <!-- Criticidad (Compacta pero legible) -->
+            <label class="flex flex-col justify-center items-center bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl border border-red-200 cursor-pointer h-[52px] shrink-0 transition-colors">
+              <span class="text-xs font-black text-red-700 tracking-wider mb-1">CRÍTICO</span>
+              <div class="relative flex items-center w-11 h-6">
                 <input type="checkbox" v-model="isCritico" class="sr-only peer">
-                <div class="w-10 h-6 bg-gray-300 rounded-full peer peer-checked:bg-red-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-4"></div>
+                <div class="w-full h-full bg-gray-300 rounded-full peer peer-checked:bg-red-600 transition-colors duration-300"></div>
+                <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 peer-checked:translate-x-5 shadow-sm"></div>
               </div>
             </label>
 
@@ -266,10 +268,10 @@ const onSubmit = async () => {
             <button 
               type="submit" 
               :disabled="isSubmitting"
-              class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-12 rounded-xl text-sm font-black shadow-lg shadow-blue-900/40 active:scale-95 transition-all disabled:opacity-50 relative overflow-hidden uppercase flex items-center justify-center">
-              <div v-if="isSubmitting" class="absolute inset-x-0 bottom-0 h-1 bg-blue-800/50" :style="{ width: uploadProgress + '%' }"></div>
-              <span>
-                {{ isSubmitting ? `${uploadProgress}%` : 'ENVIAR REPORTE' }}
+              class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-[52px] rounded-xl text-base font-black shadow-lg shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden uppercase flex items-center justify-center">
+              <div v-if="isSubmitting" class="absolute inset-x-0 bottom-0 h-1 bg-blue-800/50 transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
+              <span class="tracking-wide">
+                {{ isSubmitting ? `ENVIANDO... ${uploadProgress}%` : 'ENVIAR REPORTE' }}
               </span>
             </button>
           </div>

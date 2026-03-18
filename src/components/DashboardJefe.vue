@@ -91,6 +91,20 @@ onMounted(() => {
     notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid)
       .then(() => notificationService.escucharMensajesEnPrimerPlano())
       .catch(err => console.warn('FCM no disponible:', err));
+  } else {
+    // Si el usuario aún no está listo (race conditions), nos suscribimos al estado de auth
+    authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        notificationService.solicitarPermisosYRegistrarToken(user.uid)
+          .then(() => notificationService.escucharMensajesEnPrimerPlano())
+          .catch(err => console.warn('FCM no disponible:', err));
+        // Una vez registrado, nos desuscribimos
+        if (authUnsubscribe) {
+          authUnsubscribe();
+          authUnsubscribe = null;
+        }
+      }
+    });
   }
 });
 

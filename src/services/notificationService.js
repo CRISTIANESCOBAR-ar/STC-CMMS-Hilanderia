@@ -18,14 +18,26 @@ export const notificationService = {
         return;
       }
       console.log('Solicitando permisos de notificación...');
+      // Registrar el service worker dedicado a FCM antes de solicitar token
+      let swReg = null;
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          console.log('Service Worker (firebase-messaging-sw.js) registrado:', swReg.scope);
+        } catch (swErr) {
+          console.warn('No se pudo registrar firebase-messaging-sw.js:', swErr);
+        }
+      }
+
       const permission = await Notification.requestPermission();
       
       if (permission === 'granted') {
         console.log('Permiso concedido. Obteniendo token FCM...');
         
-        const currentToken = await getToken(messaging, {
-          vapidKey: VAPID_KEY
-        });
+        const getTokenOptions = { vapidKey: VAPID_KEY };
+        if (swReg) getTokenOptions.serviceWorkerRegistration = swReg;
+
+        const currentToken = await getToken(messaging, getTokenOptions);
 
         if (currentToken) {
           console.log('Token FCM obtenido:', currentToken);

@@ -94,7 +94,7 @@ const limpiarCacheYActualizar = async () => {
   <div class="min-h-screen bg-gray-50 flex flex-col pt-10 pb-8 sm:px-6 lg:px-8">
     
     <!-- Logo Superior -->
-    <div class="flex-shrink-0 flex justify-center w-full mt-4">
+    <div class="shrink-0 flex justify-center w-full mt-4">
       <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-16 sm:h-20 object-contain mix-blend-multiply opacity-95 hover:opacity-100 transition-opacity" />
     </div>
 
@@ -160,7 +160,7 @@ const limpiarCacheYActualizar = async () => {
     </div>
 
     <!-- Area Inferior: Footer y Notificador de Actualizaciones -->
-    <div class="flex-shrink-0 w-full flex flex-col items-center justify-end mt-auto space-y-4 px-4">
+    <div class="shrink-0 w-full flex flex-col items-center justify-end mt-auto space-y-4 px-4">
       
       <!-- Notificador de Versión Nueva -->
       <transition 

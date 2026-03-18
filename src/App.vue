@@ -62,11 +62,11 @@ const pageTitle = computed(() => {
 </script>
 
 <template>
-  <div v-if="!isAuthReady" class="fixed inset-0 flex items-center justify-center bg-white z-[9999]">
+  <div v-if="!isAuthReady" class="fixed inset-0 flex items-center justify-center bg-white z-9999">
     <img 
       src="/LogoSantana.jpg" 
       alt="Santana" 
-      class="max-w-[400px] w-4/5 h-auto animate-pulse-soft"
+      class="max-w-100 w-4/5 h-auto animate-pulse-soft"
     />
   </div>
   
@@ -98,7 +98,7 @@ const pageTitle = computed(() => {
           <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
           <span 
             v-if="!['/maquinas', '/historico', '/usuarios', '/jefe'].includes(router.currentRoute.value.path)" 
-            class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none"
+            class="font-bold text-lg tracking-tight truncate max-w-37.5 sm:max-w-none"
           >
             {{ pageTitle }}
           </span>

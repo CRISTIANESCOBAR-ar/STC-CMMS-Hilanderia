@@ -276,7 +276,7 @@ const exportToExcel = async () => {
       <template v-else>
         <div v-if="viewMode === 'cards'" class="flex-1 overflow-y-auto pr-1">
           <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            <div v-for="m in paginatedMaquinas" :key="m.id" class="relative bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col group hover:border-indigo-300 transition-all min-h-[110px]">
+            <div v-for="m in paginatedMaquinas" :key="m.id" class="relative bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col group hover:border-indigo-300 transition-all min-h-27.5">
               <!-- Cuerpo Principal -->
               <div class="space-y-2 flex-1 pr-14">
                 <div class="flex items-center space-x-2">
@@ -305,14 +305,14 @@ const exportToExcel = async () => {
             <table class="w-full text-sm text-left border-collapse">
               <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 uppercase tracking-widest shadow-sm">
                 <tr>
-                  <th class="px-4 py-4 bg-gray-50 w-[120px]">Tipo</th>
-                  <th class="px-4 py-4 bg-gray-50 w-[100px]">ID Máq.</th>
-                  <th class="px-4 py-4 bg-gray-50 min-w-[200px]">Nombre</th>
-                  <th class="px-4 py-4 bg-gray-50 w-[80px]">Local</th>
-                  <th class="px-4 py-4 bg-gray-50 w-[80px]">Lado</th>
-                  <th class="px-4 py-4 bg-gray-50 w-[120px]">Modelo</th>
-                  <th class="px-4 py-4 bg-gray-50 w-[120px]">Serie</th>
-                  <th v-if="userRole === 'admin'" class="px-4 py-4 text-center bg-gray-50 w-[100px]">Acciones</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Tipo</th>
+                  <th class="px-4 py-4 bg-gray-50 w-25">ID Máq.</th>
+                  <th class="px-4 py-4 bg-gray-50 min-w-50">Nombre</th>
+                  <th class="px-4 py-4 bg-gray-50 w-20">Local</th>
+                  <th class="px-4 py-4 bg-gray-50 w-20">Lado</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Modelo</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Serie</th>
+                  <th v-if="userRole === 'admin'" class="px-4 py-4 text-center bg-gray-50 w-25">Acciones</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
@@ -320,7 +320,7 @@ const exportToExcel = async () => {
                   <template v-if="editingRowId === m.id">
                     <td class="px-4 py-3"><select v-model="editingRow.tipo" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="t in tiposOptions" :key="t">{{ t }}</option></select></td>
                     <td class="px-4 py-3"><input v-model="editingRow.maquina" type="number" class="w-24 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.nombre_maquina" type="text" class="w-full min-w-[160px] bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                    <td class="px-4 py-3"><input v-model="editingRow.nombre_maquina" type="text" class="w-full min-w-40 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.local_fisico" type="text" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><select v-model="editingRow.lado" class="bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option value="U">U</option><option value="A">A</option><option value="B">B</option></select></td>
                     <td class="px-4 py-3"><input v-model="editingRow.modelo" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
@@ -412,7 +412,7 @@ const exportToExcel = async () => {
     </main>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
+    <div v-if="showModal" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
       <div class="bg-white rounded-lg w-full max-w-lg shadow-2xl overflow-hidden my-auto">
         <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
@@ -462,7 +462,7 @@ const exportToExcel = async () => {
           </div>
           <div class="pt-4 flex space-x-3">
             <button @click="closeModal" type="button" class="flex-1 py-3.5 border border-gray-200 rounded-xl font-bold text-base text-gray-500 hover:bg-gray-50 transition-colors">CANCELAR</button>
-            <button type="submit" class="flex-[2] py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base shadow-md hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center space-x-2">
+            <button type="submit" class="flex-2 py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base shadow-md hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center space-x-2">
               <Check class="w-6 h-6" /><span>GUARDAR CAMBIOS</span>
             </button>
           </div>

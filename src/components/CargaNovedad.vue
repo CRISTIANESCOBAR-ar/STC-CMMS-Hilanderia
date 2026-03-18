@@ -255,7 +255,7 @@ const onSubmit = async () => {
           <div class="max-w-sm mx-auto flex items-center gap-3">
             
             <!-- Criticidad (Compacta pero legible) -->
-            <label class="flex flex-col justify-center items-center bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl border border-red-200 cursor-pointer h-[52px] shrink-0 transition-colors">
+            <label class="flex flex-col justify-center items-center bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl border border-red-200 cursor-pointer h-13 shrink-0 transition-colors">
               <span class="text-xs font-black text-red-700 tracking-wider mb-1">CRÍTICO</span>
               <div class="relative flex items-center w-11 h-6">
                 <input type="checkbox" v-model="isCritico" class="sr-only peer">
@@ -268,7 +268,7 @@ const onSubmit = async () => {
             <button 
               type="submit" 
               :disabled="isSubmitting"
-              class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-[52px] rounded-xl text-base font-black shadow-lg shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden uppercase flex items-center justify-center">
+              class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-13 rounded-xl text-base font-black shadow-lg shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden uppercase flex items-center justify-center">
               <div v-if="isSubmitting" class="absolute inset-x-0 bottom-0 h-1 bg-blue-800/50 transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
               <span class="tracking-wide">
                 {{ isSubmitting ? `ENVIANDO... ${uploadProgress}%` : 'ENVIAR REPORTE' }}

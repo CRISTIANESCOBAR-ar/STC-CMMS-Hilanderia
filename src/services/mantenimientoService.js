@@ -92,30 +92,12 @@ export const mantenimientoService = {
    * @returns {Function} - Función para desuscribirse (unsubscribe) del snapshot
    */
   obtenerNovedadesPendientes(callback, onError = null) {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('estado', 'in', ['pendiente', 'en proceso']),
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const novedades = [];
-      snapshot.forEach((doc) => {
-        novedades.push({ id: doc.id, ...doc.data() });
-      });
-      
-      novedades.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis() || Date.now();
-        const timeB = b.createdAt?.toMillis() || Date.now();
-        return timeB - timeA;
-      });
-
-      callback(novedades);
-    }, (error) => {
-      console.error("Error obteniendo novedades pendientes:", error);
-      if (onError) onError(error);
-    });
-
-    return unsubscribe;
+    // Usamos obtenerHistorico como base para asegurar máxima compatibilidad en móviles,
+    // ya que esa query (sin filtros complejos) ha demostrado ser la más estable.
+    return this.obtenerHistorico((todas) => {
+      const filtradas = todas.filter(n => n.estado === 'pendiente' || n.estado === 'en proceso');
+      callback(filtradas);
+    }, onError);
   },
 
   /**

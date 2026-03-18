@@ -97,7 +97,7 @@ const pageTitle = computed(() => {
           </div>
           <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
           <span 
-            v-if="!['/maquinas', '/historico', '/usuarios'].includes(router.currentRoute.value.path)" 
+            v-if="!['/maquinas', '/historico', '/usuarios', '/jefe'].includes(router.currentRoute.value.path)" 
             class="font-bold text-lg tracking-tight truncate max-w-[150px] sm:max-w-none"
           >
             {{ pageTitle }}

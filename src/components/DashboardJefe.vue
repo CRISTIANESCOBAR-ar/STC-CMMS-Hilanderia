@@ -140,7 +140,17 @@ const aprobarNovedad = async (estado) => {
     </div>
 
 
-    <main class="px-4 max-w-5xl mx-auto pt-8">
+    <!-- Portal para Navbar (Mobile) -->
+    <Teleport to="#navbar-mobile-portal">
+      <div v-if="!isLoading && novedades.length > 0" class="flex items-center gap-2">
+        <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Panel</h1>
+        <span class="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md shrink-0">
+          {{ novedades.length }}
+        </span>
+      </div>
+    </Teleport>
+
+    <main class="px-4 max-w-5xl mx-auto pt-4 lg:pt-8">
       
       <!-- Estado de Carga -->
       <div v-if="isLoading" class="text-center py-20">
@@ -167,9 +177,10 @@ const aprobarNovedad = async (estado) => {
         <p class="text-gray-500">No hay novedades mecánicas pendientes.</p>
       </div>
 
-      <!-- Listado con Título -->
+      <!-- Listado con Novedades -->
       <div v-else>
-        <div class="flex items-center justify-between mb-6">
+        <!-- Título solo Desktop -->
+        <div class="hidden lg:flex items-center justify-between mb-6">
           <h2 class="text-2xl font-black text-gray-800 uppercase tracking-tight">Novedades de Mecánicos</h2>
           <span class="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
             {{ novedades.length }} PENDIENTES

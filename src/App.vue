@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { authService } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2 } from 'lucide-vue-next';
+import { authService, userRole } from './services/authService';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users } from 'lucide-vue-next';
 
 const router = useRouter();
 const isAuthReady = ref(false);
@@ -55,6 +55,7 @@ const pageTitle = computed(() => {
   if (path === '/jefe') return 'Panel de Control';
   if (path === '/historico') return 'Historial de Novedades';
   if (path === '/maquinas') return 'Gestión de Máquinas';
+  if (path === '/usuarios') return 'Gestión de Usuarios';
   if (path === '/login') return 'Ingreso al Sistema';
   return 'CMMS Santana';
 });
@@ -120,7 +121,11 @@ const pageTitle = computed(() => {
         leave-from-class="transform translate-y-0 opacity-100"
         leave-to-class="transform -translate-y-4 opacity-0"
       >
-        <div v-if="isMenuOpen" class="bg-gray-900 border-t border-gray-800 shadow-2xl overflow-hidden">
+        <div 
+          v-if="isMenuOpen" 
+          @click.self="closeMenu"
+          class="bg-gray-900 border-t border-gray-800 shadow-2xl overflow-hidden"
+        >
           <div class="px-3 pt-2 pb-6 space-y-2">
             <router-link 
               to="/" 
@@ -133,6 +138,7 @@ const pageTitle = computed(() => {
             </router-link>
             
             <router-link 
+              v-if="userRole === 'admin'"
               to="/jefe" 
               @click="closeMenu"
               class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
@@ -162,16 +168,37 @@ const pageTitle = computed(() => {
               Gestión de Máquinas
             </router-link>
 
+            <router-link 
+              v-if="userRole === 'admin'"
+              to="/usuarios" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-base font-semibold transition-all hover:bg-gray-800 active:bg-black"
+              active-class="bg-amber-600 text-white shadow-lg shadow-amber-900/20"
+            >
+              <Users class="w-5 h-5 mr-4" />
+              Gestión de Usuarios
+            </router-link>
+
             <div class="h-px bg-gray-800 my-4 mx-4"></div>
             
-            <div class="px-4 py-2 flex items-center text-xs text-gray-500 uppercase tracking-widest font-bold">
-               <User class="w-4 h-4 mr-2" />
-               {{ user.isAnonymous ? 'Usuario Invitado' : user.email }}
+            <div class="px-4 py-2 flex flex-col space-y-1">
+               <div class="flex items-center text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+                 <User class="w-3.5 h-3.5 mr-2" />
+                 {{ user.isAnonymous ? 'Usuario Invitado' : user.email }}
+               </div>
+               <div v-if="userRole" class="flex items-center">
+                 <span 
+                   :class="userRole === 'admin' ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 'bg-blue-500/20 text-blue-500 border-blue-500/30'"
+                   class="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter border"
+                 >
+                   Rol: {{ userRole }}
+                 </span>
+               </div>
             </div>
 
             <button 
               @click="handleLogout"
-              class="w-full flex items-center px-4 py-4 rounded-2xl text-base font-bold text-red-400 transition-all hover:bg-red-950/30 active:bg-red-950/50"
+              class="w-full flex items-center px-4 py-4 rounded-2xl text-xl font-bold text-red-400 transition-all hover:bg-red-950/30 active:bg-red-950/50"
             >
               <LogOut class="w-5 h-5 mr-4" />
               Cerrar Sesión
@@ -182,7 +209,7 @@ const pageTitle = computed(() => {
     </nav>
 
     <!-- Vistas dinámicas -->
-    <main :class="{'blur-[2px] pointer-events-none transition-all duration-300': isMenuOpen}" class="pt-4">
+    <main :class="{'blur-[2px] pointer-events-none transition-all duration-300': isMenuOpen}" class="pt-0">
       <router-view></router-view>
     </main>
   </div>

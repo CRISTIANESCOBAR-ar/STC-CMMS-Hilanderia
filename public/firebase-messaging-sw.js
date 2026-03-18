@@ -1,15 +1,22 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Configuración de Firebase para el Service Worker (Restaurada)
+// Configuración de Firebase para el Service Worker
+// IMPORTANTE: Se ha removido la configuración hardcodeada por seguridad (GitHub Alert).
+// Para que esto funcione en producción, debes restringir tu API Key por dominio
+// en la consola de Google Cloud y volver a agregar los valores aquí 
+// O usar un script de build para inyectarlos.
+
+/* 
 firebase.initializeApp({
-  apiKey: "AIzaSyCyLlPtbuzD3zdkKf8tLu6uopM54JUzKFc", 
-  authDomain: "stc-cmms-hilanderia.firebaseapp.com",
-  projectId: "stc-cmms-hilanderia",
-  storageBucket: "stc-cmms-hilanderia.firebasestorage.app",
-  messagingSenderId: "261217763477",
-  appId: "1:261217763477:web:5800682e1043e8e7b2db9c"
+  apiKey: "TU_API_KEY", 
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.firebasestorage.app",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 });
+*/
 
 const messaging = firebase.messaging();
 

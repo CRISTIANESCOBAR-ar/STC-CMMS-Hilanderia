@@ -1,6 +1,8 @@
+```
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { maquinaService } from '../services/maquinaService';
+import { authService, userRole } from '../services/authService';
 import { Plus, Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileSpreadsheet } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
@@ -223,7 +225,11 @@ const exportToExcel = async () => {
                 <Table2 class="w-3.5 h-3.5" /><span>TABLA</span>
               </button>
             </div>
-            <button @click="openAddModal" class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-black shadow-lg shadow-indigo-900/40 transition-all active:scale-95 text-[10px] uppercase">
+            <button 
+              v-if="userRole === 'admin'"
+              @click="openAddModal" 
+              class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-black shadow-lg shadow-indigo-900/40 transition-all active:scale-95 text-[10px] uppercase"
+            >
               <Plus class="w-3.5 h-3.5" /><span>AGREGAR</span>
             </button>
             <button 
@@ -237,8 +243,8 @@ const exportToExcel = async () => {
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) -->
-      <div class="lg:hidden bg-white p-3 rounded-xl shadow-sm border border-gray-100 shrink-0 space-y-3">
+      <!-- Header Local (Solo Móvil) - Sticky -->
+      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-[65px] z-20">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <div class="bg-indigo-600 p-1.5 rounded-lg text-white">
@@ -246,9 +252,9 @@ const exportToExcel = async () => {
             </div>
             <h1 class="text-sm font-black text-gray-800 uppercase tracking-tight">Gestión</h1>
           </div>
-          <div class="flex items-center gap-2">
-            <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-sm active:scale-95"><FileSpreadsheet class="w-4 h-4" /></button>
-            <button @click="openAddModal" class="bg-indigo-600 text-white p-1.5 rounded-lg shadow-md"><Plus class="w-5 h-5" /></button>
+          <div class="flex items-center gap-1.5">
+            <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-lg shadow-emerald-900/20 active:scale-90 transition-all"><FileSpreadsheet class="w-4 h-4" /></button>
+            <button v-if="userRole === 'admin'" @click="openAddModal" class="bg-indigo-600 text-white p-1.5 rounded-lg shadow-lg shadow-indigo-900/20 active:scale-90 transition-all"><Plus class="w-4 h-4" /></button>
           </div>
         </div>
         
@@ -286,7 +292,7 @@ const exportToExcel = async () => {
                   <span>Local: {{ m.local_fisico }}</span><span>Lado: {{ m.lado }}</span>
                 </div>
               </div>
-              <div class="flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+              <div v-if="userRole === 'admin'" class="flex space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                 <button @click="openEditModal(m)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-3.5 h-3.5" /></button>
                 <button @click="deleteMaquina(m.id)" class="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-3.5 h-3.5" /></button>
               </div>
@@ -307,7 +313,7 @@ const exportToExcel = async () => {
                   <th class="px-4 py-3 bg-gray-50 w-[80px]">Lado</th>
                   <th class="px-4 py-3 bg-gray-50 w-[120px]">Modelo</th>
                   <th class="px-4 py-3 bg-gray-50 w-[120px]">Serie</th>
-                  <th class="px-4 py-3 text-center bg-gray-50 w-[100px]">Acciones</th>
+                  <th v-if="userRole === 'admin'" class="px-4 py-3 text-center bg-gray-50 w-[100px]">Acciones</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
@@ -320,7 +326,7 @@ const exportToExcel = async () => {
                     <td class="px-2 py-1.5"><select v-model="editingRow.lado" class="bg-white border border-indigo-300 rounded px-2 py-1 text-xs outline-none"><option value="U">U</option><option value="A">A</option><option value="B">B</option></select></td>
                     <td class="px-2 py-1.5"><input v-model="editingRow.modelo" type="text" class="w-full bg-white border border-indigo-300 rounded px-2 py-1 text-xs outline-none" /></td>
                     <td class="px-2 py-1.5"><input v-model="editingRow.nro_serie" type="text" class="w-full bg-white border border-indigo-300 rounded px-2 py-1 text-xs outline-none" /></td>
-                    <td class="px-2 py-1.5">
+                    <td v-if="userRole === 'admin'" class="px-2 py-1.5">
                       <div class="flex justify-center space-x-1">
                         <button @click="saveInlineEdit" class="p-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"><Save class="w-3.5 h-3.5" /></button>
                         <button @click="cancelInlineEdit" class="p-1.5 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"><X class="w-3.5 h-3.5" /></button>
@@ -335,7 +341,7 @@ const exportToExcel = async () => {
                     <td class="px-2 py-2 text-gray-500 font-bold">{{ m.lado }}</td>
                     <td class="px-2 py-2 text-gray-400 text-xs">{{ m.modelo || '—' }}</td>
                     <td class="px-2 py-2 text-gray-400 text-xs">{{ m.nro_serie || '—' }}</td>
-                    <td class="px-2 py-2">
+                    <td v-if="userRole === 'admin'" class="px-2 py-2">
                       <div class="flex justify-center space-x-1">
                         <button @click="startInlineEdit(m)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-3.5 h-3.5" /></button>
                         <button @click="deleteMaquina(m.id)" class="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-3.5 h-3.5" /></button>

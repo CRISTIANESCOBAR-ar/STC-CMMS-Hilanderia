@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { authService, userRole } from '../services/authService';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { 
   Clock, 
@@ -252,8 +253,8 @@ const getStatusClass = (estado) => {
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) -->
-      <div class="lg:hidden bg-white p-3 rounded-xl shadow-sm border border-gray-100 shrink-0 space-y-3">
+      <!-- Header Local (Solo Móvil) - Sticky para tener exportar siempre a mano -->
+      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 space-y-2 sticky top-[65px] z-20">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <div class="bg-blue-600 p-1.5 rounded-lg text-white">
@@ -261,8 +262,8 @@ const getStatusClass = (estado) => {
             </div>
             <h1 class="text-sm font-black text-gray-800 uppercase tracking-tight">Histórico</h1>
           </div>
-          <div class="flex items-center gap-2">
-            <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-[10px] font-bold uppercase rounded-lg px-2 py-1 outline-none">
+          <div class="flex items-center gap-1.5">
+            <select v-model="statusFilter" class="bg-gray-50 border border-gray-200 text-[10px] font-black uppercase rounded-lg px-2 py-1.5 outline-none focus:border-blue-500">
               <option value="todos">Todos</option>
               <option value="pendiente">Pendiente</option>
               <option value="en proceso">En proceso</option>
@@ -270,8 +271,8 @@ const getStatusClass = (estado) => {
             </select>
             <button 
               @click="exportToExcel" 
-              data-tippy-content="Exportar a Excel"
-              class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-sm active:scale-95 transition-all"
+              class="bg-emerald-600 text-white p-1.5 rounded-lg shadow-lg shadow-emerald-900/20 active:scale-90 transition-all"
+              title="Exportar Excel"
             >
               <FileSpreadsheet class="w-4 h-4" />
             </button>
@@ -329,7 +330,22 @@ const getStatusClass = (estado) => {
                     <p class="text-xs text-gray-600 line-clamp-2 max-w-sm group-hover:line-clamp-none transition-all">{{ n.observaciones }}</p>
                   </td>
                   <td class="px-4 py-3">
-                    <span class="px-2.5 py-1 text-[9px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
+                    <div class="flex items-center space-x-1">
+                      <span 
+                        :class="getStatusClass(n.estado)"
+                        class="px-2.5 py-1 rounded text-[9px] font-black uppercase border whitespace-nowrap"
+                      >
+                        {{ n.estado }}
+                      </span>
+                      <!-- Solo Admin puede cambiar estado (Mecánico solo lee) -->
+                      <button 
+                        v-if="userRole === 'admin'"
+                        @click="cambiarEstado(n)" 
+                        class="p-1 hover:bg-gray-100 rounded-md transition-colors"
+                      >
+                        <RefreshCw class="w-3 h-3 text-gray-400" />
+                      </button>
+                    </div>
                   </td>
                   <td class="px-4 py-3 text-center">
                     <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-1.5 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-md inline-flex transition-all">

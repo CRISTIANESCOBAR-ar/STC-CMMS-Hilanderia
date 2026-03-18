@@ -2,7 +2,10 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService } from '../services/authService';
-import { UserCircle, LogIn, Loader2 } from 'lucide-vue-next';
+import { UserCircle, LogIn, Loader2, RefreshCw } from 'lucide-vue-next';
+
+// Hora del build incrustada por Vite
+const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Desconocido';
 
 const router = useRouter();
 const isLoading = ref('');
@@ -30,6 +33,32 @@ const handleAnonLogin = async () => {
   } catch (error) {
     errorMsg.value = 'No se pudo ingresar como invitado.';
   } finally {
+    isLoading.value = '';
+  }
+};
+
+const limpiarCacheYActualizar = async () => {
+  isLoading.value = 'update';
+  try {
+    // 1. Desregistrar Service Workers
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    // 2. Limpiar Caches de la PWA
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (let key of keys) {
+        await caches.delete(key);
+      }
+    }
+    // 3. Recargar la página forzando la red
+    window.location.reload(true);
+  } catch (err) {
+    console.error("Error al limpiar caché:", err);
+    errorMsg.value = "No se pudo actualizar. Intenta borrar caché del navegador manualmente.";
     isLoading.value = '';
   }
 };
@@ -93,6 +122,19 @@ const handleAnonLogin = async () => {
               Entrar como Invitado
             </button>
 
+          </div>
+
+          <!-- Información de Build y Botón de Actualización -->
+          <div class="mt-8 text-center border-t border-gray-100 pt-6">
+            <p class="text-xs text-gray-400 font-mono mb-3">Versión: {{ BUILD_TIME }}</p>
+            <button 
+              @click="limpiarCacheYActualizar"
+              :disabled="isLoading !== ''"
+              class="inline-flex items-center text-xs font-semibold text-gray-500 hover:text-blue-600 transition"
+            >
+              <RefreshCw class="w-3 h-3 mr-1" :class="{ 'animate-spin': isLoading === 'update' }" />
+              Buscar Actualizaciones
+            </button>
           </div>
         </div>
       </div>

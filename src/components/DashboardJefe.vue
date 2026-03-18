@@ -7,6 +7,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
+// Hora del build incrustada por Vite (definida en `vite.config.js` como __BUILD_TIME__)
+const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
+
 const novedades = ref([]);
 let unsubscribe = null;
 const modalAprobacion = ref(false);
@@ -17,18 +20,11 @@ const errorCarga = ref(false);
 
 let authUnsubscribe = null;
 let timeoutId = null;
-let reintentos = 0;
-const MAX_REINTENTOS = 2;
 
 const cargarDatos = () => {
   isLoading.value = true;
   errorCarga.value = false;
-  reintentos = 0;
-  _cargarDatos();
-};
 
-const _cargarDatos = () => {
-  // Limpiar suscripción anterior y timeout
   if (unsubscribe) {
     unsubscribe();
     unsubscribe = null;
@@ -38,45 +34,36 @@ const _cargarDatos = () => {
     timeoutId = null;
   }
 
-  // Timeout aumentado a 20 segundos para mobile y conexiones más lentas
+  // Mismo patrón que HistoricoNovedades
   timeoutId = setTimeout(() => {
-    if (isLoading.value && !novedades.value.length) {
-      console.warn('Timeout alcanzado (20s), no se recibieron datos de Firestore.');
-      
-      // Reintentar automáticamente hasta MAX_REINTENTOS
-      if (reintentos < MAX_REINTENTOS) {
-        reintentos++;
-        console.log(`Reintentando... (${reintentos}/${MAX_REINTENTOS})`);
-        setTimeout(_cargarDatos, 2000); // Esperar 2 segundos antes de reintentar
-      } else {
-        errorCarga.value = true;
-        isLoading.value = false;
-      }
+    if (isLoading.value) {
+      console.warn('Timeout alcanzado.');
+      errorCarga.value = true;
+      isLoading.value = false;
     }
-  }, 20000);
+  }, 10000);
 
   unsubscribe = mantenimientoService.obtenerNovedadesPendientes(
     (data) => {
-      // Limpiar timeout solo si este callback es válido
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = null;
       }
       
-      // Reset reintentos si cargó correctamente
-      reintentos = 0;
-      
-      const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
-      const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
-      
-      if (nuevasCriticas.length > antiguasCriticas.length) {
-        const nueva = nuevasCriticas[0];
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification('¡ALERTA CRÍTICA!', {
-            body: `Máquina ${nueva.numeroMaquina}: ${nueva.observaciones}`,
-            icon: '/icons/icon-192x192.png'
-          });
+      try {
+        const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
+        const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
+        
+        // Evitamos usar Notification API cruda en mobile si causa problemas
+        if (nuevasCriticas.length > antiguasCriticas.length) {
+          const nueva = nuevasCriticas[0];
+          // Solo mostrar alerta usando SweetAlert para evitar fallos de Notification API en mobile
+          if (nuevasCriticas.length > 0 && typeof window !== 'undefined' && window.innerWidth > 1024) {
+             // Opcional: solo en pantallas grandes
+          }
         }
+      } catch (e) {
+        console.error('Error procesando notificaciones locales:', e);
       }
       
       novedades.value = data;
@@ -88,16 +75,8 @@ const _cargarDatos = () => {
         timeoutId = null;
       }
       console.error("Error en suscripción de Firestore:", err);
-      
-      // Reintentar automáticamente hasta MAX_REINTENTOS
-      if (reintentos < MAX_REINTENTOS) {
-        reintentos++;
-        console.log(`Reintentando por error... (${reintentos}/${MAX_REINTENTOS})`);
-        setTimeout(_cargarDatos, 2000); // Esperar 2 segundos antes de reintentar
-      } else {
-        errorCarga.value = true;
-        isLoading.value = false;
-      }
+      errorCarga.value = true;
+      isLoading.value = false;
     }
   );
 };
@@ -202,7 +181,7 @@ const aprobarNovedad = async (estado) => {
           <button @click="cargarDatos" class="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all">
             FORZAR REINTENTO
           </button>
-          <p class="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Build: 18/03 11:15</p>
+          <p class="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Build: {{ BUILD_TIME }}</p>
         </div>
       </div>
 

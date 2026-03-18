@@ -12,4 +12,7 @@ export default defineConfig({
     // Para desarrollo mobile
     host: true,
   },
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString())
+  }
 })

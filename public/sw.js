@@ -1,7 +1,9 @@
 const CACHE_NAME = 'cmms-cache-v2';
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  // Comentado intencionalmente: NO usar self.skipWaiting() aquí.
+  // Esto permite que el Service Worker pase al estado "waiting", 
+  // lo cual detona el evento en LoginView para mostrar el cartel verde de "Actualización Disponible".
 });
 
 self.addEventListener('activate', event => {

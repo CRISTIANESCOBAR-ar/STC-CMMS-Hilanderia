@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
-import { UploadCloud, CheckCircle, Settings } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Settings, Wrench, Zap } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
@@ -11,6 +11,7 @@ import { compressImage, formatSize } from '../utils/imageCompressor';
 const maquinas = ref([]);
 const tipoSeleccionado = ref('CARDA'); // Default
 const maquinaSeleccionadaId = ref('');
+const tipoProblema = ref('Mecánico'); // Mecánico or Eléctrico
 const isCritico = ref(false);
 const observaciones = ref('');
 const imagenFile = ref(null);
@@ -111,7 +112,8 @@ const onSubmit = async () => {
       local_fisico: detallesMaquina.value.local_fisico,
       lado: detallesMaquina.value.lado,
       critico: isCritico.value,
-      observaciones: observaciones.value
+      observaciones: observaciones.value,
+      tipoProblema: tipoProblema.value
     };
 
     // Pasamos el callback de progreso al servicio
@@ -163,6 +165,20 @@ const onSubmit = async () => {
       </div>
 
       <form @submit.prevent="onSubmit" class="space-y-4">
+
+        <!-- Selección de Tipo de Problema -->
+        <div class="flex gap-2">
+           <label class="flex-1 flex items-center justify-center py-3 rounded-xl border cursor-pointer transition-all font-black text-sm uppercase tracking-wider"
+                  :class="tipoProblema === 'Mecánico' ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30' : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50 hover:border-blue-300'">
+              <input type="radio" v-model="tipoProblema" value="Mecánico" class="hidden">
+              <Wrench class="w-4 h-4 mr-2" /> MECÁNICA
+           </label>
+           <label class="flex-1 flex items-center justify-center py-3 rounded-xl border cursor-pointer transition-all font-black text-sm uppercase tracking-wider"
+                  :class="tipoProblema === 'Eléctrico' ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30' : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50 hover:border-amber-300'">
+              <input type="radio" v-model="tipoProblema" value="Eléctrico" class="hidden">
+              <Zap class="w-4 h-4 mr-2" /> ELÉCTRICA
+           </label>
+        </div>
         
         <!-- Selección de Máquina (En una sola fila para mobile) -->
         <div class="flex gap-2">

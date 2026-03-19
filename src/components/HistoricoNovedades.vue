@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
 import { mantenimientoService } from '../services/mantenimientoService';
+import { aiService } from '../services/aiService';
 import { 
   Clock, 
   AlertTriangle, 
@@ -14,10 +15,15 @@ import {
   Filter,
   Image as ImageIcon,
   History,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Sparkles,
+  Copy,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-vue-next';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import Swal from 'sweetalert2';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/animations/shift-away.css';
@@ -32,6 +38,15 @@ const itemsPerPage = ref(25);
 const currentPage = ref(1);
 const searchQuery = ref('');
 const statusFilter = ref('todos');
+const filterDate = ref(''); // YYYY-MM-DD
+
+// Estado IA
+const iaSummary = ref('');
+const iaSummaryRaw = ref('');
+const isIaLoading = ref(false);
+const iaError = ref(false);
+const iaFromCache = ref(false);
+const iaCollapsed = ref(false);
 
 let timeoutId = null;
 
@@ -88,13 +103,65 @@ const novedadesFiltradas = computed(() => {
     const obs = String(n.observaciones || '').toLowerCase();
     const matchesSearch = numMaq.includes(search) || tipoMaq.includes(search) || obs.includes(search);
     const matchesStatus = statusFilter.value === 'todos' || n.estado === statusFilter.value;
-    return matchesSearch && matchesStatus;
+    
+    let matchesDate = true;
+    if (filterDate.value && n.createdAt) {
+      let dateObj;
+      if (typeof n.createdAt.toDate === 'function') dateObj = n.createdAt.toDate();
+      else dateObj = new Date(n.createdAt);
+      
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      matchesDate = `${yyyy}-${mm}-${dd}` === filterDate.value;
+    }
+    
+    return matchesSearch && matchesStatus && matchesDate;
   });
 });
 
 watch([searchQuery, statusFilter], () => {
   currentPage.value = 1;
 });
+
+watch(filterDate, (newVal) => {
+  currentPage.value = 1;
+  if (newVal) {
+    cargarAnalisisIA();
+  } else {
+    iaSummary.value = '';
+    iaSummaryRaw.value = '';
+  }
+});
+
+const cargarAnalisisIA = async (forceRegenerate = false) => {
+  if (!filterDate.value) return;
+  isIaLoading.value = true;
+  iaError.value = false;
+  try {
+    const response = await aiService.generarResumenDiario(forceRegenerate, filterDate.value);
+    iaSummaryRaw.value = response.text;
+    iaSummary.value = formatMarkdown(response.text);
+    iaFromCache.value = response.fromCache;
+  } catch (error) {
+    console.error("No se pudo cargar análisis de IA", error);
+    iaError.value = true;
+  } finally {
+    isIaLoading.value = false;
+  }
+};
+
+const formatMarkdown = (text) => {
+  if (!text) return '';
+  return text.replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/_(.*?)_/g, '<i>$1</i>').replace(/\n/g, '<br/>');
+};
+
+const copiarWhatsApp = () => {
+  if (!iaSummaryRaw.value) return;
+  navigator.clipboard.writeText(iaSummaryRaw.value).then(() => {
+    Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'El reporte está listo para pegar en WhatsApp.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
+  });
+};
 
 const totalPages = computed(() => Math.ceil(novedadesFiltradas.value.length / itemsPerPage.value) || 1);
 const paginatedNovedades = computed(() => {
@@ -219,22 +286,32 @@ const getStatusClass = (estado) => {
             </div>
           </div>
 
-          <!-- Buscador (Desktop) -->
-          <div class="relative flex-1 max-w-md mx-auto">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="Buscar máquina o falla..." 
-              class="w-full pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-700 focus:bg-gray-700 focus:border-blue-500 rounded-lg text-xs text-gray-200 outline-none transition-all placeholder:text-gray-500" 
-            />
-          </div>
-
-          <!-- Filtro (Desktop) -->
-          <div class="flex items-center gap-2 shrink-0">
+          <!-- Búsqueda y Filtros (Desktop) -->
+          <div class="flex-1 flex items-center gap-2 max-w-2xl mx-auto">
+            <div class="relative flex-[1.5]">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="Buscar máquina o falla..." 
+                class="w-full pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-700 focus:bg-gray-700 focus:border-blue-500 rounded-lg text-xs text-gray-200 outline-none transition-all placeholder:text-gray-500" 
+              />
+            </div>
+            
+            <div class="relative flex-[0.8] min-w-[120px]">
+              <input 
+                v-model="filterDate" 
+                type="date" 
+                :class="{'text-transparent': !filterDate, 'text-gray-300': filterDate}"
+                class="w-full bg-gray-800 border border-gray-700 text-xs font-bold rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all"
+                title="Filtrar por fecha y analizar IA"
+              />
+              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none uppercase font-bold tracking-wider bg-gray-800 px-1">Fecha IA...</span>
+            </div>
+            
             <select 
               v-model="statusFilter"
-              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold uppercase rounded-lg px-3 py-1.5 focus:border-blue-500 outline-none transition-all"
+              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold uppercase rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all flex-[0.7]"
             >
               <option value="todos">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
@@ -245,7 +322,7 @@ const getStatusClass = (estado) => {
             <button 
               @click="exportToExcel"
               data-tippy-content="Exportar a Excel"
-              class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-900/40 transition-all active:scale-95"
+              class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-900/40 transition-all active:scale-95 shrink-0"
             >
               <FileSpreadsheet class="w-4 h-4" />
             </button>
@@ -264,7 +341,7 @@ const getStatusClass = (estado) => {
       </Teleport>
 
       <!-- Header Local (Solo Móvil) - Espacioso -->
-      <div class="md:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
+      <div class="md:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20 space-y-2">
         <div class="flex items-center gap-2">
           <div class="relative flex-[1.2]">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -272,14 +349,83 @@ const getStatusClass = (estado) => {
           </div>
           <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-xs font-black uppercase rounded-lg px-2 py-2 outline-none focus:border-blue-500 flex-[0.8] text-center">
             <option value="todos">Todos</option>
-            <option value="pendiente">Pen.</option>
-            <option value="en proceso">En Proc.</option>
-            <option value="resuelto">Res.</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="en proceso">En Proceso</option>
+            <option value="resuelto">Resuelto</option>
           </select>
+        </div>
+        <div class="relative">
+          <input v-model="filterDate" type="date" :class="{'text-transparent flex items-center': !filterDate, 'text-gray-600': filterDate}" class="w-full bg-gray-50 border border-gray-100 text-sm font-bold rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-blue-500/20" />
+          <span v-if="!filterDate" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none font-bold">Seleccionar Fecha IA...</span>
         </div>
       </div>
 
       <!-- Contenido Principal -->
+      
+      <!-- Panel de Inteligencia Artificial (Aparece al seleccionar Fecha) -->
+      <div v-if="filterDate && (!isLoading && !errorCarga)" class="mt-2 mb-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 md:p-5 border border-indigo-100 shadow-sm relative overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-[35vh]">
+         <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+            <Sparkles class="w-24 h-24 text-indigo-600" />
+         </div>
+         
+         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-indigo-100/50 pb-2">
+           <!-- Titulo -->
+           <h3 class="flex items-center text-lg md:text-xl font-black text-indigo-900 truncate pr-2" @click="iaCollapsed = !iaCollapsed">
+             <Sparkles class="w-5 h-5 md:w-6 md:h-6 mr-1.5 md:mr-2 text-indigo-600 shrink-0" /> 
+             <span class="truncate cursor-pointer select-none hover:opacity-80 transition-opacity">Análisis IA</span>
+           </h3>
+           
+           <!-- Acciones -->
+           <div class="flex items-center gap-1.5 shrink-0">
+             <div v-if="!isIaLoading && iaSummary" class="flex items-center gap-1.5">
+               <button @click="copiarWhatsApp" title="Copiar para WhatsApp" class="bg-green-500 text-white font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-green-600 transition shadow-md border border-green-600 flex items-center shrink-0">
+                 <Copy class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
+                 <span class="hidden md:inline text-[10px] uppercase tracking-wider">WhatsApp</span>
+               </button>
+               
+               <template v-if="iaFromCache">
+                 <button @click="cargarAnalisisIA(true)" title="Regenerar Análisis" class="bg-white border border-indigo-200 text-indigo-600 font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-indigo-50 transition shadow-sm shrink-0 flex items-center">
+                   <Sparkles class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
+                   <span class="hidden md:inline text-[10px] uppercase tracking-wider">Regenerar</span>
+                 </button>
+               </template>
+             </div>
+             
+             <!-- Separador Vertical -->
+             <div class="w-px h-5 bg-indigo-200 mx-0.5 md:mx-1"></div>
+             
+             <!-- Colapsar -->
+             <button 
+               @click="iaCollapsed = !iaCollapsed" 
+               class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-indigo-200"
+               title="Expandir/Contraer"
+             >
+               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
+               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
+             </button>
+           </div>
+         </div>
+
+         <div v-show="!iaCollapsed">
+           <div v-if="isIaLoading" class="flex flex-col items-center justify-center py-4 z-10 relative">
+             <div class="animate-pulse flex gap-2 w-full max-w-sm">
+                <div class="h-2 bg-indigo-200 rounded w-full"></div>
+                <div class="h-2 bg-indigo-200 rounded w-1/2"></div>
+             </div>
+             <p class="text-xs text-indigo-600 font-bold mt-2 uppercase tracking-wide">Generando Resumen...</p>
+           </div>
+           
+           <div v-else-if="iaError" class="text-indigo-800 text-sm font-semibold z-10 relative">
+             No se pudo generar el resumen de IA automáticamente para esta fecha.
+             <button @click="cargarAnalisisIA(true)" class="underline ml-2">Reintentar</button>
+           </div>
+
+           <div v-else class="text-indigo-950 text-base md:text-lg leading-relaxed z-10 relative font-medium space-y-2 bg-white/70 p-3 rounded-2xl border border-white max-w-none" v-html="iaSummary">
+           </div>
+         </div>
+      </div>
+
+      <!-- Estado Carga Lista -->
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
         <p class="font-bold text-xs uppercase tracking-widest text-gray-400">Cargando historial...</p>

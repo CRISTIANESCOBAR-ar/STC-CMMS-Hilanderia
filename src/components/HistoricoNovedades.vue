@@ -192,12 +192,20 @@ const exportToExcel = async () => {
 
   // Agregar Datos
   novedadesFiltradas.value.forEach(n => {
+    let obsText = n.observaciones;
+    if (n.seccion || n.denominacion) {
+      obsText += ` \n[Punto: ${n.denominacion || n.seccion}`;
+      if (n.numeroArticulo && n.numeroArticulo !== '-') obsText += ` | Art: ${n.numeroArticulo}`;
+      if (n.numeroCatalogo && n.numeroCatalogo !== '-') obsText += ` | Cat: ${n.numeroCatalogo}`;
+      obsText += `]`;
+    }
+
     worksheet.addRow({
       fecha: formatDate(n.createdAt),
       tipo: n.tipoMaquina,
       maquina: n.numeroMaquina,
       lado: n.lado,
-      observaciones: n.observaciones,
+      observaciones: obsText,
       estado: n.estado.toUpperCase()
     });
   });
@@ -468,6 +476,15 @@ const getStatusClass = (estado) => {
                   </td>
                   <td class="px-5 py-4 text-sm font-black text-gray-600">{{ n.lado }}</td>
                   <td class="px-5 py-4 max-w-sm">
+                    <div v-if="n.seccion || n.denominacion" class="mb-2 bg-indigo-50 border border-indigo-100 p-2 rounded-lg inline-block w-full">
+                       <span class="block text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-0.5">Punto de Control Afectado</span>
+                       <div class="flex justify-between items-center gap-2">
+                         <span class="text-xs font-bold text-indigo-900 truncate">{{ n.denominacion || n.seccion }} <span v-if="n.grupo" class="text-indigo-400 font-normal">({{ n.grupo }})</span></span>
+                         <span v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="shrink-0 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-indigo-200">
+                           Art: {{ n.numeroArticulo }}
+                         </span>
+                       </div>
+                    </div>
                     <p class="text-sm text-gray-700 font-medium whitespace-normal">{{ n.observaciones }}</p>
                   </td>
                   <td class="px-5 py-4">
@@ -519,6 +536,18 @@ const getStatusClass = (estado) => {
               <span class="text-sm font-black text-gray-800 uppercase">{{ n.numeroMaquina }} ({{ n.lado }})</span>
               <span class="text-xs font-bold text-gray-400 uppercase mt-0.5">{{ formatDate(n.createdAt) }}</span>
             </div>
+            
+            <div v-if="n.seccion || n.denominacion" class="bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg space-y-1">
+               <div class="flex flex-col">
+                  <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none">Punto de Control</span>
+                  <span class="text-xs font-bold text-indigo-900 leading-tight mt-0.5">{{ n.denominacion || n.seccion }}</span>
+               </div>
+               <div v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="flex gap-2">
+                 <span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Art: {{ n.numeroArticulo }}</span>
+                 <span v-if="n.numeroCatalogo && n.numeroCatalogo !== '-'" class="bg-indigo-100 border border-indigo-200 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Cat: {{ n.numeroCatalogo }}</span>
+               </div>
+            </div>
+
             <p class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
             <div class="flex items-center justify-between pt-2">
               <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>

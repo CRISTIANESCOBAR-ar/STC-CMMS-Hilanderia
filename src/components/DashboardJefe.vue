@@ -390,7 +390,18 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
                 <span class="text-sm font-black px-3 py-1.5 rounded-lg bg-black/10 uppercase">{{ novedad.estado }}</span>
               </div>
               
-              <p class="text-lg font-bold my-5 p-4 bg-black/5 rounded-2xl border border-black/5 leading-snug">
+              <div v-if="novedad.seccion || novedad.denominacion" class="bg-black/5 border border-black/10 p-3 rounded-xl mb-4">
+                 <span class="block text-xs font-black uppercase tracking-widest leading-none mb-1 opacity-60">PUNTO DE CONTROL AFECTADO</span>
+                 <div class="flex flex-col gap-1">
+                   <span class="text-sm font-bold opacity-90">{{ novedad.denominacion || novedad.seccion }} <span v-if="novedad.grupo" class="opacity-60 font-medium">({{ novedad.grupo }})</span></span>
+                   <div v-if="novedad.numeroArticulo && novedad.numeroArticulo !== '-'" class="flex gap-2 mt-1">
+                     <span class="bg-indigo-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shadow-sm">Art: {{ novedad.numeroArticulo }}</span>
+                     <span v-if="novedad.numeroCatalogo && novedad.numeroCatalogo !== '-'" class="bg-white text-indigo-800 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-indigo-200 shadow-sm">Cat: {{ novedad.numeroCatalogo }}</span>
+                   </div>
+                 </div>
+              </div>
+
+              <p class="text-lg font-bold mb-5 p-4 bg-black/5 rounded-2xl border border-black/5 leading-snug">
                 "{{ novedad.observaciones }}"
               </p>
 

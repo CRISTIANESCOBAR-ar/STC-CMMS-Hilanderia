@@ -103,8 +103,8 @@ const pageTitle = computed(() => {
             {{ pageTitle }}
           </span>
           
-          <!-- Portal para Contenido Mobile (Título + Botones rápidos) -->
-          <div id="navbar-mobile-portal" class="lg:hidden flex items-center space-x-2 overflow-hidden"></div>
+          <!-- Portal para Contenido Extra (Título + Botones rápidos) -->
+          <div id="navbar-header-portal" class="flex items-center space-x-2 overflow-hidden"></div>
         </div>
 
         <!-- Portales para acciones (Solo Desktop) -->

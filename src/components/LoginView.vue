@@ -91,10 +91,10 @@ const limpiarCacheYActualizar = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col pt-10 pb-8 sm:px-6 lg:px-8">
+  <div class="h-[100dvh] overflow-hidden bg-gray-50 flex flex-col pt-2 pb-4 sm:px-6 lg:px-8">
     
     <!-- Logo Superior -->
-    <div class="shrink-0 flex justify-center w-full mt-4">
+    <div class="shrink-0 flex justify-center w-full mt-2">
       <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-16 sm:h-20 object-contain mix-blend-multiply opacity-95 hover:opacity-100 transition-opacity" />
     </div>
 
@@ -102,18 +102,18 @@ const limpiarCacheYActualizar = async () => {
     <div class="flex-1 flex flex-col justify-center w-full sm:mx-auto sm:max-w-md">
       
       <!-- Titulo e Icono -->
-      <div class="text-center mb-8">
-        <div class="mx-auto h-16 w-16 bg-blue-600 rounded-2xl rotate-3 flex items-center justify-center shadow-lg border-4 border-gray-50 mb-6 transition-transform hover:rotate-0 duration-300">
+      <div class="text-center mb-4">
+        <div class="mx-auto h-12 w-12 bg-blue-600 rounded-xl rotate-3 flex items-center justify-center shadow-lg border-2 border-gray-50 mb-3 transition-transform hover:rotate-0 duration-300">
           <Wrench class="w-8 h-8 text-white -rotate-3" stroke-width="2.5" />
         </div>
         <h2 class="text-3xl font-black text-gray-900 tracking-tight">CMMS Hilandería</h2>
-        <p class="mt-2 text-sm font-medium text-gray-500 uppercase tracking-widest">
+        <p class="mt-2 text-sm font-medium text-gray-500 tracking-widest">
           Reporte de Mantenimiento
         </p>
       </div>
 
       <!-- Tarjeta -->
-      <div class="bg-white py-8 px-4 shadow-xl sm:rounded-3xl rounded-2xl mx-4 sm:mx-0 sm:px-10 border border-gray-100 relative overflow-hidden">
+      <div class="bg-white py-6 px-4 shadow-xl sm:rounded-3xl rounded-2xl mx-4 sm:mx-0 sm:px-10 border border-gray-100 relative overflow-hidden">
         
         <!-- Banner de Novedad (Aparece si hay actualización y decora la caja) -->
         <div v-if="hasUpdate" class="absolute top-0 inset-x-0 h-1 bg-green-500 animate-pulse"></div>
@@ -141,7 +141,7 @@ const limpiarCacheYActualizar = async () => {
 
           <div class="py-2 flex items-center justify-between">
             <span class="w-1/4 border-b border-gray-100"></span>
-            <span class="text-[10px] text-center text-gray-400 uppercase tracking-widest font-bold px-2">Invitado</span>
+            <span class="text-[10px] text-center text-gray-400 tracking-widest font-bold px-2">Invitado</span>
             <span class="w-1/4 border-b border-gray-100"></span>
           </div>
 
@@ -160,7 +160,7 @@ const limpiarCacheYActualizar = async () => {
     </div>
 
     <!-- Area Inferior: Footer y Notificador de Actualizaciones -->
-    <div class="shrink-0 w-full flex flex-col items-center justify-end mt-auto space-y-4 px-4">
+    <div class="shrink-0 w-full flex flex-col items-center justify-end mt-auto space-y-2 pb-4 px-4">
       
       <!-- Notificador de Versión Nueva -->
       <transition 
@@ -179,7 +179,7 @@ const limpiarCacheYActualizar = async () => {
             class="w-full flex justify-center items-center py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition shadow-sm active:scale-95"
           >
             <RefreshCw class="w-4 h-4 mr-2" :class="{ 'animate-spin': isLoading === 'update' }" />
-            ACTUALIZAR AHORA
+            Actualizar ahora
           </button>
         </div>
       </transition>
@@ -192,7 +192,7 @@ const limpiarCacheYActualizar = async () => {
         class="inline-flex items-center text-xs font-semibold text-gray-400 hover:text-gray-700 bg-gray-100/50 hover:bg-gray-100 py-2 px-4 rounded-full transition-colors"
       >
         <RefreshCw class="w-3 h-3 mr-2" :class="{ 'animate-spin': isLoading === 'update' }" />
-        Actualización Manual
+        Actualización manual
       </button>
 
       <!-- Build Info -->

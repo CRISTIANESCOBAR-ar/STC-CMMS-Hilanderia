@@ -1,0 +1,73 @@
+import { collection, addDoc, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+
+const COLLECTION_NAME = 'catalogo_puestos_control';
+
+export const catalogoService = {
+  /**
+   * Obtiene los puntos de control para un modelo de máquina específico.
+   * @param {string} modelo - Ejemplo: 'R-60'
+   */
+  async obtenerPuntosPorModelo(modelo) {
+    try {
+      const q = query(collection(db, COLLECTION_NAME), where('modelo', '==', modelo));
+      const querySnapshot = await getDocs(q);
+      const catalog = [];
+      querySnapshot.forEach((doc) => {
+        catalog.push({ id: doc.id, ...doc.data() });
+      });
+      return catalog;
+    } catch (error) {
+      console.error("Error al obtener puntos de control:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Carga el catálogo completo desde un JSON a Firestore.
+   * También actualiza las máquinas OPEN END existentes para que tengan el modelo 'R-60'.
+   */
+  async migrarCatalogo(items) {
+    try {
+      const { writeBatch, getDocs } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      
+      // 1. Cargar el catálogo
+      items.forEach((item) => {
+        const itemConModelo = { ...item, modelo: item.modelo || 'R-60' };
+        const docId = `r60_${item.seccion}_${item.grupo}_${item.subGrupo}_${item.denominacion}`
+          .replace(/[\s/]+/g, '_')
+          .toLowerCase();
+        const docRef = doc(db, COLLECTION_NAME, docId);
+        batch.set(docRef, { ...itemConModelo, updatedAt: new Date() }, { merge: true });
+      });
+
+      // 2. Parchear máquinas existentes
+      const maquinasRef = collection(db, 'maquinas');
+      const mSnap = await getDocs(maquinasRef);
+      mSnap.forEach((mDoc) => {
+        const data = mDoc.data();
+        if (data.tipo === 'OPEN END' && !data.modelo) {
+          batch.update(mDoc.ref, { modelo: 'R-60' });
+        }
+      });
+
+      await batch.commit();
+      console.log("Migración y parche de máquinas completos");
+    } catch (error) {
+      console.error("Error en migración:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verifica si el catálogo está vacío y lo inicializa si es necesario.
+   */
+  async inicializarSiVacio(items) {
+    const q = query(collection(db, COLLECTION_NAME), where('modelo', '==', 'R-60'));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      await this.migrarCatalogo(items);
+    }
+  }
+};

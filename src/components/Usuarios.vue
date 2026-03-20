@@ -65,9 +65,9 @@ onMounted(cargarUsuarios);
             <div class="bg-indigo-600 p-2 rounded-xl text-white">
               <Users class="w-5 h-5" />
             </div>
-            <h1 class="text-base font-black text-gray-800 uppercase tracking-tight">Gestión de Usuarios</h1>
+            <h1 class="text-base font-black text-gray-800 tracking-tight">Gestión de usuarios</h1>
           </div>
-          <span class="px-3 py-1 bg-indigo-50 text-xs font-black text-indigo-600 rounded-full uppercase">
+          <span class="px-3 py-1 bg-indigo-50 text-xs font-black text-indigo-600 rounded-full">
             {{ usuarios.length }} Registrados
           </span>
         </div>
@@ -86,7 +86,7 @@ onMounted(cargarUsuarios);
       <!-- Lista de Usuarios -->
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"></div>
-        <p class="font-bold text-sm uppercase tracking-widest">Cargando usuarios...</p>
+        <p class="font-bold text-sm tracking-widest">Cargando usuarios...</p>
       </div>
 
       <div v-else class="flex-1 overflow-y-auto space-y-3 pr-1">
@@ -101,7 +101,7 @@ onMounted(cargarUsuarios);
               <Shield v-else class="w-6 h-6" />
             </div>
             <div class="space-y-1">
-              <h3 class="text-sm font-black text-gray-800 uppercase leading-none">{{ user.displayName || 'Usuario Google' }}</h3>
+              <h3 class="text-sm font-black text-gray-800 leading-none">{{ user.displayName || 'Usuario Google' }}</h3>
               <div class="flex items-center space-x-2">
                 <Mail class="w-4 h-4 text-gray-400" />
                 <span class="text-xs font-bold text-gray-500">{{ user.email }}</span>
@@ -112,7 +112,7 @@ onMounted(cargarUsuarios);
           <div class="flex flex-col items-end space-y-2">
             <span 
               :class="user.role === 'admin' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'"
-              class="px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+              class="px-3 py-1.5 rounded-md text-[10px] font-black tracking-widest cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
               @click="cambiarRole(user, user.role === 'admin' ? 'mecanico' : 'admin')"
             >
               {{ user.role }}

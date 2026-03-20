@@ -223,15 +223,15 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
   <div class="min-h-screen bg-gray-100 pb-10">
     <!-- Alerta Crítica Flotante (Opcional, ahora que el header es global) -->
     <div v-if="novedades.some(n => n.critico && n.estado === 'pendiente')" 
-      class="bg-red-600 text-white text-[10px] font-black py-1 px-4 text-center uppercase tracking-widest sticky top-16 z-40 shadow-md">
-      ¡HAY FALLAS CRÍTICAS PENDIENTES!
+      class="bg-red-600 text-white text-[10px] font-black py-1 px-4 text-center tracking-widest sticky top-16 z-40 shadow-md">
+      ¡Hay fallas críticas pendientes!
     </div>
 
 
     <!-- Portal para Navbar (Mobile) -->
     <Teleport to="#navbar-mobile-portal">
       <div v-if="!isLoading && novedades.length > 0" class="flex items-center gap-2">
-        <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Panel</h1>
+        <h1 class="text-xs font-black text-white tracking-tighter shrink-0">Panel</h1>
         <div class="flex items-center gap-1">
           <span v-if="mecanicasCount > 0" class="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md shrink-0 border border-blue-400">
              <Wrench class="w-2.5 h-2.5 inline mr-0.5" />{{ mecanicasCount }}
@@ -250,10 +250,10 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
         <p class="text-gray-500 font-medium mb-4">Cargando novedades...</p>
         <div class="space-y-2">
-          <button @click="cargarDatos" class="text-[10px] font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all">
-            FORZAR REINTENTO
+          <button @click="cargarDatos" class="text-[10px] font-black tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all">
+            Forzar reintento
           </button>
-          <p class="text-[8px] text-gray-300 font-bold uppercase tracking-widest">Build: {{ BUILD_TIME }}</p>
+          <p class="text-[8px] text-gray-300 font-bold tracking-widest">Build: {{ BUILD_TIME }}</p>
         </div>
       </div>
 
@@ -265,7 +265,7 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
         <button 
           @click="cargarDatos" 
           class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-blue-700 transition">
-          REINTENTAR
+          Reintentar
         </button>
       </div>
 
@@ -335,17 +335,17 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
       <!-- Título y Filtros SIEMPRE VISIBLES si hay datos cargados (incluso si los filtrados dan 0) -->
       <div v-if="!isLoading && !errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div class="flex items-center gap-3">
-           <h2 class="text-2xl font-black text-gray-800 uppercase tracking-tight hidden lg:block">Panel de Control</h2>
+           <h2 class="text-2xl font-black text-gray-800 tracking-tight hidden lg:block">Panel de control</h2>
         </div>
         
         <div class="flex items-center self-start md:self-auto bg-white rounded-xl shadow-sm border border-gray-200 p-1">
-           <button @click="filtroTipo = 'Todos'" :class="filtroTipo === 'Todos' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition flex items-center">
+           <button @click="filtroTipo = 'Todos'" :class="filtroTipo === 'Todos' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
               <Filter class="w-3.5 h-3.5 mr-1" /> Todos
            </button>
-           <button @click="filtroTipo = 'Mecánico'" :class="filtroTipo === 'Mecánico' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition flex items-center">
+           <button @click="filtroTipo = 'Mecánico'" :class="filtroTipo === 'Mecánico' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
               <Wrench class="w-3.5 h-3.5 mr-1" /> Mec. ({{mecanicasCount}})
            </button>
-           <button @click="filtroTipo = 'Eléctrico'" :class="filtroTipo === 'Eléctrico' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition flex items-center">
+           <button @click="filtroTipo = 'Eléctrico'" :class="filtroTipo === 'Eléctrico' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
               <Zap class="w-3.5 h-3.5 mr-1" /> Eléc. ({{electricasCount}})
            </button>
         </div>
@@ -381,22 +381,25 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
             <div>
               <div class="flex justify-between items-start mb-4 pr-8">
                 <div>
-                  <h3 class="text-3xl font-black flex items-center">
-                    <AlertTriangle v-if="novedad.critico" class="w-6 h-6 mr-2" />
-                    ID: {{ novedad.numeroMaquina }}
-                  </h3>
-                  <p class="text-base font-bold opacity-80 uppercase tracking-widest mt-1">{{ novedad.tipoMaquina }} (Lado {{ novedad.lado }})</p>
-                </div>
-                <span class="text-sm font-black px-3 py-1.5 rounded-lg bg-black/10 uppercase">{{ novedad.estado }}</span>
+                    <h3 class="text-3xl font-black flex items-center">
+                      <AlertTriangle v-if="novedad.critico" class="w-6 h-6 mr-2" />
+                      ID: {{ novedad.numeroMaquina }}
+                    </h3>
+                    <div class="flex items-center gap-2 mt-1">
+                      <p class="text-base font-bold opacity-80 tracking-widest">{{ novedad.tipoMaquina }} (Lado {{ novedad.lado }})</p>
+                      <span v-if="novedad.motivo" class="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded border border-white/20 uppercase tracking-widest">{{ novedad.motivo }}</span>
+                    </div>
+                  </div>
+                  <span class="text-sm font-black px-3 py-1.5 rounded-lg bg-black/10">{{ novedad.estado }}</span>
               </div>
               
               <div v-if="novedad.seccion || novedad.denominacion" class="bg-black/5 border border-black/10 p-3 rounded-xl mb-4">
-                 <span class="block text-xs font-black uppercase tracking-widest leading-none mb-1 opacity-60">PUNTO DE CONTROL AFECTADO</span>
+                 <span class="block text-xs font-black tracking-widest leading-none mb-1 opacity-60">PUNTO DE CONTROL AFECTADO</span>
                  <div class="flex flex-col gap-1">
                    <span class="text-sm font-bold opacity-90">{{ novedad.denominacion || novedad.seccion }} <span v-if="novedad.grupo" class="opacity-60 font-medium">({{ novedad.grupo }})</span></span>
                    <div v-if="novedad.numeroArticulo && novedad.numeroArticulo !== '-'" class="flex gap-2 mt-1">
-                     <span class="bg-indigo-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shadow-sm">Art: {{ novedad.numeroArticulo }}</span>
-                     <span v-if="novedad.numeroCatalogo && novedad.numeroCatalogo !== '-'" class="bg-white text-indigo-800 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-indigo-200 shadow-sm">Cat: {{ novedad.numeroCatalogo }}</span>
+                     <span class="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">Art: {{ novedad.numeroArticulo }}</span>
+                     <span v-if="novedad.numeroCatalogo && novedad.numeroCatalogo !== '-'" class="bg-white text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded border border-indigo-200 shadow-sm">Cat: {{ novedad.numeroCatalogo }}</span>
                    </div>
                  </div>
               </div>
@@ -418,7 +421,7 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
                 @click="abrirModal(novedad)"
                 class="w-full bg-black/10 hover:bg-black/20 text-current font-black text-lg py-4 rounded-xl transition border border-black/10 flex items-center justify-center active:scale-95 shadow-sm">
                 <CheckSquare class="w-6 h-6 mr-2" />
-                GESTIONAR
+                Gestionar
               </button>
             </div>
           </div>
@@ -434,7 +437,7 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
         
         <div class="space-y-6">
           <div>
-            <label class="block text-base font-bold text-gray-700 mb-2 uppercase tracking-tight">Instrucciones / Feedback (Opcional)</label>
+            <label class="block text-base font-bold text-gray-700 mb-2 tracking-tight">Instrucciones / feedback (Opcional)</label>
             <textarea 
               v-model="feedback" 
               rows="4" 
@@ -446,16 +449,16 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
             <button 
               @click="aprobarNovedad('en proceso')"
               class="py-4 px-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-black text-lg rounded-2xl transition shadow-md active:scale-95">
-              EN PROCESO
+              En proceso
             </button>
             <button 
               @click="aprobarNovedad('resuelto')"
               class="py-4 px-4 bg-green-500 hover:bg-green-600 text-white font-black text-lg rounded-2xl transition shadow-md active:scale-95">
-              RESUELTO
+              Resuelto
             </button>
           </div>
           <button @click="cerrarModal" class="w-full mt-4 py-4 text-gray-500 hover:bg-gray-100 font-bold text-lg rounded-2xl transition">
-            CANCELAR
+            Cancelar
           </button>
         </div>
       </div>

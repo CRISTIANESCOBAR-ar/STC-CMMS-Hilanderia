@@ -88,11 +88,11 @@ const pageTitle = computed(() => {
     </transition>
 
     <!-- Barra de Navegación Global con Menú Hamburguesa -->
-    <nav v-if="user" class="bg-gray-900 text-white shadow-xl sticky top-0 z-50">
+    <nav v-if="user" class="bg-white text-gray-900 shadow-md border-b border-gray-100 sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
         <!-- Logo y Nombre -->
         <div class="flex items-center space-x-3 shrink-0 overflow-hidden">
-          <div class="bg-white p-0.5 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+          <div class="bg-white p-0.5 rounded-[2px] border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
             <img src="/LogoSantana.jpg" class="h-8 w-auto object-contain" alt="Logo" />
           </div>
           <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
@@ -113,7 +113,7 @@ const pageTitle = computed(() => {
         <!-- Botón Hamburguesa -->
         <button 
           @click="isMenuOpen = !isMenuOpen"
-          class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 transition-all focus:outline-none ring-1 ring-gray-700 shrink-0"
+          class="p-2 rounded-[2px] bg-gray-50 hover:bg-gray-100 text-gray-700 transition-all focus:outline-none ring-1 ring-gray-200 shrink-0"
           :aria-label="isMenuOpen ? 'Cerrar menú' : 'Abrir menú'"
         >
           <Menu v-if="!isMenuOpen" class="w-6 h-6" />
@@ -133,13 +133,13 @@ const pageTitle = computed(() => {
         <div 
           v-if="isMenuOpen" 
           @click.self="closeMenu"
-          class="bg-gray-900 border-t border-gray-800 shadow-2xl overflow-hidden"
+          class="bg-white border-t border-gray-100 shadow-2xl overflow-hidden"
         >
           <div class="px-3 pt-2 pb-6 space-y-2">
             <router-link 
               to="/" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <Wrench class="w-6 h-6 mr-4" />
@@ -150,7 +150,7 @@ const pageTitle = computed(() => {
               v-if="userRole === 'admin'"
               to="/jefe" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <ShieldCheck class="w-6 h-6 mr-4" />
@@ -160,7 +160,7 @@ const pageTitle = computed(() => {
             <router-link 
               to="/historico" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <History class="w-6 h-6 mr-4" />
@@ -188,7 +188,7 @@ const pageTitle = computed(() => {
               Gestión de Usuarios
             </router-link>
 
-            <div class="h-px bg-gray-800 my-4 mx-4"></div>
+            <div class="h-px bg-gray-100 my-4 mx-4"></div>
             
             <div class="px-4 py-2 flex flex-col space-y-2">
                <div class="flex items-center text-xs text-gray-500 uppercase tracking-widest font-bold">
@@ -198,7 +198,7 @@ const pageTitle = computed(() => {
                <div v-if="userRole" class="flex items-center">
                  <span 
                    :class="userRole === 'admin' ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 'bg-blue-500/20 text-blue-500 border-blue-500/30'"
-                   class="px-3 py-1 rounded-lg text-xs font-black uppercase tracking-tighter border"
+                   class="px-3 py-1 rounded-lg text-xs font-black tracking-tighter border"
                  >
                    Rol: {{ userRole }}
                  </span>
@@ -207,7 +207,7 @@ const pageTitle = computed(() => {
 
             <button 
               @click="handleLogout"
-              class="w-full flex items-center px-4 py-4 rounded-2xl text-xl font-bold text-red-400 transition-all hover:bg-red-950/30 active:bg-red-950/50 mt-2"
+              class="w-full flex items-center px-4 py-4 rounded-[2px] text-xl font-bold text-red-600 transition-all hover:bg-red-50 active:bg-red-100 mt-2"
             >
               <LogOut class="w-6 h-6 mr-4" />
               Cerrar Sesión

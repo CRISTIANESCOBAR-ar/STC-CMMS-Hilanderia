@@ -199,8 +199,8 @@ const exportToExcel = async () => {
               <Settings2 class="w-4 h-4" />
             </div>
             <div class="hidden xl:block">
-              <h1 class="text-sm font-black text-white uppercase tracking-tight leading-none">Gestión de Máquinas</h1>
-              <p class="text-[8px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Catálogo</p>
+              <h1 class="text-sm font-black text-white tracking-tight leading-none">Gestión de máquinas</h1>
+              <p class="text-[8px] text-gray-400 font-bold tracking-widest mt-0.5">Catálogo</p>
             </div>
           </div>
 
@@ -218,19 +218,19 @@ const exportToExcel = async () => {
           <!-- Controles y Botón (Desktop) -->
           <div class="flex items-center gap-3 shrink-0">
             <div class="flex border border-gray-700 rounded-md overflow-hidden bg-gray-800">
-              <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-black transition-colors">
-                <LayoutGrid class="w-3.5 h-3.5" /><span>TARJETAS</span>
+              <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold transition-colors">
+                <LayoutGrid class="w-3.5 h-3.5" /><span>Tarjetas</span>
               </button>
-              <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-black transition-colors border-l border-gray-700">
-                <Table2 class="w-3.5 h-3.5" /><span>TABLA</span>
+              <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold transition-colors border-l border-gray-700">
+                <Table2 class="w-3.5 h-3.5" /><span>Tabla</span>
               </button>
             </div>
             <button 
               v-if="userRole === 'admin'"
               @click="openAddModal" 
-              class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-black shadow-lg shadow-indigo-900/40 transition-all active:scale-95 text-[10px] uppercase"
+              class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg shadow-indigo-900/40 transition-all active:scale-95 text-[11px]"
             >
-              <Plus class="w-3.5 h-3.5" /><span>AGREGAR</span>
+              <Plus class="w-3.5 h-3.5" /><span>Agregar</span>
             </button>
             <button 
               @click="exportToExcel"
@@ -246,7 +246,7 @@ const exportToExcel = async () => {
       <!-- Portal para Navbar (Mobile) - Maximizar espacio vertical -->
       <Teleport to="#navbar-mobile-portal">
         <div class="flex items-center gap-2">
-          <h1 class="text-xs font-black text-white uppercase tracking-tighter shrink-0">Gestión</h1>
+          <h1 class="text-xs font-black text-white tracking-tighter shrink-0">Gestión</h1>
           <div class="flex items-center gap-1">
             <button @click="exportToExcel" class="bg-emerald-600 text-white p-1 rounded-md active:scale-90 transition-all"><FileSpreadsheet class="w-3.5 h-3.5" /></button>
             <button v-if="userRole === 'admin'" @click="openAddModal" class="bg-indigo-600 text-white p-1 rounded-md active:scale-90 transition-all"><Plus class="w-3.5 h-3.5" /></button>
@@ -270,7 +270,7 @@ const exportToExcel = async () => {
 
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
-        <p class="font-bold text-xs uppercase tracking-widest">Cargando catálogo...</p>
+        <p class="font-bold text-xs tracking-widest">Cargando catálogo...</p>
       </div>
 
       <template v-else>
@@ -280,7 +280,7 @@ const exportToExcel = async () => {
               <!-- Cuerpo Principal -->
               <div class="space-y-2 flex-1 pr-14">
                 <div class="flex items-center space-x-2">
-                  <span class="px-2 py-1 bg-gray-100 text-xs font-black text-gray-500 rounded uppercase shrink-0">{{ m.tipo }}</span>
+                  <span class="px-2 py-1 bg-gray-100 text-xs font-black text-gray-500 rounded shrink-0">{{ m.tipo }}</span>
                   <span class="text-xl font-black text-gray-800 truncate">{{ m.maquina }}</span>
                 </div>
                 <p class="text-sm font-bold text-gray-600 line-clamp-1 italic">{{ m.nombre_maquina || 'Sin nombre' }}</p>
@@ -303,7 +303,7 @@ const exportToExcel = async () => {
         <div v-else class="flex-1 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div class="overflow-auto flex-1 min-h-0">
             <table class="w-full text-sm text-left border-collapse">
-              <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 uppercase tracking-widest shadow-sm">
+              <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
                 <tr>
                   <th class="px-4 py-4 bg-gray-50 w-30">Tipo</th>
                   <th class="px-4 py-4 bg-gray-50 w-25">ID Máq.</th>
@@ -333,7 +333,7 @@ const exportToExcel = async () => {
                     </td>
                   </template>
                   <template v-else>
-                    <td class="px-4 py-4"><span class="px-2.5 py-1 bg-gray-100 text-xs font-black text-gray-600 rounded-md uppercase">{{ m.tipo }}</span></td>
+                    <td class="px-4 py-4"><span class="px-2.5 py-1 bg-gray-100 text-xs font-black text-gray-600 rounded-md">{{ m.tipo }}</span></td>
                     <td class="px-4 py-4 font-black text-gray-800 text-base">{{ m.maquina }}</td>
                     <td class="px-4 py-4 text-gray-700 font-medium text-sm">{{ m.nombre_maquina }}</td>
                     <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.local_fisico }}</td>
@@ -416,35 +416,35 @@ const exportToExcel = async () => {
       <div class="bg-white rounded-lg w-full max-w-lg shadow-2xl overflow-hidden my-auto">
         <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
-            <h3 class="text-xl font-black text-gray-800 uppercase tracking-tight">{{ isEditing ? 'Editar Máquina' : 'Nueva Máquina' }}</h3>
-            <p class="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Completa los campos técnicos</p>
+            <h3 class="text-xl font-black text-gray-800 tracking-tight">{{ isEditing ? 'Editar máquina' : 'Nueva máquina' }}</h3>
+            <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">Completa los campos técnicos</p>
           </div>
           <button @click="closeModal" class="p-2 hover:bg-gray-200 rounded-lg transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
         </div>
         <form @submit.prevent="handleSubmit" class="p-5 space-y-4">
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-500 uppercase ml-1">Tipo</label>
+              <label class="text-xs font-bold text-gray-500 ml-1">Tipo</label>
               <select v-model="form.tipo" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option v-for="t in tiposOptions" :key="t">{{ t }}</option>
               </select>
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-500 uppercase ml-1">ID Máquina</label>
+              <label class="text-xs font-bold text-gray-500 ml-1">ID Máquina</label>
               <input v-model="form.maquina" type="number" required class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
           </div>
           <div class="space-y-1.5">
-            <label class="text-xs font-bold text-gray-500 uppercase ml-1">Nombre Descriptivo</label>
+            <label class="text-xs font-bold text-gray-500 ml-1">Nombre descriptivo</label>
             <input v-model="form.nombre_maquina" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-500 uppercase ml-1">Local Físico</label>
+              <label class="text-xs font-bold text-gray-500 ml-1">Local físico</label>
               <input v-model="form.local_fisico" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-500 uppercase ml-1">Lado</label>
+              <label class="text-xs font-bold text-gray-500 ml-1">Lado</label>
               <select v-model="form.lado" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option value="U">Único (U)</option><option value="A">Lado A</option><option value="B">Lado B</option>
               </select>
@@ -452,18 +452,18 @@ const exportToExcel = async () => {
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-400 uppercase ml-1">Modelo (Opcional)</label>
+              <label class="text-xs font-bold text-gray-400 ml-1">Modelo (Opcional)</label>
               <input v-model="form.modelo" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base outline-none" />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-400 uppercase ml-1">Serie (Opcional)</label>
+              <label class="text-xs font-bold text-gray-400 ml-1">Serie (Opcional)</label>
               <input v-model="form.nro_serie" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base outline-none" />
             </div>
           </div>
           <div class="pt-4 flex space-x-3">
-            <button @click="closeModal" type="button" class="flex-1 py-3.5 border border-gray-200 rounded-xl font-bold text-base text-gray-500 hover:bg-gray-50 transition-colors">CANCELAR</button>
+            <button @click="closeModal" type="button" class="flex-1 py-3.5 border border-gray-200 rounded-xl font-bold text-base text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button>
             <button type="submit" class="flex-2 py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base shadow-md hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center space-x-2">
-              <Check class="w-6 h-6" /><span>GUARDAR CAMBIOS</span>
+              <Check class="w-6 h-6" /><span>Guardar cambios</span>
             </button>
           </div>
         </form>

@@ -1,4 +1,13 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap');
+
+body {
+  /* Configuración anterior (Inter): */
+  /* font-family: 'Inter', system-ui, -apple-system, sans-serif; */
+  /* letter-spacing: -0.011em; */
+  
+  font-family: 'Roboto', sans-serif;
+}
 
 /* Animación simplificada para el Logo en el Splash Screen */
 @keyframes pulse-soft {

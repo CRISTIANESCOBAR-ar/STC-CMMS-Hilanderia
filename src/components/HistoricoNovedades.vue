@@ -206,7 +206,7 @@ const exportToExcel = async () => {
       maquina: n.numeroMaquina,
       lado: n.lado,
       observaciones: obsText,
-      estado: n.estado.toUpperCase()
+      estado: n.estado
     });
   });
 
@@ -289,8 +289,8 @@ const getStatusClass = (estado) => {
               <History class="w-4 h-4" />
             </div>
             <div class="hidden xl:block text-white">
-              <h1 class="text-sm font-black uppercase tracking-tight leading-none">Histórico</h1>
-              <p class="text-[8px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Novedades</p>
+              <h1 class="text-sm font-black tracking-tight leading-none">Histórico</h1>
+              <p class="text-[8px] text-gray-400 font-bold tracking-widest mt-0.5">Novedades</p>
             </div>
           </div>
 
@@ -314,12 +314,12 @@ const getStatusClass = (estado) => {
                 class="w-full bg-gray-800 border border-gray-700 text-xs font-bold rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all"
                 title="Filtrar por fecha y analizar IA"
               />
-              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none uppercase font-bold tracking-wider bg-gray-800 px-1">Fecha IA...</span>
+              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none font-bold tracking-wider bg-gray-800 px-1">Fecha IA...</span>
             </div>
             
             <select 
               v-model="statusFilter"
-              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold uppercase rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all flex-[0.7]"
+              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all flex-[0.7]"
             >
               <option value="todos">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
@@ -341,7 +341,7 @@ const getStatusClass = (estado) => {
       <!-- Portal para Navbar (Mobile) -->
       <Teleport to="#navbar-mobile-portal">
         <div class="flex items-center gap-2">
-          <h1 class="text-sm font-black text-white uppercase tracking-tighter shrink-0">Histórico</h1>
+          <h1 class="text-sm font-black text-white tracking-tighter shrink-0">Histórico</h1>
           <div class="flex items-center gap-1">
              <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-md active:scale-90 transition-all shadow-sm"><FileSpreadsheet class="w-4 h-4" /></button>
           </div>
@@ -355,7 +355,7 @@ const getStatusClass = (estado) => {
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500/20" />
           </div>
-          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-xs font-black uppercase rounded-lg px-2 py-2 outline-none focus:border-blue-500 flex-[0.8] text-center">
+          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-xs font-black rounded-lg px-2 py-2 outline-none focus:border-blue-500 flex-[0.8] text-center">
             <option value="todos">Todos</option>
             <option value="pendiente">Pendiente</option>
             <option value="en proceso">En Proceso</option>
@@ -420,7 +420,7 @@ const getStatusClass = (estado) => {
                 <div class="h-2 bg-indigo-200 rounded w-full"></div>
                 <div class="h-2 bg-indigo-200 rounded w-1/2"></div>
              </div>
-             <p class="text-xs text-indigo-600 font-bold mt-2 uppercase tracking-wide">Generando Resumen...</p>
+             <p class="text-xs text-indigo-600 font-bold mt-2 tracking-wide">Generando resumen...</p>
            </div>
            
            <div v-else-if="iaError" class="text-indigo-800 text-sm font-semibold z-10 relative">
@@ -436,18 +436,18 @@ const getStatusClass = (estado) => {
       <!-- Estado Carga Lista -->
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-        <p class="font-bold text-xs uppercase tracking-widest text-gray-400">Cargando historial...</p>
+        <p class="font-bold text-xs tracking-widest text-gray-400">Cargando historial...</p>
       </div>
 
       <div v-else-if="errorCarga" class="flex-1 flex flex-col items-center justify-center text-center p-8">
         <AlertTriangle class="w-12 h-12 text-red-300 mb-3" />
-        <h2 class="font-black text-gray-800 uppercase text-sm">Error de conexión</h2>
-        <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg text-xs font-black shadow-lg">REINTENTAR</button>
+        <h2 class="font-black text-gray-800 text-sm">Error de conexión</h2>
+        <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg text-xs font-black shadow-lg">Reintentar</button>
       </div>
 
       <div v-else-if="novedadesFiltradas.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-lg border border-gray-100">
         <CheckCircle class="w-12 h-12 text-gray-200 mb-3" />
-        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Sin resultados</p>
+        <p class="text-xs font-bold text-gray-400 tracking-widest">Sin resultados</p>
       </div>
 
       <template v-else>
@@ -456,7 +456,7 @@ const getStatusClass = (estado) => {
           <div class="overflow-auto flex-1 min-h-0">
             <table class="w-full text-left border-collapse">
               <thead class="sticky top-0 bg-gray-50 z-20 shadow-sm border-b border-gray-100">
-                <tr class="text-xs font-black text-gray-500 uppercase tracking-widest">
+                <tr class="text-xs font-black text-gray-500 tracking-widest">
                   <th class="px-5 py-4 bg-gray-50">Fecha</th>
                   <th class="px-5 py-4 bg-gray-50">Máquina</th>
                   <th class="px-5 py-4 bg-gray-50">Lado</th>
@@ -471,16 +471,17 @@ const getStatusClass = (estado) => {
                   <td class="px-5 py-4">
                     <div class="flex flex-col">
                       <span class="text-base font-black text-gray-800">{{ n.numeroMaquina }}</span>
-                      <span class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{{ n.tipoMaquina }}</span>
+                      <span class="text-[10px] text-gray-400 font-bold tracking-tighter">{{ n.tipoMaquina }}</span>
+                      <span v-if="n.motivo" class="mt-1 text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 self-start uppercase tracking-widest">{{ n.motivo }}</span>
                     </div>
                   </td>
                   <td class="px-5 py-4 text-sm font-black text-gray-600">{{ n.lado }}</td>
                   <td class="px-5 py-4 max-w-sm">
                     <div v-if="n.seccion || n.denominacion" class="mb-2 bg-indigo-50 border border-indigo-100 p-2 rounded-lg inline-block w-full">
-                       <span class="block text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-0.5">Punto de Control Afectado</span>
+                       <span class="block text-[9px] font-black text-indigo-400 tracking-widest leading-none mb-0.5">Punto de control afectado</span>
                        <div class="flex justify-between items-center gap-2">
                          <span class="text-xs font-bold text-indigo-900 truncate">{{ n.denominacion || n.seccion }} <span v-if="n.grupo" class="text-indigo-400 font-normal">({{ n.grupo }})</span></span>
-                         <span v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="shrink-0 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-indigo-200">
+                         <span v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="shrink-0 bg-indigo-100 text-indigo-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-200">
                            Art: {{ n.numeroArticulo }}
                          </span>
                        </div>
@@ -491,7 +492,7 @@ const getStatusClass = (estado) => {
                     <div class="flex items-center space-x-2">
                       <span 
                         :class="getStatusClass(n.estado)"
-                        class="px-2.5 py-1 rounded text-[10px] font-black uppercase border whitespace-nowrap"
+                        class="px-2.5 py-1 rounded text-[10px] font-black border whitespace-nowrap"
                       >
                         {{ n.estado }}
                       </span>
@@ -509,7 +510,7 @@ const getStatusClass = (estado) => {
                     <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all">
                       <ImageIcon class="w-4 h-4" />
                     </a>
-                    <span v-else class="text-xs text-gray-300 font-bold uppercase">---</span>
+                    <span v-else class="text-xs text-gray-300 font-bold">---</span>
                   </td>
                 </tr>
               </tbody>
@@ -518,7 +519,7 @@ const getStatusClass = (estado) => {
           
           <!-- Paginación Desktop -->
           <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
-            <span class="text-xs text-gray-400 font-black uppercase tracking-widest">{{ novedadesFiltradas.length }} registros</span>
+            <span class="text-xs text-gray-400 font-black tracking-widest">{{ novedadesFiltradas.length }} registros</span>
             <div class="flex items-center space-x-1.5">
               <button @click="goToFirst" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronsLeft class="w-4 h-4" /></button>
               <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronLeft class="w-4 h-4" /></button>
@@ -533,8 +534,8 @@ const getStatusClass = (estado) => {
         <div class="md:hidden flex-1 overflow-y-auto pr-1 space-y-4">
           <div v-for="n in paginatedNovedades" :key="n.id" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
             <div class="flex justify-between items-start">
-              <span class="text-sm font-black text-gray-800 uppercase">{{ n.numeroMaquina }} ({{ n.lado }})</span>
-              <span class="text-xs font-bold text-gray-400 uppercase mt-0.5">{{ formatDate(n.createdAt) }}</span>
+              <span class="text-sm font-black text-gray-800">{{ n.numeroMaquina }} ({{ n.lado }})</span>
+              <span class="text-xs font-bold text-gray-400 mt-0.5">{{ formatDate(n.createdAt) }}</span>
             </div>
             
             <div v-if="n.seccion || n.denominacion" class="bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg space-y-1">
@@ -550,9 +551,9 @@ const getStatusClass = (estado) => {
 
             <p class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
             <div class="flex items-center justify-between pt-2">
-              <span class="px-2.5 py-1 text-[10px] font-black uppercase rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
-              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
-                <ImageIcon class="w-4 h-4 mr-1.5" /> FOTO
+              <span class="px-2.5 py-1 text-[10px] font-black rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
+              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-xs font-black text-blue-600 tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
+                <ImageIcon class="w-4 h-4 mr-1.5" /> Foto
               </a>
             </div>
           </div>

@@ -5,7 +5,8 @@ import HistoricoNovedades from './components/HistoricoNovedades.vue'
 import GestionMaquinas from './components/GestionMaquinas.vue'
 import Usuarios from './components/Usuarios.vue'
 import LoginView from './components/LoginView.vue'
-import { authService, auth, userRole } from './services/authService'
+import { authService, userRole } from './services/authService'
+import { auth } from './firebase/config'
 
 const routes = [
   { path: '/login', component: LoginView },

@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { mantenimientoService } from '../services/mantenimientoService';
 import { aiService } from '../services/aiService';
 import { notificationService } from '../services/notificationService';
-import { auth } from '../firebase/config';
+import { db, auth } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare, Wrench, Zap, Filter, Sparkles, Copy, ChevronUp, ChevronDown } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
@@ -30,7 +30,7 @@ const iaCollapsed = ref(false);
 let authUnsubscribe = null;
 let timeoutId = null;
 
-const cargarDatos = () => {
+const cargarDatos = async () => {
   isLoading.value = true;
   errorCarga.value = false;
 
@@ -40,54 +40,46 @@ const cargarDatos = () => {
   }
   if (timeoutId) {
     clearTimeout(timeoutId);
-    timeoutId = null;
   }
+  // No need for unsubscribe here as getDocs is a one-time fetch
 
-  // Mismo patrón que HistoricoNovedades
   timeoutId = setTimeout(() => {
-    if (isLoading.value) {
-      console.warn('Timeout alcanzado.');
+    if (isLoading.value && novedades.value.length === 0) {
       errorCarga.value = true;
       isLoading.value = false;
     }
   }, 10000);
 
-  unsubscribe = mantenimientoService.obtenerNovedadesPendientes(
-    (data) => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      try {
-        const nuevasCriticas = data.filter(n => n.critico && n.estado === 'pendiente');
-        const antiguasCriticas = novedades.value.filter(n => n.critico && n.estado === 'pendiente');
-        
-        // Evitamos usar Notification API cruda en mobile si causa problemas
-        if (nuevasCriticas.length > antiguasCriticas.length) {
-          const nueva = nuevasCriticas[0];
-          // Solo mostrar alerta usando SweetAlert para evitar fallos de Notification API en mobile
-          if (nuevasCriticas.length > 0 && typeof window !== 'undefined' && window.innerWidth > 1024) {
-             // Opcional: solo en pantallas grandes
-          }
-        }
-      } catch (e) {
-        console.error('Error procesando notificaciones locales:', e);
-      }
-      
-      novedades.value = data;
-      isLoading.value = false;
-    },
-    (err) => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      console.error("Error en suscripción de Firestore:", err);
+  try {
+    const q = query(
+      collection(db, 'novedades'),
+      where('estado', 'in', ['pendiente', 'en proceso'])
+    );
+    const snapshot = await getDocs(q);
+    clearTimeout(timeoutId);
+
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // Ordenar por fecha descendente
+    novedades.value = data.sort((a, b) => {
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        return new Date(val).getTime() || 0;
+      };
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
+
+    isLoading.value = false;
+    errorCarga.value = false;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error("Error cargando novedades:", err);
+    if (novedades.value.length === 0) {
       errorCarga.value = true;
-      isLoading.value = false;
     }
-  );
+    isLoading.value = false;
+  }
 };
 
 onMounted(() => {
@@ -230,7 +222,7 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
 
     <!-- Portal para Navbar (Mobile) -->
     <Teleport to="#navbar-mobile-portal">
-      <div v-if="!isLoading && novedades.length > 0" class="flex items-center gap-2">
+      <div v-if="novedades.length > 0" class="flex items-center gap-2">
         <h1 class="text-xs font-black text-white tracking-tighter shrink-0">Panel</h1>
         <div class="flex items-center gap-1">
           <span v-if="mecanicasCount > 0" class="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md shrink-0 border border-blue-400">
@@ -245,8 +237,8 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
 
     <main class="px-4 max-w-5xl mx-auto pt-4 lg:pt-8">
       
-      <!-- Estado de Carga -->
-      <div v-if="isLoading" class="text-center py-20 flex flex-col items-center">
+      <!-- Estado de Carga (Solo si no hay datos) -->
+      <div v-if="isLoading && novedades.length === 0" class="text-center py-20 flex flex-col items-center animate-in fade-in duration-500">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
         <p class="text-gray-500 font-medium mb-4">Cargando novedades...</p>
         <div class="space-y-2">
@@ -257,20 +249,20 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
         </div>
       </div>
 
-      <!-- Error de Carga -->
-      <div v-else-if="errorCarga" class="text-center py-20">
+      <!-- Error de Carga (Solo si no hay datos y falló) -->
+      <div v-else-if="errorCarga && novedades.length === 0" class="text-center py-20 animate-in zoom-in duration-300">
         <AlertTriangle class="w-16 h-16 text-red-500 mx-auto mb-4" />
-        <h2 class="text-2xl font-bold text-gray-800">Error al cargar datos</h2>
-        <p class="text-gray-500 mb-6">Verifica tu conexión o permisos del sistema.</p>
+        <h2 class="text-2xl font-bold text-gray-800 tracking-tight">Error de conexión</h2>
+        <p class="text-gray-500 mb-6 font-medium">No se pudieron obtener datos. Verifica tu red.</p>
         <button 
           @click="cargarDatos" 
-          class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold shadow-md hover:bg-blue-700 transition">
-          Reintentar
+          class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all uppercase tracking-widest text-sm">
+          Reintentar Ahora
         </button>
       </div>
 
       <!-- Panel de Inteligencia Artificial -->
-      <div v-if="!isLoading && !errorCarga" class="mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-3xl p-4 md:p-6 lg:mx-8 border border-indigo-100 shadow-sm relative overflow-hidden">
+      <div v-if="novedades.length > 0 && !errorCarga" class="mb-8 bg-linear-to-r from-indigo-50 to-purple-50 rounded-3xl p-4 md:p-6 lg:mx-8 border border-indigo-100 shadow-sm relative overflow-hidden">
          <div class="absolute top-0 right-0 p-4 opacity-10">
             <Sparkles class="w-24 h-24 text-indigo-600" />
          </div>
@@ -307,8 +299,8 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
                class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-indigo-200"
                title="Expandir/Contraer"
              >
-               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
-               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
+               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
+               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
              </button>
            </div>
          </div>
@@ -333,7 +325,7 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
       </div>
 
       <!-- Título y Filtros SIEMPRE VISIBLES si hay datos cargados (incluso si los filtrados dan 0) -->
-      <div v-if="!isLoading && !errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      <div v-if="!errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div class="flex items-center gap-3">
            <h2 class="text-2xl font-black text-gray-800 tracking-tight hidden lg:block">Panel de control</h2>
         </div>
@@ -352,14 +344,14 @@ const electricasCount = computed(() => novedades.value.filter(n => n.tipoProblem
       </div>
 
       <!-- Sin Novedades en el filtro actual -->
-      <div v-if="!isLoading && !errorCarga && novedadesFiltradas.length === 0" class="text-center py-20">
+      <div v-if="!isLoading && !errorCarga && novedadesFiltradas.length === 0 && novedades.length > 0" class="text-center py-20">
         <CheckCircle class="w-16 h-16 text-green-400 mx-auto mb-4" />
         <h2 class="text-2xl font-bold text-gray-600">¡Todo en orden!</h2>
         <p class="text-gray-500">No hay novedades pendientes para la vista seleccionada.</p>
       </div>
 
       <!-- Listado con Novedades -->
-      <div v-if="!isLoading && !errorCarga && novedadesFiltradas.length > 0">
+      <div v-if="!errorCarga && novedadesFiltradas.length > 0">
         <!-- Grid de Novedades -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div 

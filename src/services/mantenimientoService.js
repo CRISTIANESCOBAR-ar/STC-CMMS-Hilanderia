@@ -1,4 +1,4 @@
-import { collection, addDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -92,12 +92,39 @@ export const mantenimientoService = {
    * @returns {Function} - Función para desuscribirse (unsubscribe) del snapshot
    */
   obtenerNovedadesPendientes(callback, onError = null) {
-    // Usamos obtenerHistorico como base para asegurar máxima compatibilidad en móviles,
-    // ya que esa query (sin filtros complejos) ha demostrado ser la más estable.
-    return this.obtenerHistorico((todas) => {
-      const filtradas = todas.filter(n => n.estado === 'pendiente' || n.estado === 'en proceso');
-      callback(filtradas);
-    }, onError);
+    // Query directa con filtro server-side para evitar descargar todo el historial.
+    // Firestore indexa automáticamente campos simples, no requiere índice compuesto.
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('estado', 'in', ['pendiente', 'en proceso'])
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const novedades = [];
+      snapshot.forEach((doc) => {
+        novedades.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Ordenar por fecha descendente (cliente)
+      novedades.sort((a, b) => {
+        const getTime = (val) => {
+          if (!val) return 0;
+          if (typeof val.toMillis === 'function') return val.toMillis();
+          if (val instanceof Date) return val.getTime();
+          if (typeof val === 'number') return val;
+          if (typeof val === 'string') return new Date(val).getTime();
+          return 0;
+        };
+        return getTime(b.createdAt) - getTime(a.createdAt);
+      });
+
+      callback(novedades);
+    }, (error) => {
+      console.error("Error obteniendo novedades pendientes:", error);
+      if (onError) onError(error);
+    });
+
+    return unsubscribe;
   },
 
   /**
@@ -155,5 +182,52 @@ export const mantenimientoService = {
       console.error("Error al actualizar la novedad:", error);
       throw error;
     }
+  },
+
+  /**
+   * Versión puntual (Once) de novedades pendientes usando getDocs
+   */
+  async obtenerNovedadesPendientesOnce() {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('estado', 'in', ['pendiente', 'en proceso'])
+    );
+    const snapshot = await getDocs(q);
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    return data.sort((a, b) => {
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        if (val instanceof Date) return val.getTime();
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') return new Date(val).getTime();
+        return 0;
+      };
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
+  },
+
+  /**
+   * Versión puntual (Once) de histórico usando getDocs
+   */
+  async obtenerHistoricoOnce() {
+    const q = query(
+      collection(db, COLLECTION_NAME)
+    );
+    const snapshot = await getDocs(q);
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    return data.sort((a, b) => {
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        if (val instanceof Date) return val.getTime();
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') return new Date(val).getTime();
+        return 0;
+      };
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
   }
 };

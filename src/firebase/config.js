@@ -16,22 +16,10 @@ const firebaseConfig = {
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
+// Inicialización de Firestore sin persistencia para evitar bloqueos internos
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app); 
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null; 
-
-// Habilitar persistencia offline en Firestore para mejor rendimiento en mobile
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db)
-    .catch((err) => {
-      if (err.code === 'failed-precondition') {
-        console.warn('Firestore: Persistencia no disponible (múltiples pestañas abiertas)');
-      } else if (err.code === 'unimplemented') {
-        console.warn('Firestore: El navegador no soporta persistencia offline');
-      }
-    });
-}
 
 export default app;

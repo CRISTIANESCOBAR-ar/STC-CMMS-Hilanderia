@@ -1,11 +1,8 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, getFirestore } from 'firebase/firestore';
-import { app } from '../firebase/config';
+import { signInWithPopup, GoogleAuthProvider, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 import { ref } from 'vue';
 
-// Initialize Auth & DB
-export const auth = getAuth(app);
-const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Estado reactivo del rol

@@ -1,8 +1,9 @@
 ```
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { maquinaService } from '../services/maquinaService';
+import { ref, onMounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
+import { db } from '../firebase/config';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { Plus, Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileSpreadsheet } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
@@ -41,14 +42,40 @@ const goToNext = () => { if (currentPage.value < totalPages.value) currentPage.v
 const goToLast = () => { currentPage.value = totalPages.value; };
 
 // Resetear página al buscar
-import { watch } from 'vue';
 watch(searchQuery, () => { currentPage.value = 1; });
 
-onMounted(() => {
-  maquinaService.obtenerMaquinas((data) => {
-    maquinas.value = data;
+onMounted(async () => {
+  const timeoutId = setTimeout(() => {
+    if (isLoading.value) {
+      isLoading.value = false;
+      Swal.fire({ 
+        icon: 'warning', 
+        title: 'Tiempo excedido', 
+        text: 'La base de datos tarda demasiado en responder. Intenta recargar la página.' 
+      });
+    }
+  }, 10000);
+
+  try {
+    const q = query(collection(db, 'maquinas'));
+    const snapshot = await getDocs(q);
+    clearTimeout(timeoutId);
+
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // Ordenar manualmente para asegurar consistencia
+    maquinas.value = data.sort((a, b) => {
+      if ((a.nro_tipo || 0) !== (b.nro_tipo || 0)) return (a.nro_tipo || 0) - (b.nro_tipo || 0);
+      return (a.local_fisico || 0) - (b.local_fisico || 0);
+    });
+
     isLoading.value = false;
-  });
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error("Error cargando máquinas:", error);
+    isLoading.value = false;
+    Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el catálogo de máquinas.' });
+  }
   // Inicializar tooltips con un pequeño delay
   setTimeout(() => {
     tippy('[data-tippy-content]', {

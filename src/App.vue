@@ -92,7 +92,7 @@ const pageTitle = computed(() => {
       <div class="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
         <!-- Logo y Nombre -->
         <div class="flex items-center space-x-3 shrink-0 overflow-hidden">
-          <div class="bg-white p-0.5 rounded-[2px] border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
+          <div class="bg-white p-0.5 rounded-xs border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
             <img src="/LogoSantana.jpg" class="h-8 w-auto object-contain" alt="Logo" />
           </div>
           <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
@@ -105,6 +105,9 @@ const pageTitle = computed(() => {
           
           <!-- Portal para Contenido Extra (Título + Botones rápidos) -->
           <div id="navbar-header-portal" class="flex items-center space-x-2 overflow-hidden"></div>
+          
+          <!-- Portal Mobile (NUEVO/RESTURADO) -->
+          <div id="navbar-mobile-portal" class="lg:hidden flex items-center gap-1.5 overflow-hidden"></div>
         </div>
 
         <!-- Portales para acciones (Solo Desktop) -->
@@ -113,7 +116,7 @@ const pageTitle = computed(() => {
         <!-- Botón Hamburguesa -->
         <button 
           @click="isMenuOpen = !isMenuOpen"
-          class="p-2 rounded-[2px] bg-gray-50 hover:bg-gray-100 text-gray-700 transition-all focus:outline-none ring-1 ring-gray-200 shrink-0"
+          class="p-2 rounded-xs bg-gray-50 hover:bg-gray-100 text-gray-700 transition-all focus:outline-none ring-1 ring-gray-200 shrink-0"
           :aria-label="isMenuOpen ? 'Cerrar menú' : 'Abrir menú'"
         >
           <Menu v-if="!isMenuOpen" class="w-6 h-6" />
@@ -139,7 +142,7 @@ const pageTitle = computed(() => {
             <router-link 
               to="/" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <Wrench class="w-6 h-6 mr-4" />
@@ -150,7 +153,7 @@ const pageTitle = computed(() => {
               v-if="userRole === 'admin'"
               to="/jefe" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <ShieldCheck class="w-6 h-6 mr-4" />
@@ -160,7 +163,7 @@ const pageTitle = computed(() => {
             <router-link 
               to="/historico" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-[2px] text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <History class="w-6 h-6 mr-4" />
@@ -207,7 +210,7 @@ const pageTitle = computed(() => {
 
             <button 
               @click="handleLogout"
-              class="w-full flex items-center px-4 py-4 rounded-[2px] text-xl font-bold text-red-600 transition-all hover:bg-red-50 active:bg-red-100 mt-2"
+              class="w-full flex items-center px-4 py-4 rounded-xs text-xl font-bold text-red-600 transition-all hover:bg-red-50 active:bg-red-100 mt-2"
             >
               <LogOut class="w-6 h-6 mr-4" />
               Cerrar Sesión

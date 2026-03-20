@@ -27,6 +27,26 @@ export const maquinaService = {
   },
 
   /**
+   * Obtiene todas las máquinas una sola vez (Once)
+   */
+  async obtenerMaquinasOnce() {
+    const q = query(collection(db, COLLECTION_NAME));
+    const snapshot = await getDocs(q);
+    const maquinas = [];
+    snapshot.forEach((doc) => {
+      maquinas.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Ordenar por nro_tipo y luego por local_fisico
+    maquinas.sort((a, b) => {
+      if ((a.nro_tipo || 0) !== (b.nro_tipo || 0)) return (a.nro_tipo || 0) - (b.nro_tipo || 0);
+      return (a.local_fisico || 0) - (b.local_fisico || 0);
+    });
+
+    return maquinas;
+  },
+
+  /**
    * Agrega una nueva máquina
    * @param {Object} data 
    */

@@ -5,7 +5,7 @@ import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { catalogoService } from '../services/catalogoService';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Settings, Wrench, Zap, Info, Camera } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
@@ -230,13 +230,13 @@ const onSubmit = async () => {
 
     <!-- Teleport para la cabecera (Mecánica / Eléctrica) -->
     <Teleport to="#navbar-header-portal">
-      <div class="flex items-center justify-center gap-1 bg-gray-50 p-0.5 rounded-[2px] border border-gray-200 w-28 sm:w-44">
-        <label class="flex-1 flex justify-center py-1.5 rounded-[2px] cursor-pointer transition-all items-center"
+      <div class="flex items-center justify-center gap-1 bg-gray-50 p-0.5 rounded-xs border border-gray-200 w-28 sm:w-44">
+        <label class="flex-1 flex justify-center py-1.5 rounded-xs cursor-pointer transition-all items-center"
                :class="tipoProblema === 'Mecánico' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'">
            <input type="radio" v-model="tipoProblema" value="Mecánico" class="hidden">
            <Wrench class="w-3.5 h-3.5" />
         </label>
-        <label class="flex-1 flex justify-center py-1.5 rounded-[2px] cursor-pointer transition-all items-center"
+        <label class="flex-1 flex justify-center py-1.5 rounded-xs cursor-pointer transition-all items-center"
                :class="tipoProblema === 'Eléctrico' ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'">
            <input type="radio" v-model="tipoProblema" value="Eléctrico" class="hidden">
            <Zap class="w-3.5 h-3.5" />
@@ -345,25 +345,27 @@ const onSubmit = async () => {
             v-model="observaciones" 
             rows="2" 
             placeholder="Describa el problema..."
-            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-[60px]"></textarea>
+            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15"></textarea>
         </div>
 
-        <!-- Previsualización Condicional (Encima de la barra inferior) -->
-        <div v-if="imagenPreview" class="fixed bottom-20 left-4 right-4 z-40 animate-in slide-in-from-bottom-4 duration-300">
-           <div class="bg-white p-2 rounded-xl shadow-2xl border border-gray-100 flex items-center gap-3">
-              <div class="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-gray-200">
-                <img :src="imagenPreview" class="w-full h-full object-cover" />
+        <div v-if="imagenPreview" class="px-4 py-4 mb-16 animate-in fade-in duration-300">
+           <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+              <div class="relative w-full h-56 sm:h-64 bg-gray-900 flex items-center justify-center">
+                <img :src="imagenPreview" class="w-full h-full object-contain" />
                 <div v-if="isCompressing" class="absolute inset-0 bg-white/80 flex items-center justify-center">
-                  <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
               </div>
-              <div class="flex-1 overflow-hidden">
-                <p class="text-[10px] font-extrabold text-gray-400 tracking-widest mb-0.5">Imagen seleccionada</p>
-                <p class="text-xs font-black text-green-600 truncate">{{ formatSize(imagenFile?.size) }}</p>
+              <div class="p-3 bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                <div>
+                  <p class="text-[10px] font-extrabold text-gray-400 tracking-widest mb-0.5">IMAGEN ADJUNTA</p>
+                  <p class="text-xs font-black text-green-600">{{ formatSize(imagenFile?.size) }}</p>
+                </div>
+                <button type="button" @click="imagenPreview=null; imagenFile=null" class="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition active:scale-95 font-bold text-xs" title="Eliminar imagen">
+                  <Trash2 class="w-4 h-4" />
+                  Quitar
+                </button>
               </div>
-              <button type="button" @click="imagenPreview=null; imagenFile=null" class="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition active:scale-95">
-                <Settings class="w-5 h-5 rotate-45" />
-              </button>
            </div>
         </div>
 

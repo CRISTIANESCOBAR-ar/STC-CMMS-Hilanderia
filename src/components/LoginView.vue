@@ -91,7 +91,7 @@ const limpiarCacheYActualizar = async () => {
 </script>
 
 <template>
-  <div class="h-[100dvh] overflow-hidden bg-gray-50 flex flex-col pt-2 pb-4 sm:px-6 lg:px-8">
+  <div class="h-dvh overflow-hidden bg-gray-50 flex flex-col pt-2 pb-4 sm:px-6 lg:px-8">
     
     <!-- Logo Superior -->
     <div class="shrink-0 flex justify-center w-full mt-2">

@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
-import { mantenimientoService } from '../services/mantenimientoService';
 import { aiService } from '../services/aiService';
+import { db } from '../firebase/config';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { 
   Clock, 
   AlertTriangle, 
@@ -50,32 +51,44 @@ const iaCollapsed = ref(false);
 
 let timeoutId = null;
 
-const cargarDatos = () => {
+const cargarDatos = async () => {
   isLoading.value = true;
   errorCarga.value = false;
 
-  if (unsubscribe) unsubscribe();
-  if (timeoutId) clearTimeout(timeoutId);
-
   timeoutId = setTimeout(() => {
-    if (isLoading.value) {
+    if (isLoading.value && novedades.value.length === 0) {
       errorCarga.value = true;
       isLoading.value = false;
     }
   }, 10000);
 
-  unsubscribe = mantenimientoService.obtenerHistorico(
-    (data) => {
-      if (timeoutId) clearTimeout(timeoutId);
-      novedades.value = data;
-      isLoading.value = false;
-    },
-    (err) => {
-      if (timeoutId) clearTimeout(timeoutId);
+  try {
+    const q = query(collection(db, 'novedades'));
+    const snapshot = await getDocs(q);
+    clearTimeout(timeoutId);
+
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Ordenar por fecha descendente
+    novedades.value = data.sort((a, b) => {
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        return new Date(val).getTime() || 0;
+      };
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
+
+    isLoading.value = false;
+    errorCarga.value = false;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error("Error obteniendo histórico:", err);
+    if (novedades.value.length === 0) {
       errorCarga.value = true;
-      isLoading.value = false;
     }
-  );
+    isLoading.value = false;
+  }
 };
 
 onMounted(() => {
@@ -306,7 +319,7 @@ const getStatusClass = (estado) => {
               />
             </div>
             
-            <div class="relative flex-[0.8] min-w-[120px]">
+            <div class="relative flex-[0.8] min-w-30">
               <input 
                 v-model="filterDate" 
                 type="date" 
@@ -371,7 +384,7 @@ const getStatusClass = (estado) => {
       <!-- Contenido Principal -->
       
       <!-- Panel de Inteligencia Artificial (Aparece al seleccionar Fecha) -->
-      <div v-if="filterDate && (!isLoading && !errorCarga)" class="mt-2 mb-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 md:p-5 border border-indigo-100 shadow-sm relative overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-[35vh]">
+      <div v-if="filterDate && !errorCarga" class="mt-2 mb-4 bg-linear-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 md:p-5 border border-indigo-100 shadow-sm relative overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-[35vh]">
          <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
             <Sparkles class="w-24 h-24 text-indigo-600" />
          </div>
@@ -408,8 +421,8 @@ const getStatusClass = (estado) => {
                class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-indigo-200"
                title="Expandir/Contraer"
              >
-               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
-               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-[3]" />
+               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
+               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
              </button>
            </div>
          </div>
@@ -433,13 +446,13 @@ const getStatusClass = (estado) => {
          </div>
       </div>
 
-      <!-- Estado Carga Lista -->
-      <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+      <!-- Estado Carga Lista (Solo si está vacío) -->
+      <div v-if="isLoading && novedades.length === 0" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
         <p class="font-bold text-xs tracking-widest text-gray-400">Cargando historial...</p>
       </div>
 
-      <div v-else-if="errorCarga" class="flex-1 flex flex-col items-center justify-center text-center p-8">
+      <div v-else-if="errorCarga && novedades.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8">
         <AlertTriangle class="w-12 h-12 text-red-300 mb-3" />
         <h2 class="font-black text-gray-800 text-sm">Error de conexión</h2>
         <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg text-xs font-black shadow-lg">Reintentar</button>

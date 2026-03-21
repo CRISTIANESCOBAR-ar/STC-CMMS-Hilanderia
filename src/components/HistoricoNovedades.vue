@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { authService, userRole } from '../services/authService';
+import { authService, userRole, userProfile } from '../services/authService';
 import { aiService } from '../services/aiService';
 import { db } from '../firebase/config';
 import { collection, getDocs, query } from 'firebase/firestore';
@@ -28,6 +28,7 @@ import Swal from 'sweetalert2';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/animations/shift-away.css';
+import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 
 const novedades = ref([]);
 const isLoading = ref(true);
@@ -51,6 +52,17 @@ const iaCollapsed = ref(false);
 
 let timeoutId = null;
 
+const sectoresVisibles = computed(() => {
+  const perfil = userProfile.value;
+  if (!perfil) return [DEFAULT_SECTOR];
+  if (perfil.role === 'admin' && perfil.alcance === 'global') return null;
+  if (perfil.role === 'jefe_sector') {
+    const sectoresJefe = perfil.jefeDeSectores?.length ? perfil.jefeDeSectores : perfil.sectoresAsignados;
+    return sanitizeSectorList(sectoresJefe, perfil.sectorDefault);
+  }
+  return sanitizeSectorList(perfil.sectoresAsignados, perfil.sectorDefault);
+});
+
 const cargarDatos = async () => {
   isLoading.value = true;
   errorCarga.value = false;
@@ -70,7 +82,7 @@ const cargarDatos = async () => {
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // Ordenar por fecha descendente
-    novedades.value = data.sort((a, b) => {
+    const ordenadas = data.sort((a, b) => {
       const getTime = (val) => {
         if (!val) return 0;
         if (typeof val.toMillis === 'function') return val.toMillis();
@@ -78,6 +90,12 @@ const cargarDatos = async () => {
       };
       return getTime(b.createdAt) - getTime(a.createdAt);
     });
+
+    if (sectoresVisibles.value === null) {
+      novedades.value = ordenadas;
+    } else {
+      novedades.value = ordenadas.filter((n) => sectoresVisibles.value.includes(normalizeSectorValue(n.sector || DEFAULT_SECTOR)));
+    }
 
     isLoading.value = false;
     errorCarga.value = false;

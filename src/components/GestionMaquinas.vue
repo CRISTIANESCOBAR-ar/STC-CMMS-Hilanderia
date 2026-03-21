@@ -11,6 +11,7 @@ import { saveAs } from 'file-saver';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/animations/shift-away.css';
+import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue } from '../constants/organization';
 
 const maquinas = ref([]);
 const isLoading = ref(true);
@@ -22,7 +23,7 @@ const viewMode = ref('cards');
 const editingRowId = ref(null);
 const editingRow = ref({});
 
-const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '' };
+const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR };
 const form = ref({ ...initialForm });
 
 // Paginación
@@ -61,7 +62,7 @@ onMounted(async () => {
     const snapshot = await getDocs(q);
     clearTimeout(timeoutId);
 
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), sector: normalizeSectorValue(doc.data().sector || DEFAULT_SECTOR) }));
     
     // Ordenar manualmente para asegurar consistencia
     maquinas.value = data.sort((a, b) => {
@@ -91,7 +92,8 @@ const filteredMaquinas = computed(() => {
   return maquinas.value.filter(m =>
     String(m.maquina).toLowerCase().includes(query) ||
     m.tipo.toLowerCase().includes(query) ||
-    m.nombre_maquina?.toLowerCase().includes(query)
+    m.nombre_maquina?.toLowerCase().includes(query) ||
+    String(m.sector || '').toLowerCase().includes(query)
   );
 });
 
@@ -148,6 +150,7 @@ const exportToExcel = async () => {
 
   // Configurar Columnas
   worksheet.columns = [
+    { header: 'SECTOR', key: 'sector', width: 18 },
     { header: 'TIPO', key: 'tipo', width: 15 },
     { header: 'ID MÁQ', key: 'maquina', width: 10 },
     { header: 'NOMBRE', key: 'nombre_maquina', width: 30 },
@@ -160,6 +163,7 @@ const exportToExcel = async () => {
   // Agregar Datos
   filteredMaquinas.value.forEach(m => {
     worksheet.addRow({
+      sector: m.sector || DEFAULT_SECTOR,
       tipo: m.tipo,
       maquina: m.maquina,
       nombre_maquina: m.nombre_maquina || '---',
@@ -204,7 +208,7 @@ const exportToExcel = async () => {
   });
 
   // Filtros Automáticos
-  worksheet.autoFilter = 'A1:G1';
+  worksheet.autoFilter = 'A1:H1';
 
   // Generar y Descargar
   const buffer = await workbook.xlsx.writeBuffer();
@@ -307,6 +311,7 @@ const exportToExcel = async () => {
               <!-- Cuerpo Principal -->
               <div class="space-y-2 flex-1 pr-14">
                 <div class="flex items-center space-x-2">
+                  <span class="px-2 py-1 bg-emerald-50 text-[10px] font-black text-emerald-700 rounded shrink-0 border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span>
                   <span class="px-2 py-1 bg-gray-100 text-xs font-black text-gray-500 rounded shrink-0">{{ m.tipo }}</span>
                   <span class="text-xl font-black text-gray-800 truncate">{{ m.maquina }}</span>
                 </div>
@@ -333,6 +338,7 @@ const exportToExcel = async () => {
               <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
                 <tr>
                   <th class="px-4 py-4 bg-gray-50 w-30">Tipo</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Sector</th>
                   <th class="px-4 py-4 bg-gray-50 w-25">ID Máq.</th>
                   <th class="px-4 py-4 bg-gray-50 min-w-50">Nombre</th>
                   <th class="px-4 py-4 bg-gray-50 w-20">Local</th>
@@ -346,6 +352,7 @@ const exportToExcel = async () => {
                 <tr v-for="m in paginatedMaquinas" :key="m.id" :class="editingRowId === m.id ? 'bg-indigo-50' : 'hover:bg-gray-50/50'" class="transition-colors">
                   <template v-if="editingRowId === m.id">
                     <td class="px-4 py-3"><select v-model="editingRow.tipo" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="t in tiposOptions" :key="t">{{ t }}</option></select></td>
+                    <td class="px-4 py-3"><select v-model="editingRow.sector" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option></select></td>
                     <td class="px-4 py-3"><input v-model="editingRow.maquina" type="number" class="w-24 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.nombre_maquina" type="text" class="w-full min-w-40 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.local_fisico" type="text" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
@@ -361,6 +368,7 @@ const exportToExcel = async () => {
                   </template>
                   <template v-else>
                     <td class="px-4 py-4"><span class="px-2.5 py-1 bg-gray-100 text-xs font-black text-gray-600 rounded-md">{{ m.tipo }}</span></td>
+                    <td class="px-4 py-4"><span class="px-2.5 py-1 bg-emerald-50 text-xs font-black text-emerald-700 rounded-md border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span></td>
                     <td class="px-4 py-4 font-black text-gray-800 text-base">{{ m.maquina }}</td>
                     <td class="px-4 py-4 text-gray-700 font-medium text-sm">{{ m.nombre_maquina }}</td>
                     <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.local_fisico }}</td>
@@ -457,9 +465,15 @@ const exportToExcel = async () => {
               </select>
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-bold text-gray-500 ml-1">ID Máquina</label>
-              <input v-model="form.maquina" type="number" required class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <label class="text-xs font-bold text-gray-500 ml-1">Sector</label>
+              <select v-model="form.sector" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option>
+              </select>
             </div>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-bold text-gray-500 ml-1">ID Máquina</label>
+            <input v-model="form.maquina" type="number" required class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-gray-500 ml-1">Nombre descriptivo</label>

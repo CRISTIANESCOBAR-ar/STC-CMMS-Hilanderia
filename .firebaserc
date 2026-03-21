@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "stc-cmms-hilanderia"
-  }
+  },
+  "targets": {
+    "stc-cmms-hilanderia": {
+      "hosting": {
+        "main": [
+          "stc-cmms"
+        ],
+        "legacy": [
+          "stc-cmms-hilanderia"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

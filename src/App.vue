@@ -2,7 +2,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users } from 'lucide-vue-next';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages } from 'lucide-vue-next';
+import { canAccessJefePanel } from './constants/organization';
 
 const router = useRouter();
 const isAuthReady = ref(false);
@@ -58,6 +59,12 @@ const pageTitle = computed(() => {
   if (path === '/usuarios') return 'Gestión de Usuarios';
   if (path === '/login') return 'Ingreso al Sistema';
   return 'CMMS Santana';
+});
+
+const userRoleLabelClass = computed(() => {
+  if (userRole.value === 'admin') return 'bg-amber-500/20 text-amber-500 border-amber-500/30';
+  if (userRole.value === 'jefe_sector') return 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30';
+  return 'bg-blue-500/20 text-blue-500 border-blue-500/30';
 });
 </script>
 
@@ -150,7 +157,7 @@ const pageTitle = computed(() => {
             </router-link>
             
             <router-link 
-              v-if="userRole === 'admin'"
+              v-if="canAccessJefePanel(userRole)"
               to="/jefe" 
               @click="closeMenu"
               class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
@@ -191,6 +198,17 @@ const pageTitle = computed(() => {
               Gestión de Usuarios
             </router-link>
 
+            <router-link 
+              v-if="userRole === 'admin'"
+              to="/traducciones" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              active-class="bg-violet-600 text-white shadow-lg shadow-violet-900/20"
+            >
+              <Languages class="w-6 h-6 mr-4" />
+              Traducciones de catálogo
+            </router-link>
+
             <div class="h-px bg-gray-100 my-4 mx-4"></div>
             
             <div class="px-4 py-2 flex flex-col space-y-2">
@@ -200,7 +218,7 @@ const pageTitle = computed(() => {
                </div>
                <div v-if="userRole" class="flex items-center">
                  <span 
-                   :class="userRole === 'admin' ? 'bg-amber-500/20 text-amber-500 border-amber-500/30' : 'bg-blue-500/20 text-blue-500 border-blue-500/30'"
+                     :class="userRoleLabelClass"
                    class="px-3 py-1 rounded-lg text-xs font-black tracking-tighter border"
                  >
                    Rol: {{ userRole }}

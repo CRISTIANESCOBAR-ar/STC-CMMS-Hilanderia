@@ -1,21 +1,42 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userRole } from '../services/authService';
 import { Users, Shield, ShieldCheck, Mail, Calendar, Search } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
+import { DEFAULT_SECTOR, ROLE_OPTIONS, SECTOR_OPTIONS, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 
 const usuarios = ref([]);
 const isLoading = ref(true);
 const searchQuery = ref('');
+
+const normalizarUsuario = (user) => {
+  const role = user.role || 'mecanico';
+  const sectorDefault = normalizeSectorValue(user.sectorDefault || DEFAULT_SECTOR);
+  const sectoresAsignados = sanitizeSectorList(user.sectoresAsignados, sectorDefault);
+  const jefeDeSectores = role === 'jefe_sector'
+    ? sanitizeSectorList(user.jefeDeSectores?.length ? user.jefeDeSectores : [sectorDefault], sectorDefault)
+    : [];
+
+  return {
+    ...user,
+    role,
+    alcance: role === 'admin' ? (user.alcance || 'global') : 'sector',
+    sectorDefault,
+    sectoresAsignados,
+    jefeDeSectores,
+    sectoresAsignadosText: sectoresAsignados.join(', '),
+    jefeDeSectoresText: jefeDeSectores.join(', ')
+  };
+};
 
 const cargarUsuarios = async () => {
   isLoading.value = true;
   try {
     const q = query(collection(db, 'usuarios'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    usuarios.value = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    usuarios.value = snap.docs.map(doc => normalizarUsuario({ id: doc.id, ...doc.data() }));
   } catch (e) {
     console.error("Error cargando usuarios:", e);
     Swal.fire('Error', 'No se pudieron cargar los usuarios', 'error');
@@ -24,30 +45,57 @@ const cargarUsuarios = async () => {
   }
 };
 
-const cambiarRole = async (user, nuevoRole) => {
+const filteredUsuarios = computed(() => {
+  const search = searchQuery.value.toLowerCase();
+  return usuarios.value.filter((u) => {
+    const email = String(u.email || '').toLowerCase();
+    const name = String(u.displayName || '').toLowerCase();
+    return email.includes(search) || name.includes(search);
+  });
+});
+
+const guardarConfiguracion = async (user) => {
   if (userRole.value !== 'admin') {
-    Swal.fire('Acceso Denegado', 'Solo administradores pueden cambiar roles', 'warning');
+    Swal.fire('Acceso Denegado', 'Solo administradores pueden gestionar usuarios', 'warning');
     return;
   }
 
-  const result = await Swal.fire({
-    title: '¿Confirmar cambio?',
-    text: `El usuario ${user.email} pasará a ser ${nuevoRole.toUpperCase()}`,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: 'Sí, cambiar',
-    cancelButtonText: 'Cancelar',
-    confirmButtonColor: '#2563eb'
-  });
+  const sectoresAsignados = sanitizeSectorList(
+    String(user.sectoresAsignadosText || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    user.sectorDefault || DEFAULT_SECTOR
+  );
 
-  if (result.isConfirmed) {
-    try {
-      await updateDoc(doc(db, 'usuarios', user.id), { role: nuevoRole });
-      user.role = nuevoRole;
-      Swal.fire('Actualizado', 'Rol modificado correctamente', 'success');
-    } catch (e) {
-      Swal.fire('Error', 'No se pudo actualizar el rol', 'error');
-    }
+  const jefeDeSectores = user.role === 'jefe_sector'
+    ? sanitizeSectorList(
+      String(user.jefeDeSectoresText || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      user.sectorDefault || DEFAULT_SECTOR
+    )
+    : [];
+
+  const payload = {
+    role: user.role,
+    alcance: user.role === 'admin' ? (user.alcance || 'global') : 'sector',
+    sectorDefault: normalizeSectorValue(user.sectorDefault || DEFAULT_SECTOR),
+    sectoresAsignados,
+    jefeDeSectores
+  };
+
+  try {
+    await updateDoc(doc(db, 'usuarios', user.id), payload);
+    Object.assign(user, {
+      ...payload,
+      sectoresAsignadosText: payload.sectoresAsignados.join(', '),
+      jefeDeSectoresText: payload.jefeDeSectores.join(', ')
+    });
+    Swal.fire({ icon: 'success', title: 'Guardado', text: 'Configuración actualizada', timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' });
+  } catch (e) {
+    Swal.fire('Error', 'No se pudo actualizar el usuario', 'error');
   }
 };
 
@@ -68,7 +116,7 @@ onMounted(cargarUsuarios);
             <h1 class="text-base font-black text-gray-800 tracking-tight">Gestión de usuarios</h1>
           </div>
           <span class="px-3 py-1 bg-indigo-50 text-xs font-black text-indigo-600 rounded-full">
-            {{ usuarios.length }} Registrados
+            {{ filteredUsuarios.length }} Registrados
           </span>
         </div>
         
@@ -91,12 +139,12 @@ onMounted(cargarUsuarios);
 
       <div v-else class="flex-1 overflow-y-auto space-y-3 pr-1">
         <div 
-          v-for="user in usuarios.filter(u => u.email.toLowerCase().includes(searchQuery.toLowerCase()) || u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()))" 
+          v-for="user in filteredUsuarios" 
           :key="user.id"
-          class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between group hover:border-indigo-300 transition-all"
+          class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 group hover:border-indigo-300 transition-all"
         >
           <div class="flex items-center space-x-4">
-            <div :class="user.role === 'admin' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'" class="p-3 rounded-full shrink-0">
+            <div :class="user.role === 'admin' ? 'bg-amber-100 text-amber-600' : user.role === 'jefe_sector' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'" class="p-3 rounded-full shrink-0">
               <ShieldCheck v-if="user.role === 'admin'" class="w-6 h-6" />
               <Shield v-else class="w-6 h-6" />
             </div>
@@ -109,17 +157,52 @@ onMounted(cargarUsuarios);
             </div>
           </div>
 
-          <div class="flex flex-col items-end space-y-2">
-            <span 
-              :class="user.role === 'admin' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'"
-              class="px-3 py-1.5 rounded-md text-[10px] font-black tracking-widest cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
-              @click="cambiarRole(user, user.role === 'admin' ? 'mecanico' : 'admin')"
-            >
-              {{ user.role }}
-            </span>
-            <div class="flex items-center space-x-1.5 text-[10px] text-gray-400 font-bold">
-              <Calendar class="w-3.5 h-3.5" />
-              <span>{{ user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : '---' }}</span>
+          <div class="w-full lg:w-auto lg:min-w-95">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select v-model="user.role" class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20">
+                <option v-for="role in ROLE_OPTIONS" :key="role" :value="role">{{ role }}</option>
+              </select>
+
+              <select v-model="user.sectorDefault" class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20">
+                <option v-for="sector in SECTOR_OPTIONS" :key="sector" :value="sector">{{ sector }}</option>
+              </select>
+
+              <input
+                v-model="user.sectoresAsignadosText"
+                type="text"
+                placeholder="Sectores asignados: HILANDERIA, TEJEDURIA"
+                class="sm:col-span-2 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+
+              <input
+                v-if="user.role === 'jefe_sector'"
+                v-model="user.jefeDeSectoresText"
+                type="text"
+                placeholder="Sectores jefe: HILANDERIA"
+                class="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-2 text-xs font-semibold text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+
+              <select
+                v-if="user.role === 'admin'"
+                v-model="user.alcance"
+                class="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 text-xs font-bold text-amber-700 outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                <option value="global">Admin global</option>
+                <option value="sector">Admin sectorizado</option>
+              </select>
+            </div>
+
+            <div class="flex items-center justify-between mt-2">
+              <div class="flex items-center space-x-1.5 text-[10px] text-gray-400 font-bold">
+                <Calendar class="w-3.5 h-3.5" />
+                <span>{{ user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : '---' }}</span>
+              </div>
+              <button
+                @click="guardarConfiguracion(user)"
+                class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[10px] font-black tracking-widest hover:bg-indigo-700 transition-all active:scale-95"
+              >
+                Guardar
+              </button>
             </div>
           </div>
         </div>

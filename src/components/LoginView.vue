@@ -44,7 +44,11 @@ const handleGoogleLogin = async () => {
     await authService.loginConGoogle();
     router.push('/'); // Redirigir siempre a la Carga de Novedades (default view)
   } catch (error) {
-    errorMsg.value = 'Error al ingresar con Google. Verifica tu conexión.';
+    if (error?.code === 'auth/unauthorized-domain') {
+      errorMsg.value = 'Este dominio no esta autorizado en Firebase Auth. Agrega stc-cmms.web.app en Authentication > Settings > Authorized domains.';
+    } else {
+      errorMsg.value = 'Error al ingresar con Google. Verifica tu conexión.';
+    }
   } finally {
     isLoading.value = '';
   }

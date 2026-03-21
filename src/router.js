@@ -4,6 +4,7 @@ import DashboardJefe from './components/DashboardJefe.vue'
 import HistoricoNovedades from './components/HistoricoNovedades.vue'
 import GestionMaquinas from './components/GestionMaquinas.vue'
 import Usuarios from './components/Usuarios.vue'
+import Traducciones from './components/Traducciones.vue'
 import LoginView from './components/LoginView.vue'
 import { authService, userRole } from './services/authService'
 import { auth } from './firebase/config'
@@ -11,10 +12,11 @@ import { auth } from './firebase/config'
 const routes = [
   { path: '/login', component: LoginView },
   { path: '/', component: CargaNovedad, meta: { requiresAuth: true } },
-  { path: '/jefe', component: DashboardJefe, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/jefe', component: DashboardJefe, meta: { requiresAuth: true, role: ['admin', 'jefe_sector'] } },
   { path: '/historico', component: HistoricoNovedades, meta: { requiresAuth: true } },
   { path: '/maquinas', component: GestionMaquinas, meta: { requiresAuth: true } },
-  { path: '/usuarios', component: Usuarios, meta: { requiresAuth: true, role: 'admin' } }
+  { path: '/usuarios', component: Usuarios, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/traducciones', component: Traducciones, meta: { requiresAuth: true, role: 'admin' } }
 ]
 
 export const router = createRouter({
@@ -38,10 +40,14 @@ router.beforeEach(async (to, from) => {
     return '/';
   }
 
+  if (currentUser && !userRole.value) {
+    userRole.value = await authService.getUsuarioRole(currentUser.uid);
+  }
+
   // Validar Roles (si la ruta requiere uno específico)
-  if (requiredRole && userRole.value !== requiredRole) {
-    // Si no es admin y trata de entrar a algo de admin, mandarlo al home
-    if (userRole.value !== 'admin') {
+  if (requiredRole) {
+    const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+    if (!allowedRoles.includes(userRole.value)) {
       return '/';
     }
   }

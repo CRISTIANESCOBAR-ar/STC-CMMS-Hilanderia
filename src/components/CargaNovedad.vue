@@ -4,14 +4,16 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { catalogoService } from '../services/catalogoService';
+import { userProfile } from '../services/authService';
+import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2 } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
 
 const maquinas = ref([]);
-const tipoSeleccionado = ref('CARDA'); // Default
+const tipoSeleccionado = ref('');
 const maquinaSeleccionadaId = ref('');
 const tipoProblema = ref('Mecánico'); // Mecánico or Eléctrico
 
@@ -32,6 +34,25 @@ const uploadProgress = ref(0);
 const successMessage = ref('');
 const maquinasError = ref(false);
 const isCompressing = ref(false);
+const menuAccionesAbierto = ref(false);
+
+const accionesRapidas = [
+  { id: 'accion-1', nombre: 'Opcion 1' },
+  { id: 'accion-2', nombre: 'Opcion 2' },
+  { id: 'accion-3', nombre: 'Opcion 3' },
+  { id: 'accion-4', nombre: 'Opcion 4' },
+  { id: 'accion-5', nombre: 'Opcion 5' },
+  { id: 'accion-6', nombre: 'Opcion 6' },
+  { id: 'accion-7', nombre: 'Opcion 7' },
+  { id: 'accion-8', nombre: 'Opcion 8' }
+];
+
+const sectoresUsuario = computed(() => {
+  if (!userProfile.value) return [DEFAULT_SECTOR];
+  return sanitizeSectorList(userProfile.value.sectoresAsignados, userProfile.value.sectorDefault);
+});
+
+const sectorPrincipalUsuario = computed(() => sectoresUsuario.value[0] || DEFAULT_SECTOR);
 
 // Cargar lista de máquinas desde Firestore al montar
 onMounted(() => {
@@ -47,7 +68,12 @@ const cargarMaquinas = async () => {
     const querySnapshot = await getDocs(collection(db, 'maquinas'));
     const lista = [];
     querySnapshot.forEach((doc) => {
-      lista.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      lista.push({
+        id: doc.id,
+        ...data,
+        sector: normalizeSectorValue(data.sector || DEFAULT_SECTOR)
+      });
     });
     maquinas.value = lista;
     maquinasError.value = false;
@@ -66,8 +92,17 @@ const inicializarCatalogo = async () => {
 };
 
 // Filtrar máquinas por tipo y darles nombre descriptivo
+const maquinasPorSector = computed(() => {
+  return maquinas.value.filter((m) => sectoresUsuario.value.includes(normalizeSectorValue(m.sector || DEFAULT_SECTOR)));
+});
+
+const tiposDisponibles = computed(() => {
+  const tipos = maquinasPorSector.value.map((m) => String(m.tipo || '').toUpperCase()).filter(Boolean);
+  return [...new Set(tipos)].sort();
+});
+
 const maquinasFiltradas = computed(() => {
-  return maquinas.value
+  return maquinasPorSector.value
     .filter(m => m.tipo.toUpperCase() === tipoSeleccionado.value)
     .map(m => ({
       ...m,
@@ -82,9 +117,15 @@ watch(tipoSeleccionado, () => {
   resetCatalogo();
 });
 
+watch(tiposDisponibles, (newTipos) => {
+  if (!newTipos.includes(tipoSeleccionado.value)) {
+    tipoSeleccionado.value = newTipos[0] || '';
+  }
+}, { immediate: true });
+
 const detallesMaquina = computed(() => {
   if (!maquinaSeleccionadaId.value) return null;
-  return maquinas.value.find(m => m.id === maquinaSeleccionadaId.value);
+  return maquinasPorSector.value.find(m => m.id === maquinaSeleccionadaId.value);
 });
 
 // Cargar catálogo si el modelo es R-60
@@ -172,11 +213,17 @@ const onSubmit = async () => {
   successMessage.value = '';
 
   try {
+    const sectorNovedad = normalizeSectorValue(detallesMaquina.value.sector || sectorPrincipalUsuario.value);
+
     const datosNovedad = {
       maquinaId: detallesMaquina.value.id,
       numeroMaquina: detallesMaquina.value.maquina,
       tipoMaquina: detallesMaquina.value.tipo,
       modeloMaquina: detallesMaquina.value.modelo || '',
+      sector: sectorNovedad,
+      planta: detallesMaquina.value.planta || null,
+      area: detallesMaquina.value.area || null,
+      jefeDestinoSector: detallesMaquina.value.jefeDestinoSector || sectorNovedad,
       local_fisico: detallesMaquina.value.local_fisico,
       lado: detallesMaquina.value.lado,
       critico: isCritico.value,
@@ -219,6 +266,19 @@ const onSubmit = async () => {
   } finally {
     isSubmitting.value = false;
   }
+};
+
+const toggleMenuAcciones = () => {
+  menuAccionesAbierto.value = !menuAccionesAbierto.value;
+};
+
+const cerrarMenuAcciones = () => {
+  menuAccionesAbierto.value = false;
+};
+
+const seleccionarAccionRapida = (accion) => {
+  console.log('Accion rapida seleccionada:', accion.id);
+  menuAccionesAbierto.value = false;
 };
 </script>
 
@@ -264,8 +324,10 @@ const onSubmit = async () => {
             <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Tipo</label>
             <select 
               v-model="tipoSeleccionado" 
+              :disabled="tiposDisponibles.length === 0"
               class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-              <option v-for="tipo in ['APERTURA', 'CARDA', 'MANUAR', 'OPEN END', 'FILTRO']" :key="tipo" :value="tipo">
+              <option v-if="tiposDisponibles.length === 0" value="" disabled>Sin tipos</option>
+              <option v-for="tipo in tiposDisponibles" :key="tipo" :value="tipo">
                 {{ tipo }}
               </option>
             </select>
@@ -369,9 +431,52 @@ const onSubmit = async () => {
            </div>
         </div>
 
+        <div
+          v-if="menuAccionesAbierto"
+          class="fixed inset-0 z-30 bg-slate-900/12"
+          @click="cerrarMenuAcciones"
+        ></div>
+
         <!-- Acciones Fijas (Bottom Bar Compacta e Integrada) -->
-        <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-3 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
-          <div class="max-w-sm mx-auto flex items-center gap-3">
+        <div class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2 sm:px-3">
+          <div
+            class="max-w-sm mx-auto bg-white border border-gray-200 shadow-[0_-10px_35px_rgba(15,23,42,0.14)] overflow-hidden transition-all duration-200"
+            :class="menuAccionesAbierto ? 'rounded-[1.75rem]' : 'rounded-[1.4rem]'"
+          >
+            <div
+              v-if="menuAccionesAbierto"
+              class="px-3 pt-3 pb-2 border-b border-gray-100 animate-in slide-in-from-bottom-4 duration-200"
+            >
+              <div class="w-12 h-1.5 rounded-full bg-gray-300 mx-auto mb-3"></div>
+              <div class="flex items-center justify-between mb-3 px-1">
+                <p class="text-sm font-black text-gray-700 tracking-wide">Acciones rapidas</p>
+                <button
+                  type="button"
+                  class="w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center transition"
+                  @click="cerrarMenuAcciones"
+                  aria-label="Cerrar menu"
+                >
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+              <div class="grid grid-cols-4 gap-2">
+                <button
+                  v-for="accion in accionesRapidas"
+                  :key="accion.id"
+                  type="button"
+                  class="h-20 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
+                  @click="seleccionarAccionRapida(accion)"
+                >
+                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-blue-600 font-black text-xs">
+                    {{ accion.id.split('-')[1] }}
+                  </span>
+                  <span class="text-[11px] font-bold text-gray-600 leading-tight">{{ accion.nombre }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="p-3">
+              <div class="flex items-center gap-3">
             
             <!-- Criticidad (Toggle Discreto) -->
             <label class="flex items-center gap-2 cursor-pointer group shrink-0">
@@ -389,16 +494,29 @@ const onSubmit = async () => {
               <input type="file" accept="image/*" capture="environment" class="hidden" @change="onFileChange" />
             </label>
 
-            <!-- Boton Enviar -->
-            <button 
-              type="submit" 
-              :disabled="isSubmitting"
-              class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-12 rounded-xl text-base font-bold shadow-lg shadow-blue-600/10 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden flex items-center justify-center">
-              <div v-if="isSubmitting" class="absolute inset-x-0 bottom-0 h-1 bg-blue-800/50 transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
-              <span class="tracking-wide">
-                {{ isSubmitting ? `... ${uploadProgress}%` : 'Enviar' }}
-              </span>
+            <button
+              type="button"
+              class="h-12 px-3 rounded-xl border shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+              :class="menuAccionesAbierto ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'"
+              @click="toggleMenuAcciones"
+              aria-label="Abrir menu de acciones"
+            >
+              <Grid2x2 class="w-5 h-5" />
+              <span class="text-xs font-black tracking-wide">Menu</span>
             </button>
+
+                <!-- Boton Enviar -->
+                <button 
+                  type="submit" 
+                  :disabled="isSubmitting"
+                  class="flex-1 text-white bg-blue-600 hover:bg-blue-700 h-12 rounded-xl text-base font-bold shadow-lg shadow-blue-600/10 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden flex items-center justify-center">
+                  <div v-if="isSubmitting" class="absolute inset-x-0 bottom-0 h-1 bg-blue-800/50 transition-all duration-300" :style="{ width: uploadProgress + '%' }"></div>
+                  <span class="tracking-wide">
+                    {{ isSubmitting ? `... ${uploadProgress}%` : 'Enviar' }}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

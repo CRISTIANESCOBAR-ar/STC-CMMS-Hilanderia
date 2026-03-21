@@ -2,11 +2,13 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { aiService } from '../services/aiService';
 import { notificationService } from '../services/notificationService';
+import { userProfile } from '../services/authService';
 import { db, auth } from '../firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare, Wrench, Zap, Filter, Sparkles, Copy, ChevronUp, ChevronDown } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
+import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 
 // Hora del build incrustada por Vite (definida en `vite.config.js` como __BUILD_TIME__)
 const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
@@ -19,6 +21,19 @@ const novedadActual = ref(null);
 const feedback = ref('');
 const isLoading = ref(true);
 const errorCarga = ref(false);
+
+const sectoresVisibles = computed(() => {
+  const perfil = userProfile.value;
+  if (!perfil) return [DEFAULT_SECTOR];
+  if (perfil.role === 'admin' && perfil.alcance === 'global') return null;
+
+  if (perfil.role === 'jefe_sector') {
+    const sectoresJefe = perfil.jefeDeSectores?.length ? perfil.jefeDeSectores : perfil.sectoresAsignados;
+    return sanitizeSectorList(sectoresJefe, perfil.sectorDefault);
+  }
+
+  return sanitizeSectorList(perfil.sectoresAsignados, perfil.sectorDefault);
+});
 
 const iaSummary = ref('');
 const iaSummaryRaw = ref('');
@@ -61,7 +76,7 @@ const cargarDatos = async () => {
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     
     // Ordenar por fecha descendente
-    novedades.value = data.sort((a, b) => {
+    const ordenadas = data.sort((a, b) => {
       const getTime = (val) => {
         if (!val) return 0;
         if (typeof val.toMillis === 'function') return val.toMillis();
@@ -69,6 +84,12 @@ const cargarDatos = async () => {
       };
       return getTime(b.createdAt) - getTime(a.createdAt);
     });
+
+    if (sectoresVisibles.value === null) {
+      novedades.value = ordenadas;
+    } else {
+      novedades.value = ordenadas.filter((n) => sectoresVisibles.value.includes(normalizeSectorValue(n.sector || DEFAULT_SECTOR)));
+    }
 
     isLoading.value = false;
     errorCarga.value = false;

@@ -2,8 +2,14 @@ import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, serverTimestam
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
+import { DEFAULT_SECTOR, normalizeSectorValue } from '../constants/organization';
 
 const COLLECTION_NAME = 'novedades';
+
+const normalizarNovedad = (datos = {}) => ({
+  ...datos,
+  sector: normalizeSectorValue(datos.sector || DEFAULT_SECTOR)
+});
 
 export const mantenimientoService = {
   /**
@@ -49,7 +55,7 @@ export const mantenimientoService = {
                 // Una vez obtenida la URL, procedemos a guardar el documento
                 const currentAuthUser = getAuth().currentUser;
                 const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-                  ...datos,
+                  ...normalizarNovedad(datos),
                   fotoUrl,
                   estado: 'pendiente', 
                   createdAt: serverTimestamp(),
@@ -70,7 +76,7 @@ export const mantenimientoService = {
       // Si no hay foto, guardamos directamente
       const currentAuthUser = getAuth().currentUser;
       const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-        ...datos,
+        ...normalizarNovedad(datos),
         fotoUrl,
         estado: 'pendiente', 
         createdAt: serverTimestamp(),

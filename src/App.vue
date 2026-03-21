@@ -58,7 +58,7 @@ const pageTitle = computed(() => {
   if (path === '/maquinas') return 'Gestión de Máquinas';
   if (path === '/usuarios') return 'Gestión de Usuarios';
   if (path === '/login') return 'Ingreso al Sistema';
-  return 'CMMS Santana';
+  return 'CMMS STC';
 });
 
 const userRoleLabelClass = computed(() => {

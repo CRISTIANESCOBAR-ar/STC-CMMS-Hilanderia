@@ -1,6 +1,6 @@
 {
-  "name": "CMMS Hilandería",
-  "short_name": "CMMS",
+  "name": "CMMS STC",
+  "short_name": "CMMS STC",
   "description": "Sistema de Mantenimiento para Hilandería",
   "start_url": "/",
   "display": "standalone",

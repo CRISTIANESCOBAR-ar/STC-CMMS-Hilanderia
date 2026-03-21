@@ -4,13 +4,13 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
 import { db } from '../firebase/config';
 import { collection, getDocs, query, doc, updateDoc } from 'firebase/firestore';
-import { Plus, Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileSpreadsheet } from 'lucide-vue-next';
+import { Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
-import 'tippy.js/animations/shift-away.css';
+import 'tippy.js/themes/light-border.css';
 import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue } from '../constants/organization';
 
 const maquinas = ref([]);
@@ -22,6 +22,8 @@ const viewMode = ref('cards');
 
 // 'all' | 'activas' | 'inactivas'
 const activoFilter = ref('all');
+// '' = todos los tipos, o el nombre del tipo seleccionado
+const tipoFilter = ref('');
 
 const editingRowId = ref(null);
 const editingRow = ref({});
@@ -45,8 +47,8 @@ const goToPrev = () => { if (currentPage.value > 1) currentPage.value--; };
 const goToNext = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
 const goToLast = () => { currentPage.value = totalPages.value; };
 
-// Resetear página al buscar o cambiar filtro
-watch([searchQuery, activoFilter], () => { currentPage.value = 1; });
+// Resetear página al buscar o cambiar filtros
+watch([searchQuery, activoFilter, tipoFilter], () => { currentPage.value = 1; });
 
 onMounted(async () => {
   const timeoutId = setTimeout(() => {
@@ -83,9 +85,8 @@ onMounted(async () => {
   // Inicializar tooltips con un pequeño delay
   setTimeout(() => {
     tippy('[data-tippy-content]', {
-      animation: 'shift-away',
-      theme: 'translucent',
-      duration: [200, 150]
+      theme: 'light-border',
+      duration: [120, 100]
     });
   }, 500);
 });
@@ -96,6 +97,7 @@ const filteredMaquinas = computed(() => {
     const estaActivo = m.activo ?? true;
     if (activoFilter.value === 'activas' && !estaActivo) return false;
     if (activoFilter.value === 'inactivas' && estaActivo) return false;
+    if (tipoFilter.value && m.tipo !== tipoFilter.value) return false;
     return (
       String(m.maquina).toLowerCase().includes(q) ||
       m.tipo.toLowerCase().includes(q) ||
@@ -103,6 +105,14 @@ const filteredMaquinas = computed(() => {
       String(m.sector || '').toLowerCase().includes(q)
     );
   });
+});
+
+const tipoFilterOptions = computed(() => {
+  const tipos = new Set();
+  maquinas.value.forEach((m) => {
+    if (m.tipo) tipos.add(m.tipo);
+  });
+  return Array.from(tipos).sort((a, b) => a.localeCompare(b));
 });
 
 const openAddModal = () => { isEditing.value = false; form.value = { ...initialForm }; showModal.value = true; };
@@ -252,95 +262,103 @@ const exportToExcel = async () => {
 
       <!-- Portal para Navbar (Desktop) -->
       <Teleport to="#navbar-actions">
-        <div class="flex items-center w-full gap-4">
-          <!-- Título y Subtítulo (Desktop) -->
-          <div class="flex items-center space-x-3 shrink-0">
-            <div class="bg-indigo-500 p-1.5 rounded-lg text-white">
+        <div class="hidden lg:flex items-center w-full gap-2">
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="bg-indigo-500 p-1 rounded-md text-white shadow-sm">
               <Settings2 class="w-4 h-4" />
             </div>
-            <div class="hidden xl:block">
-              <h1 class="text-sm font-black text-white tracking-tight leading-none">Gestión de máquinas</h1>
-              <p class="text-[8px] text-gray-400 font-bold tracking-widest mt-0.5">Catálogo</p>
-            </div>
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Catálogo</span>
           </div>
 
-          <!-- Buscador (Desktop) -->
-          <div class="relative flex-1 max-w-md mx-auto">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="Buscar por ID, Tipo o Nombre..." 
-              class="w-full pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-700 focus:bg-gray-700 focus:border-indigo-500 rounded-lg text-xs text-gray-200 outline-none transition-all placeholder:text-gray-500" 
+          <div class="relative w-72 shrink-0">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Buscar..."
+              class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-100 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-md text-xs text-gray-700 outline-none transition-all placeholder:text-gray-400 shadow-sm"
             />
           </div>
 
-          <!-- Controles y Botón (Desktop) -->
-          <div class="flex items-center gap-3 shrink-0">
+          <div class="flex items-center gap-1 shrink-0">
+            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipo</label>
+            <select
+              v-model="tipoFilter"
+              class="h-8 min-w-40 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
+            >
+              <option value="">Todos</option>
+              <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
+            </select>
+          </div>
 
-            <!-- Filtro Activo/Inactivo -->
-            <div class="flex border border-gray-700 rounded-md overflow-hidden bg-gray-800 text-[10px] font-bold">
-              <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="px-2.5 py-1.5 transition-colors">Todos</button>
-              <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="px-2.5 py-1.5 transition-colors border-l border-gray-700">Activas</button>
-              <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="px-2.5 py-1.5 transition-colors border-l border-gray-700">Inactivas</button>
-            </div>
+          <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-white text-sm font-medium shrink-0 shadow-sm">
+            <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150">Todas</button>
+            <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-green-50 text-green-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150 border-l border-slate-200">Activas</button>
+            <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150 border-l border-slate-200">Inactivas</button>
+          </div>
 
-            <div class="flex border border-gray-700 rounded-md overflow-hidden bg-gray-800">
-              <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold transition-colors">
-                <LayoutGrid class="w-3.5 h-3.5" /><span>Tarjetas</span>
-              </button>
-              <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'" class="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold transition-colors border-l border-gray-700">
-                <Table2 class="w-3.5 h-3.5" /><span>Tabla</span>
-              </button>
-            </div>
-            <button 
+          <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-white shrink-0 shadow-sm">
+            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium transition-colors duration-150">
+              <LayoutGrid class="w-4 h-4" /><span>Tarjetas</span>
+            </button>
+            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium transition-colors duration-150 border-l border-slate-200">
+              <Table2 class="w-4 h-4" /><span>Tabla</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0 ml-auto">
+            <button
               v-if="userRole === 'admin'"
-              @click="openAddModal" 
-              class="flex items-center space-x-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg shadow-indigo-900/40 transition-all active:scale-95 text-[11px]"
+              @click="openAddModal"
+              data-tippy-content="Agregar máquina"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
             >
-              <Plus class="w-3.5 h-3.5" /><span>Agregar</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg>
+              <span>Agregar</span>
             </button>
-            <button 
+            <button
               @click="exportToExcel"
-              data-tippy-content="Exportar a Excel"
-              class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-900/40 transition-all active:scale-95"
+              data-tippy-content="Exportar a Excel (XLSX)"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
             >
-              <FileSpreadsheet class="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
+              <span>Exportar</span>
             </button>
           </div>
         </div>
       </Teleport>
 
-      <!-- Portal para Navbar (Mobile) - Maximizar espacio vertical -->
+      <!-- Portal para Navbar (Mobile) -->
       <Teleport to="#navbar-mobile-portal">
-        <div class="flex items-center gap-2">
-          <h1 class="text-xs font-black text-white tracking-tighter shrink-0">Gestión</h1>
-          <div class="flex items-center gap-1">
-            <button @click="exportToExcel" class="bg-emerald-600 text-white p-1 rounded-md active:scale-90 transition-all"><FileSpreadsheet class="w-3.5 h-3.5" /></button>
-            <button v-if="userRole === 'admin'" @click="openAddModal" class="bg-indigo-600 text-white p-1 rounded-md active:scale-90 transition-all"><Plus class="w-3.5 h-3.5" /></button>
-          </div>
+        <div class="lg:hidden flex items-center gap-1">
+          <label class="text-[10px] font-black text-gray-300 uppercase">Tipo</label>
+          <select v-model="tipoFilter" class="h-7 max-w-26 bg-white border border-slate-100 text-gray-700 text-[10px] px-1.5 rounded-md shadow-sm">
+            <option value="">Todos</option>
+            <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
+          </select>
+          <button @click="exportToExcel" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
+          <button v-if="userRole === 'admin'" @click="openAddModal" data-tippy-content="Agregar máquina" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
         </div>
       </Teleport>
 
-      <!-- Header Local (Solo Móvil) - Muy compacto -->
-      <div class="lg:hidden bg-white/95 backdrop-blur-sm p-1.5 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20">
-        <div class="flex items-center gap-2">
-          <div class="relative flex-1">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500/20" />
+      <div class="lg:hidden bg-white border border-slate-100 rounded-md p-2 flex flex-col gap-2 shrink-0">
+        <div class="relative">
+          <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-slate-100 rounded-md text-xs outline-none" />
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex border border-slate-100 rounded-md overflow-hidden text-[10px] font-bold">
+            <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-gray-600 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1">Todas</button>
+            <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1 border-l border-slate-100">Activas</button>
+            <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-500 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1 border-l border-slate-100">Inactivas</button>
           </div>
-          <!-- Filtro activo mobile (T=Todos, A=Activas, I=Inactivas) -->
-          <div class="flex border border-gray-200 rounded-lg overflow-hidden shrink-0 text-[9px] font-bold">
-            <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-gray-500 text-white' : 'bg-gray-50 text-gray-400'" class="px-1.5 py-1.5 transition-all">T</button>
-            <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-emerald-500 text-white' : 'bg-gray-50 text-gray-400'" class="px-1.5 py-1.5 border-l border-gray-200 transition-all">A</button>
-            <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-500 text-white' : 'bg-gray-50 text-gray-400'" class="px-1.5 py-1.5 border-l border-gray-200 transition-all">I</button>
-          </div>
-          <div class="flex border border-gray-200 rounded-lg overflow-hidden shrink-0">
-            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-400'" class="p-1.5 transition-all"><LayoutGrid class="w-3.5 h-3.5" /></button>
-            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-400'" class="p-1.5 border-l border-gray-200 transition-all"><Table2 class="w-3.5 h-3.5" /></button>
+          <div class="flex border border-slate-100 rounded-md overflow-hidden bg-gray-50">
+            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-500'" class="p-1.5"><LayoutGrid class="w-3.5 h-3.5" /></button>
+            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-500'" class="p-1.5 border-l border-slate-100"><Table2 class="w-3.5 h-3.5" /></button>
           </div>
         </div>
       </div>
+
 
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
@@ -353,7 +371,7 @@ const exportToExcel = async () => {
             <div
               v-for="m in paginatedMaquinas" :key="m.id"
               :class="!(m.activo ?? true) ? 'opacity-60 border-dashed' : 'hover:border-indigo-300'"
-              class="relative bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col group transition-all min-h-27.5"
+              class="relative bg-white p-4 rounded-md shadow-sm border border-gray-200 flex flex-col group transition-all min-h-27.5"
             >
               <!-- Cuerpo Principal -->
               <div class="space-y-2 flex-1 pr-14">
@@ -384,7 +402,7 @@ const exportToExcel = async () => {
                 <button
                   @click="toggleActivo(m)"
                   :data-tippy-content="(m.activo ?? true) ? 'Marcar inactiva' : 'Marcar activa'"
-                  class="flex items-center gap-1 px-1.5 py-1.5 rounded-lg border transition-all shadow-sm"
+                  class="flex items-center gap-1 px-1.5 py-1.5 rounded-md border transition-all shadow-sm"
                   :class="(m.activo ?? true)
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
                     : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'"
@@ -399,15 +417,15 @@ const exportToExcel = async () => {
                     ></span>
                   </span>
                 </button>
-                <button @click="openEditModal(m)" class="p-2 text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-lg transition-colors shadow-sm"><Edit3 class="w-4 h-4" /></button>
-                <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-100 rounded-lg transition-colors shadow-sm"><Trash2 class="w-4 h-4" /></button>
+                <button @click="openEditModal(m)" class="p-2 text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Edit3 class="w-4 h-4" /></button>
+                <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Trash2 class="w-4 h-4" /></button>
               </div>
             </div>
           </div>
         </div>
 
         <!-- TABLA INLINE (Ocupa todo el alto) -->
-        <div v-else class="flex-1 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-0">
+        <div v-else class="flex-1 bg-white rounded-md shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-0">
           <div class="overflow-auto flex-1 min-h-0">
             <table class="w-full text-sm text-left border-collapse">
               <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
@@ -485,8 +503,8 @@ const exportToExcel = async () => {
                     </td>
                     <td v-if="userRole === 'admin'" class="px-4 py-4">
                       <div class="flex justify-center space-x-2">
-                        <button @click="startInlineEdit(m)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit3 class="w-4 h-4" /></button>
-                        <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 class="w-4 h-4" /></button>
+                        <button @click="startInlineEdit(m)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-4 h-4" /></button>
+                        <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-4 h-4" /></button>
                       </div>
                     </td>
                   </template>
@@ -516,7 +534,7 @@ const exportToExcel = async () => {
                 <ChevronLeft class="w-4 h-4" />
               </button>
               
-              <div class="bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-600">
+              <div class="bg-white border border-gray-200 px-3 py-1.5 rounded-md text-xs font-bold text-gray-600">
                 Página {{ currentPage }} de {{ totalPages }}
               </div>
 
@@ -539,16 +557,16 @@ const exportToExcel = async () => {
         </div>
         
         <!-- Paginación para Modo Tarjetas -->
-        <div v-if="viewMode === 'cards'" class="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg shadow-sm border border-gray-100 gap-4 mt-2">
+        <div v-if="viewMode === 'cards'" class="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-md shadow-sm border border-gray-100 gap-4 mt-2">
           <div class="text-[11px] text-gray-400 font-bold uppercase tracking-widest">
             {{ filteredMaquinas.length }} máquinas
           </div>
           <div class="flex items-center space-x-1">
             <button @click="goToFirst" :disabled="currentPage === 1" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronsLeft class="w-4 h-4" /></button>
-            <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronLeft class="w-4 h-4" /></button>
+            <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronLeft class="w-4 h-4" /></button>
             <div class="px-3 py-1.5 text-xs font-bold text-gray-600">Pág {{ currentPage }} / {{ totalPages }}</div>
-            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronRight class="w-4 h-4" /></button>
-            <button @click="goToLast" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronsRight class="w-4 h-4" /></button>
+            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronRight class="w-4 h-4" /></button>
+            <button @click="goToLast" :disabled="currentPage === totalPages" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronsRight class="w-4 h-4" /></button>
           </div>
         </div>
       </template>
@@ -556,45 +574,45 @@ const exportToExcel = async () => {
 
     <!-- Modal -->
     <div v-if="showModal" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
-      <div class="bg-white rounded-lg w-full max-w-lg shadow-2xl overflow-hidden my-auto">
+      <div class="bg-white rounded-md w-full max-w-lg shadow-2xl overflow-hidden my-auto">
         <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
             <h3 class="text-xl font-black text-gray-800 tracking-tight">{{ isEditing ? 'Editar máquina' : 'Nueva máquina' }}</h3>
             <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">Completa los campos técnicos</p>
           </div>
-          <button @click="closeModal" class="p-2 hover:bg-gray-200 rounded-lg transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
+          <button @click="closeModal" class="p-2 hover:bg-gray-200 rounded-md transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
         </div>
         <form @submit.prevent="handleSubmit" class="p-5 space-y-4">
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-500 ml-1">Tipo</label>
-              <select v-model="form.tipo" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
+              <select v-model="form.tipo" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option v-for="t in tiposOptions" :key="t">{{ t }}</option>
               </select>
             </div>
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-500 ml-1">Sector</label>
-              <select v-model="form.sector" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
+              <select v-model="form.sector" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option>
               </select>
             </div>
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-gray-500 ml-1">ID Máquina</label>
-            <input v-model="form.maquina" type="number" required class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
+            <input v-model="form.maquina" type="number" required class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-bold text-gray-500 ml-1">Nombre descriptivo</label>
-            <input v-model="form.nombre_maquina" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
+            <input v-model="form.nombre_maquina" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-500 ml-1">Local físico</label>
-              <input v-model="form.local_fisico" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input v-model="form.local_fisico" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-500 ml-1">Lado</label>
-              <select v-model="form.lado" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 outline-none">
+              <select v-model="form.lado" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option value="U">Único (U)</option><option value="A">Lado A</option><option value="B">Lado B</option>
               </select>
             </div>
@@ -602,15 +620,15 @@ const exportToExcel = async () => {
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-400 ml-1">Modelo (Opcional)</label>
-              <input v-model="form.modelo" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base outline-none" />
+              <input v-model="form.modelo" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
             </div>
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-400 ml-1">Serie (Opcional)</label>
-              <input v-model="form.nro_serie" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-base outline-none" />
+              <input v-model="form.nro_serie" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
             </div>
           </div>
           <!-- Toggle Activo en Modal (estilo "Crítico") -->
-          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+          <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md border border-gray-200">
             <div>
               <p class="text-sm font-bold text-gray-700">Estado en producción</p>
               <p class="text-xs text-gray-400 font-medium">Define si la máquina está operativa</p>
@@ -624,8 +642,8 @@ const exportToExcel = async () => {
           </div>
 
           <div class="pt-4 flex space-x-3">
-            <button @click="closeModal" type="button" class="flex-1 py-3.5 border border-gray-200 rounded-xl font-bold text-base text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button>
-            <button type="submit" class="flex-2 py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-base shadow-md hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center space-x-2">
+            <button @click="closeModal" type="button" class="flex-1 py-3.5 border border-gray-200 rounded-md font-bold text-base text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button>
+            <button type="submit" class="flex-2 py-3.5 bg-indigo-600 text-white rounded-md font-bold text-base shadow-md hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center space-x-2">
               <Check class="w-6 h-6" /><span>Guardar cambios</span>
             </button>
           </div>
@@ -634,3 +652,5 @@ const exportToExcel = async () => {
     </div>
   </div>
 </template>
+
+

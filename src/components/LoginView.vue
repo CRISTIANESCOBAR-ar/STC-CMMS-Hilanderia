@@ -110,7 +110,7 @@ const limpiarCacheYActualizar = async () => {
         <div class="mx-auto h-12 w-12 bg-blue-600 rounded-xl rotate-3 flex items-center justify-center shadow-lg border-2 border-gray-50 mb-3 transition-transform hover:rotate-0 duration-300">
           <Wrench class="w-8 h-8 text-white -rotate-3" stroke-width="2.5" />
         </div>
-        <h2 class="text-3xl font-black text-gray-900 tracking-tight">CMMS Hilandería</h2>
+        <h2 class="text-3xl font-black text-gray-900 tracking-tight">CMMS STC</h2>
         <p class="mt-2 text-sm font-medium text-gray-500 tracking-widest">
           Reporte de Mantenimiento
         </p>

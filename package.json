@@ -13,7 +13,9 @@
     "migrate:sectors:dry": "node scripts/migrate-sectors.mjs",
     "migrate:sectors:apply": "node scripts/migrate-sectors.mjs --apply",
     "import:codigos:dry": "node scripts/import-codigos-textiles.mjs",
-    "import:codigos:apply": "node scripts/import-codigos-textiles.mjs --apply"
+    "import:codigos:apply": "node scripts/import-codigos-textiles.mjs --apply",
+    "import:maquinas:dry": "node scripts/import-maquinas.mjs",
+    "import:maquinas:apply": "node scripts/import-maquinas.mjs --apply"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",

@@ -15,7 +15,9 @@
     "import:codigos:dry": "node scripts/import-codigos-textiles.mjs",
     "import:codigos:apply": "node scripts/import-codigos-textiles.mjs --apply",
     "import:maquinas:dry": "node scripts/import-maquinas.mjs",
-    "import:maquinas:apply": "node scripts/import-maquinas.mjs --apply"
+    "import:maquinas:apply": "node scripts/import-maquinas.mjs --apply",
+    "reset:maquinas:dry": "node scripts/reset-maquinas-catalogo.mjs",
+    "reset:maquinas:apply": "node scripts/reset-maquinas-catalogo.mjs --apply"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",

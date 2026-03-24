@@ -4,14 +4,73 @@ import { useRouter } from 'vue-router';
 import { authService, userRole } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages } from 'lucide-vue-next';
 import { canAccessJefePanel } from './constants/organization';
+import Swal from 'sweetalert2';
 
 const router = useRouter();
 const isAuthReady = ref(false);
 const user = ref(null);
 const isMenuOpen = ref(false);
+const hasUpdate = ref(false);
+let updateCheckInterval = null;
 
 const closeMenu = () => {
   isMenuOpen.value = false;
+};
+
+// Función para verificar actualizaciones del Service Worker
+const checkForUpdates = async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (let reg of regs) {
+        if (reg.waiting) {
+          hasUpdate.value = true;
+          // Mostrar toast con Swal
+          Swal.fire({
+            icon: 'info',
+            title: 'Nueva versión disponible',
+            text: 'Se ha detectado una actualización de la aplicación.',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: true,
+            timer: 10000,
+            timerProgressBar: true,
+            confirmButtonText: 'Actualizar',
+            confirmButtonColor: '#16a34a'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              limpiarCacheYActualizar();
+            }
+          });
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error checking for updates:', err);
+  }
+};
+
+// Limpiar cache y actualizar
+const limpiarCacheYActualizar = async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (let key of keys) {
+        await caches.delete(key);
+      }
+    }
+    window.location.reload(true);
+  } catch (err) {
+    console.error("Error updating:", err);
+    Swal.fire('Error', 'No se pudo actualizar. Intenta de nuevo.', 'error');
+  }
 };
 
 // Cerrar con ESC
@@ -38,10 +97,17 @@ onMounted(() => {
       router.push('/login');
     }
   });
+
+  // Polling para verificar actualizaciones cada 5 minutos
+  checkForUpdates(); // Verificar inmediatamente al montar
+  updateCheckInterval = setInterval(checkForUpdates, 5 * 60 * 1000);
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
+  if (updateCheckInterval) {
+    clearInterval(updateCheckInterval);
+  }
 });
 
 const handleLogout = async () => {
@@ -149,7 +215,7 @@ const userRoleLabelClass = computed(() => {
             <router-link 
               to="/" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <Wrench class="w-6 h-6 mr-4" />
@@ -160,7 +226,7 @@ const userRoleLabelClass = computed(() => {
               v-if="canAccessJefePanel(userRole)"
               to="/jefe" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <ShieldCheck class="w-6 h-6 mr-4" />
@@ -170,7 +236,7 @@ const userRoleLabelClass = computed(() => {
             <router-link 
               to="/historico" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-50 active:bg-gray-100"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-blue-600 text-white shadow-lg shadow-blue-900/20"
             >
               <History class="w-6 h-6 mr-4" />
@@ -180,7 +246,7 @@ const userRoleLabelClass = computed(() => {
             <router-link 
               to="/maquinas" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
             >
               <Settings2 class="w-6 h-6 mr-4" />
@@ -191,7 +257,7 @@ const userRoleLabelClass = computed(() => {
               v-if="userRole === 'admin'"
               to="/usuarios" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-amber-600 text-white shadow-lg shadow-amber-900/20"
             >
               <Users class="w-6 h-6 mr-4" />
@@ -202,7 +268,7 @@ const userRoleLabelClass = computed(() => {
               v-if="userRole === 'admin'"
               to="/traducciones" 
               @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-800 active:bg-black"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
               active-class="bg-violet-600 text-white shadow-lg shadow-violet-900/20"
             >
               <Languages class="w-6 h-6 mr-4" />
@@ -228,7 +294,7 @@ const userRoleLabelClass = computed(() => {
 
             <button 
               @click="handleLogout"
-              class="w-full flex items-center px-4 py-4 rounded-xs text-xl font-bold text-red-600 transition-all hover:bg-red-50 active:bg-red-100 mt-2"
+              class="w-full flex items-center px-4 py-4 rounded-xs text-xl font-bold text-red-600 transition-all hover:bg-red-100 active:bg-red-200 mt-2"
             >
               <LogOut class="w-6 h-6 mr-4" />
               Cerrar Sesión

@@ -101,12 +101,20 @@ const tiposDisponibles = computed(() => {
   return [...new Set(tipos)].sort();
 });
 
+const formatNombreDescriptivo = (nombre_maquina, maquina, sector) => {
+  const id = String(maquina);
+  const num = sector === 'HILANDERIA'
+    ? parseInt(id.slice(-2), 10)
+    : parseInt(id.slice(-3), 10);
+  return `${nombre_maquina} ${num}`;
+};
+
 const maquinasFiltradas = computed(() => {
   return maquinasPorSector.value
     .filter(m => m.tipo.toUpperCase() === tipoSeleccionado.value)
     .map(m => ({
       ...m,
-      nombreDescriptivo: `${m.tipo} ${m.local_fisico}`
+      nombreDescriptivo: formatNombreDescriptivo(m.nombre_maquina, m.maquina, m.sector)
     }))
     .sort((a, b) => a.local_fisico - b.local_fisico);
 });

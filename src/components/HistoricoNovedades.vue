@@ -16,7 +16,6 @@ import {
   Filter,
   Image as ImageIcon,
   History,
-  FileSpreadsheet,
   Sparkles,
   Copy,
   ChevronUp,
@@ -328,12 +327,12 @@ const getStatusClass = (estado) => {
           <!-- Búsqueda y Filtros (Desktop) -->
           <div class="flex-1 flex items-center gap-2 max-w-2xl mx-auto">
             <div class="relative flex-[1.5]">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input 
                 v-model="searchQuery" 
                 type="text" 
                 placeholder="Buscar máquina o falla..." 
-                class="w-full pl-9 pr-4 py-1.5 bg-gray-800 border border-gray-700 focus:bg-gray-700 focus:border-blue-500 rounded-lg text-xs text-gray-200 outline-none transition-all placeholder:text-gray-500" 
+                class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-100 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-md text-xs text-gray-700 outline-none transition-all placeholder:text-gray-400 shadow-sm" 
               />
             </div>
             
@@ -341,16 +340,16 @@ const getStatusClass = (estado) => {
               <input 
                 v-model="filterDate" 
                 type="date" 
-                :class="{'text-transparent': !filterDate, 'text-gray-300': filterDate}"
-                class="w-full bg-gray-800 border border-gray-700 text-xs font-bold rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all"
+                :class="{'text-transparent': !filterDate, 'text-gray-700': filterDate}"
+                class="h-8 w-full px-2 bg-white border border-slate-100 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
                 title="Filtrar por fecha y analizar IA"
               />
-              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none font-bold tracking-wider bg-gray-800 px-1">Fecha IA...</span>
+              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none font-black tracking-widest bg-white px-1">Fecha IA...</span>
             </div>
             
             <select 
               v-model="statusFilter"
-              class="bg-gray-800 border border-gray-700 text-gray-300 text-[10px] font-bold rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none transition-all flex-[0.7]"
+              class="h-8 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm flex-[0.7]"
             >
               <option value="todos">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
@@ -360,10 +359,11 @@ const getStatusClass = (estado) => {
             
             <button 
               @click="exportToExcel"
-              data-tippy-content="Exportar a Excel"
-              class="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg shadow-emerald-900/40 transition-all active:scale-95 shrink-0"
+              data-tippy-content="Exportar a Excel (XLSX)"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md shrink-0"
             >
-              <FileSpreadsheet class="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
+              <span>Exportar</span>
             </button>
           </div>
         </div>
@@ -374,7 +374,7 @@ const getStatusClass = (estado) => {
         <div class="flex items-center gap-2">
           <h1 class="text-sm font-black text-white tracking-tighter shrink-0">Histórico</h1>
           <div class="flex items-center gap-1">
-             <button @click="exportToExcel" class="bg-emerald-600 text-white p-1.5 rounded-md active:scale-90 transition-all shadow-sm"><FileSpreadsheet class="w-4 h-4" /></button>
+             <button @click="exportToExcel" data-tippy-content="Exportar a Excel (XLSX)" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
           </div>
         </div>
       </Teleport>

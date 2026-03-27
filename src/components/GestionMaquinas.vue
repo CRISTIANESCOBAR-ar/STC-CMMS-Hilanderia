@@ -12,6 +12,7 @@ import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light-border.css';
 import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue } from '../constants/organization';
+import { maquinaService } from '../services/maquinaService';
 
 const maquinas = ref([]);
 const isLoading = ref(true);
@@ -28,7 +29,15 @@ const tipoFilter = ref('');
 const editingRowId = ref(null);
 const editingRow = ref({});
 
-const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR, activo: true };
+const normalizeMachineRecord = (maquina = {}) => ({
+  ...maquina,
+  sector: normalizeSectorValue(maquina.sector || DEFAULT_SECTOR),
+  activo: maquina.activo ?? true,
+  grp_tear: maquina.grp_tear ?? '',
+  g_cmest: maquina.g_cmest ?? ''
+});
+
+const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR, activo: true, grp_tear: '', g_cmest: '' };
 const form = ref({ ...initialForm });
 
 // Paginación
@@ -67,7 +76,7 @@ onMounted(async () => {
     const snapshot = await getDocs(q);
     clearTimeout(timeoutId);
 
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), sector: normalizeSectorValue(doc.data().sector || DEFAULT_SECTOR), activo: doc.data().activo ?? true }));
+    const data = snapshot.docs.map(doc => normalizeMachineRecord({ id: doc.id, ...doc.data() }));
     
     // Ordenar manualmente para asegurar consistencia
     maquinas.value = data.sort((a, b) => {
@@ -102,7 +111,9 @@ const filteredMaquinas = computed(() => {
       String(m.maquina).toLowerCase().includes(q) ||
       m.tipo.toLowerCase().includes(q) ||
       m.nombre_maquina?.toLowerCase().includes(q) ||
-      String(m.sector || '').toLowerCase().includes(q)
+      String(m.sector || '').toLowerCase().includes(q) ||
+      String(m.grp_tear || '').toLowerCase().includes(q) ||
+      String(m.g_cmest || '').toLowerCase().includes(q)
     );
   });
 });
@@ -116,7 +127,7 @@ const tipoFilterOptions = computed(() => {
 });
 
 const openAddModal = () => { isEditing.value = false; form.value = { ...initialForm }; showModal.value = true; };
-const openEditModal = (maquina) => { isEditing.value = true; form.value = { ...maquina, activo: maquina.activo ?? true }; showModal.value = true; };
+const openEditModal = (maquina) => { isEditing.value = true; form.value = normalizeMachineRecord(maquina); showModal.value = true; };
 const closeModal = () => { showModal.value = false; };
 
 const handleSubmit = async () => {
@@ -140,7 +151,7 @@ const toggleActivo = async (maquina) => {
   }
 };
 
-const startInlineEdit = (maquina) => { editingRowId.value = maquina.id; editingRow.value = { ...maquina, activo: maquina.activo ?? true }; };
+const startInlineEdit = (maquina) => { editingRowId.value = maquina.id; editingRow.value = normalizeMachineRecord(maquina); };
 const cancelInlineEdit = () => { editingRowId.value = null; editingRow.value = {}; };
 
 const saveInlineEdit = async () => {
@@ -194,6 +205,8 @@ const exportToExcel = async () => {
     { header: 'ACTIVO', key: 'activo', width: 10 },
     { header: 'ADQUISICION', key: 'adquisicion', width: 15 },
     { header: 'EXCEL_ID', key: 'excel_id', width: 12 },
+    { header: 'GRP_TEAR', key: 'grp_tear', width: 12 },
+    { header: 'G_CMEST', key: 'g_cmest', width: 12 },
   ];
 
   // Agregar Datos
@@ -210,6 +223,8 @@ const exportToExcel = async () => {
       activo: (m.activo ?? true) ? 'SI' : 'NO',
       adquisicion: m.adquisicion?.toDate?.()?.toLocaleDateString('es-AR') || '---',
       excel_id: m.excel_id || '---',
+      grp_tear: m.grp_tear || '---',
+      g_cmest: m.g_cmest || '---',
     });
   });
 
@@ -247,7 +262,7 @@ const exportToExcel = async () => {
   });
 
   // Filtros Automáticos
-  worksheet.autoFilter = 'A1:K1';
+  worksheet.autoFilter = 'A1:M1';
 
   // Generar y Descargar
   const buffer = await workbook.xlsx.writeBuffer();
@@ -385,6 +400,14 @@ const exportToExcel = async () => {
                   <span class="shrink-0">Loc: {{ m.local_fisico }}</span>
                   <span class="shrink-0">Lado: {{ m.lado }}</span>
                 </div>
+                <div class="flex flex-wrap gap-1.5 pt-0.5">
+                  <span class="px-2 py-0.5 text-[10px] font-black rounded border bg-sky-50 text-sky-700 border-sky-200">
+                    GRP: {{ m.grp_tear || '---' }}
+                  </span>
+                  <span class="px-2 py-0.5 text-[10px] font-black rounded border bg-amber-50 text-amber-700 border-amber-200">
+                    CMEST: {{ m.g_cmest || '---' }}
+                  </span>
+                </div>
                 <!-- Badge Activo -->
                 <div class="pt-1">
                   <span
@@ -438,6 +461,8 @@ const exportToExcel = async () => {
                   <th class="px-4 py-4 bg-gray-50 w-20">Lado</th>
                   <th class="px-4 py-4 bg-gray-50 w-30">Modelo</th>
                   <th class="px-4 py-4 bg-gray-50 w-30">Serie</th>
+                  <th class="px-4 py-4 bg-gray-50 w-24">GRP_TEAR</th>
+                  <th class="px-4 py-4 bg-gray-50 w-24">G_CMEST</th>
                   <th class="px-4 py-4 bg-gray-50 w-28 text-center">Activo</th>
                   <th v-if="userRole === 'admin'" class="px-4 py-4 text-center bg-gray-50 w-25">Acciones</th>
                 </tr>
@@ -460,6 +485,8 @@ const exportToExcel = async () => {
                     <td class="px-4 py-3"><select v-model="editingRow.lado" class="bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option value="U">U</option><option value="A">A</option><option value="B">B</option></select></td>
                     <td class="px-4 py-3"><input v-model="editingRow.modelo" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.nro_serie" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                    <td class="px-4 py-3"><input v-model="editingRow.grp_tear" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                    <td class="px-4 py-3"><input v-model="editingRow.g_cmest" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <!-- Toggle activo edición inline -->
                     <td class="px-4 py-3 text-center">
                       <button type="button" @click="editingRow.activo = !editingRow.activo" class="flex items-center gap-2 mx-auto">
@@ -485,6 +512,8 @@ const exportToExcel = async () => {
                     <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.lado }}</td>
                     <td class="px-4 py-4 text-gray-500 text-sm">{{ m.modelo || '—' }}</td>
                     <td class="px-4 py-4 text-gray-500 text-sm">{{ m.nro_serie || '—' }}</td>
+                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.grp_tear || '—' }}</td>
+                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.g_cmest || '—' }}</td>
                     <!-- Columna Activo (solo lectura / toggle admin) -->
                     <td class="px-4 py-4 text-center">
                       <button
@@ -625,6 +654,16 @@ const exportToExcel = async () => {
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-400 ml-1">Serie (Opcional)</label>
               <input v-model="form.nro_serie" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-gray-400 ml-1">GRP_TEAR</label>
+              <input v-model="form.grp_tear" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-gray-400 ml-1">G_CMEST</label>
+              <input v-model="form.g_cmest" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
             </div>
           </div>
           <!-- Toggle Activo en Modal (estilo "Crítico") -->

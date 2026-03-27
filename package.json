@@ -16,6 +16,8 @@
     "import:codigos:apply": "node scripts/import-codigos-textiles.mjs --apply",
     "import:maquinas:dry": "node scripts/import-maquinas.mjs",
     "import:maquinas:apply": "node scripts/import-maquinas.mjs --apply",
+    "sync:maquinas:dry": "node scripts/sync-maquinas-catalogo.mjs",
+    "sync:maquinas:apply": "node scripts/sync-maquinas-catalogo.mjs --apply",
     "reset:maquinas:dry": "node scripts/reset-maquinas-catalogo.mjs",
     "reset:maquinas:apply": "node scripts/reset-maquinas-catalogo.mjs --apply"
   },

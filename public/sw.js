@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cmms-cache-v2';
+const CACHE_NAME = 'cmms-cache-v3';
 
 self.addEventListener('install', event => {
   // Comentado intencionalmente: NO usar self.skipWaiting() aquí.

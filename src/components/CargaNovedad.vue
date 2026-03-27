@@ -14,6 +14,7 @@ import { compressImage, formatSize } from '../utils/imageCompressor';
 
 const maquinas = ref([]);
 const tipoSeleccionado = ref('');
+const gpSeleccionado = ref('');
 const maquinaSeleccionadaId = ref('');
 const tipoProblema = ref('Mecánico'); // Mecánico or Eléctrico
 
@@ -101,8 +102,41 @@ const tiposDisponibles = computed(() => {
   return [...new Set(tipos)].sort();
 });
 
-const formatNombreDescriptivo = (nombre_maquina, maquina, sector) => {
+const esTipoTelar = computed(() => tipoSeleccionado.value === 'TELAR');
+
+const formatGrpTear = (grpTear) => {
+  const raw = String(grpTear || '').trim();
+  if (!raw) return '';
+  const ultimosDos = raw.slice(-2);
+  const parsed = Number.parseInt(ultimosDos, 10);
+  return Number.isNaN(parsed) ? ultimosDos : String(parsed);
+};
+
+const formatGCmest = (gCmest) => {
+  const raw = String(gCmest || '').trim();
+  if (!raw) return '';
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? raw : String(parsed);
+};
+
+const gruposTelarDisponibles = computed(() => {
+  const grupos = maquinasPorSector.value
+    .filter((m) => String(m.tipo || '').toUpperCase() === 'TELAR')
+    .map((m) => String(m.grp_tear || '').trim())
+    .filter(Boolean);
+
+  return [...new Set(grupos)]
+    .sort((a, b) => Number(formatGrpTear(a)) - Number(formatGrpTear(b)))
+    .map((raw) => ({ raw, label: formatGrpTear(raw) }));
+});
+
+const formatNombreDescriptivo = (nombre_maquina, maquina, sector, tipo) => {
   const id = String(maquina);
+  if (String(tipo || '').toUpperCase() === 'TELAR') {
+    const numeroPuesto = Number.parseInt(id.slice(-2), 10);
+    return `Toyota ${Number.isNaN(numeroPuesto) ? id : numeroPuesto}`;
+  }
+
   const num = sector === 'HILANDERIA'
     ? parseInt(id.slice(-2), 10)
     : parseInt(id.slice(-3), 10);
@@ -112,15 +146,25 @@ const formatNombreDescriptivo = (nombre_maquina, maquina, sector) => {
 const maquinasFiltradas = computed(() => {
   return maquinasPorSector.value
     .filter(m => m.tipo.toUpperCase() === tipoSeleccionado.value)
+    .filter((m) => {
+      if (!esTipoTelar.value || !gpSeleccionado.value) return true;
+      return String(m.grp_tear || '').trim() === gpSeleccionado.value;
+    })
     .map(m => ({
       ...m,
-      nombreDescriptivo: formatNombreDescriptivo(m.nombre_maquina, m.maquina, m.sector)
+      nombreDescriptivo: formatNombreDescriptivo(m.nombre_maquina, m.maquina, m.sector, m.tipo)
     }))
     .sort((a, b) => a.local_fisico - b.local_fisico);
 });
 
 // Reset machine selection and catalog when type or machine changes
 watch(tipoSeleccionado, () => {
+  gpSeleccionado.value = '';
+  maquinaSeleccionadaId.value = '';
+  resetCatalogo();
+});
+
+watch(gpSeleccionado, () => {
   maquinaSeleccionadaId.value = '';
   resetCatalogo();
 });
@@ -134,6 +178,11 @@ watch(tiposDisponibles, (newTipos) => {
 const detallesMaquina = computed(() => {
   if (!maquinaSeleccionadaId.value) return null;
   return maquinasPorSector.value.find(m => m.id === maquinaSeleccionadaId.value);
+});
+
+const gmSeleccionado = computed(() => {
+  if (!esTipoTelar.value) return '';
+  return formatGCmest(detallesMaquina.value?.g_cmest);
 });
 
 // Cargar catálogo si el modelo es R-60
@@ -328,7 +377,7 @@ const seleccionarAccionRapida = (accion) => {
         <!-- Selección de Máquina (Grupo Plano) -->
         <div class="px-4 py-3 border-b border-gray-50 flex gap-4">
           <!-- Selector de Tipo -->
-          <div class="flex-[0.8]">
+          <div :class="esTipoTelar ? 'flex-[0.8]' : 'flex-[1]'">
             <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Tipo</label>
             <select 
               v-model="tipoSeleccionado" 
@@ -341,9 +390,24 @@ const seleccionarAccionRapida = (accion) => {
             </select>
           </div>
 
-          <!-- Selector de ID/Puesto -->
-          <div class="flex-[1.2]">
-            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">ID Máquina / Puesto</label>
+          <!-- Selector de Gp (solo TELAR) -->
+          <div v-if="esTipoTelar" class="flex-[0.5]">
+            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Gp</label>
+            <select
+              v-model="gpSeleccionado"
+              :disabled="gruposTelarDisponibles.length === 0"
+              class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-40"
+            >
+              <option value="" disabled>Gp...</option>
+              <option v-for="g in gruposTelarDisponibles" :key="g.raw" :value="g.raw">
+                {{ g.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Selector de ID Máquina -->
+          <div :class="esTipoTelar ? 'flex-[1.1]' : 'flex-[1.2]'">
+            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">ID Máquina</label>
             <select 
               v-model="maquinaSeleccionadaId" 
               class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none"
@@ -353,6 +417,14 @@ const seleccionarAccionRapida = (accion) => {
                 {{ m.nombreDescriptivo }} {{ m.lado !== 'U' ? '(' + m.lado + ')' : '' }}
               </option>
             </select>
+          </div>
+
+          <!-- GM (solo TELAR, solo lectura) -->
+          <div v-if="esTipoTelar" class="flex-[0.45]">
+            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
+            <div class="text-gray-900 text-base font-bold py-1.5 leading-none">
+              {{ gmSeleccionado || '—' }}
+            </div>
           </div>
         </div>
 

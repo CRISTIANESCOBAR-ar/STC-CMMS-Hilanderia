@@ -4,9 +4,16 @@ import { DEFAULT_SECTOR, normalizeSectorValue } from '../constants/organization'
 
 const COLLECTION_NAME = 'maquinas';
 
+const normalizeOptionalText = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
 const normalizarMaquina = (data = {}) => ({
   ...data,
-  sector: normalizeSectorValue(data.sector || DEFAULT_SECTOR)
+  sector: normalizeSectorValue(data.sector || DEFAULT_SECTOR),
+  grp_tear: normalizeOptionalText(data.grp_tear),
+  g_cmest: normalizeOptionalText(data.g_cmest)
 });
 
 export const maquinaService = {

@@ -6,6 +6,9 @@ import GestionMaquinas from './components/GestionMaquinas.vue'
 import Usuarios from './components/Usuarios.vue'
 import Traducciones from './components/Traducciones.vue'
 import LoginView from './components/LoginView.vue'
+import LlamarIntervencion from './components/LlamarIntervencion.vue'
+import IntervencionesView from './components/IntervencionesView.vue'
+import CodigosAdmin from './components/CodigosAdmin.vue'
 import { authService, userRole } from './services/authService'
 import { auth } from './firebase/config'
 
@@ -16,7 +19,10 @@ const routes = [
   { path: '/historico', component: HistoricoNovedades, meta: { requiresAuth: true } },
   { path: '/maquinas', component: GestionMaquinas, meta: { requiresAuth: true } },
   { path: '/usuarios', component: Usuarios, meta: { requiresAuth: true, role: 'admin' } },
-  { path: '/traducciones', component: Traducciones, meta: { requiresAuth: true, role: 'admin' } }
+  { path: '/traducciones', component: Traducciones, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/llamar', component: LlamarIntervencion, meta: { requiresAuth: true, role: ['admin', 'jefe_sector', 'supervisor', 'inspector'] } },
+  { path: '/intervenciones', component: IntervencionesView, meta: { requiresAuth: true } },
+  { path: '/codigos', component: CodigosAdmin, meta: { requiresAuth: true, role: 'admin' } },
 ]
 
 export const router = createRouter({

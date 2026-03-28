@@ -8,8 +8,14 @@ export const SECTOR_OPTIONS = [
 export const ROLE_OPTIONS = [
   'mecanico',
   'jefe_sector',
-  'admin'
+  'admin',
+  'supervisor',
+  'inspector'
 ];
+
+// Quién puede registrar una solicitud de intervención (despachar mecánico/electricista)
+export const canDespacharIntervencion = (role) =>
+  ['admin', 'jefe_sector', 'supervisor', 'inspector'].includes(role);
 
 export const normalizeSectorValue = (value) => {
   if (!value || typeof value !== 'string') return DEFAULT_SECTOR;

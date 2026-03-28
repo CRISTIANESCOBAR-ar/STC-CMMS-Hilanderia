@@ -2,8 +2,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages } from 'lucide-vue-next';
-import { canAccessJefePanel } from './constants/organization';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter } from 'lucide-vue-next';
+import { canAccessJefePanel, canDespacharIntervencion } from './constants/organization';
 import Swal from 'sweetalert2';
 
 const router = useRouter();
@@ -123,6 +123,9 @@ const pageTitle = computed(() => {
   if (path === '/historico') return 'Historial de Novedades';
   if (path === '/maquinas') return 'Gestión de Máquinas';
   if (path === '/usuarios') return 'Gestión de Usuarios';
+  if (path === '/llamar') return 'Solicitar Intervención';
+  if (path === '/intervenciones') return 'Intervenciones';
+  if (path === '/codigos') return 'Códigos de Defectos y Paradas';
   if (path === '/login') return 'Ingreso al Sistema';
   return 'CMMS STC';
 });
@@ -234,6 +237,27 @@ const userRoleLabelClass = computed(() => {
             </router-link>
 
             <router-link 
+              v-if="canDespacharIntervencion(userRole)"
+              to="/llamar" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-orange-600 text-white shadow-lg shadow-orange-900/20"
+            >
+              <BellRing class="w-6 h-6 mr-4" />
+              Solicitar Intervención
+            </router-link>
+
+            <router-link 
+              to="/intervenciones" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-orange-600 text-white shadow-lg shadow-orange-900/20"
+            >
+              <ClipboardList class="w-6 h-6 mr-4" />
+              Intervenciones
+            </router-link>
+
+            <router-link 
               to="/historico" 
               @click="closeMenu"
               class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
@@ -273,6 +297,17 @@ const userRoleLabelClass = computed(() => {
             >
               <Languages class="w-6 h-6 mr-4" />
               Traducciones de catálogo
+            </router-link>
+
+            <router-link 
+              v-if="userRole === 'admin'"
+              to="/codigos" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
+            >
+              <ListFilter class="w-6 h-6 mr-4" />
+              Códigos y Tipos de Falla
             </router-link>
 
             <div class="h-px bg-gray-100 my-4 mx-4"></div>

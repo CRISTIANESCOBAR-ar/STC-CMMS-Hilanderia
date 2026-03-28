@@ -7,7 +7,7 @@ import { catalogoService } from '../services/catalogoService';
 import { userProfile } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
@@ -26,6 +26,9 @@ const denominacionSeleccionada = ref(null); // Objeto completo del punto selecci
 
 const isCritico = ref(false);
 const motivoLlamado = ref('VERIFICACIÓN');
+
+// Visor de procedimiento
+const showProcedimientoViewer = ref(false);
 const observaciones = ref('');
 const imagenFile = ref(null);
 const imagenOriginalSize = ref(null);
@@ -185,17 +188,31 @@ const gmSeleccionado = computed(() => {
   return formatGCmest(detallesMaquina.value?.g_cmest);
 });
 
-// Cargar catálogo si el modelo es R-60
+// Determina la clave de catálogo según el tipo/modelo de la máquina
+const getCatalogKey = (maquina) => {
+  if (!maquina) return null;
+  if (maquina.tipo === 'OPEN END' || maquina.modelo === 'R-60') return { field: 'modelo', value: 'R-60' };
+  if (maquina.tipo === 'TELAR') return { field: 'tipo', value: 'TELAR' };
+  return null;
+};
+
+// Cargar catálogo según el tipo/modelo de máquina seleccionada
 watch(detallesMaquina, async (newVal) => {
-    if (newVal && newVal.modelo === 'R-60') {
-        try {
-            catalogoCompleto.value = await catalogoService.obtenerPuntosPorModelo('R-60');
-        } catch (err) {
-            console.error("Error cargando catálogo", err);
-        }
+  const key = getCatalogKey(newVal);
+  if (!key) { resetCatalogo(); return; }
+  try {
+    if (key.field === 'tipo') {
+      catalogoCompleto.value = await catalogoService.obtenerPuntosPorTipo(key.value);
     } else {
-        resetCatalogo();
+      catalogoCompleto.value = await catalogoService.obtenerPuntosPorModelo(key.value);
     }
+    // Si no hay resultados en el campo 'tipo', intentar fallback por 'modelo' con el nombre de display
+    if (catalogoCompleto.value.length === 0 && key.field === 'tipo') {
+      catalogoCompleto.value = await catalogoService.obtenerPuntosPorModelo('TOYOTA');
+    }
+  } catch (err) {
+    console.error('Error cargando catálogo', err);
+  }
 });
 
 const resetCatalogo = () => {
@@ -230,6 +247,7 @@ const denominacionesDisponibles = computed(() => {
 // Al cambiar una jerarquía superior, resetear las inferiores
 watch(seccionSeleccionada, () => { grupoSeleccionado.value = ''; denominacionSeleccionada.value = null; });
 watch(grupoSeleccionado, () => { denominacionSeleccionada.value = null; });
+watch(denominacionSeleccionada, () => { showProcedimientoViewer.value = false; });
 
 const onFileChange = async (e) => {
   const file = e.target.files[0];
@@ -452,20 +470,43 @@ const seleccionarAccionRapida = (accion) => {
 
           <!-- Selección de SubGrupo / Denominación -->
           <div v-if="grupoSeleccionado" class="px-4 py-3 border-b border-gray-50 animate-in slide-in-from-top-2">
-             <div class="flex justify-between items-center mb-1">
-                <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest">3. Punto / Parte específica</label>
-                <div v-if="denominacionSeleccionada" class="flex gap-1">
-                   <div v-if="denominacionSeleccionada.numeroArticulo && denominacionSeleccionada.numeroArticulo !== '-'" class="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded shadow-sm">
-                      Art: {{ denominacionSeleccionada.numeroArticulo }}
-                   </div>
-                </div>
-             </div>
+             <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">3. Punto / Parte específica</label>
              <select v-model="denominacionSeleccionada" class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
                <option :value="null">Seleccionar Denominación...</option>
                <option v-for="d in denominacionesDisponibles" :key="d.id" :value="d">
                  {{ d.denominacion }} {{ d.subGrupo !== '-' ? '['+d.subGrupo+']' : '' }}
                </option>
              </select>
+
+             <!-- Info + botón tras seleccionar denominación -->
+             <div v-if="denominacionSeleccionada" class="mt-2.5 flex items-center gap-2">
+               <!-- Tiempo estimado -->
+               <div v-if="denominacionSeleccionada.tiempo" class="flex items-center gap-1.5 flex-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                 <span class="text-[11px] font-black text-amber-700 tracking-wide">{{ denominacionSeleccionada.tiempo }}</span>
+               </div>
+               <!-- Badge nro artículo -->
+               <div v-if="denominacionSeleccionada.numeroArticulo && denominacionSeleccionada.numeroArticulo !== '-'" class="bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded shrink-0">
+                 Art: {{ denominacionSeleccionada.numeroArticulo }}
+               </div>
+               <!-- Botón Ver Procedimiento -->
+               <button
+                 type="button"
+                 @click="denominacionSeleccionada?.procedimiento?.length > 0 && (showProcedimientoViewer = true)"
+                 :disabled="!denominacionSeleccionada?.procedimiento?.length"
+                 :title="denominacionSeleccionada?.procedimiento?.length ? 'Ver procedimiento (' + denominacionSeleccionada.procedimiento.length + ' pasos)' : 'Sin procedimiento cargado'"
+                 class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition active:scale-[0.97]"
+                 :class="denominacionSeleccionada?.procedimiento?.length
+                   ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                   : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'"
+               >
+                 <BookOpen class="w-3.5 h-3.5" />
+                 <span>Procedimiento</span>
+                 <span v-if="denominacionSeleccionada?.procedimiento?.length" class="bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                   {{ denominacionSeleccionada.procedimiento.length }}
+                 </span>
+               </button>
+             </div>
           </div>
         </div>
 
@@ -602,6 +643,44 @@ const seleccionarAccionRapida = (accion) => {
 
       </form>
     </main>
+
+    <!-- Modal Visualizador de Procedimiento -->
+    <Teleport to="body">
+      <div
+        v-if="showProcedimientoViewer"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        @click.self="showProcedimientoViewer = false"
+      >
+        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+          <div class="p-4 border-b border-gray-100 flex justify-between items-start shrink-0">
+            <div class="flex-1 pr-2">
+              <p class="text-[10px] font-extrabold text-indigo-500 tracking-widest mb-0.5">PROCEDIMIENTO</p>
+              <h3 class="text-sm font-black text-gray-800 leading-tight">{{ denominacionSeleccionada?.denominacion }}</h3>
+              <p class="text-xs text-gray-400 font-medium mt-0.5">{{ denominacionSeleccionada?.seccion }} · Grupo {{ denominacionSeleccionada?.grupo }}</p>
+            </div>
+            <button @click="showProcedimientoViewer = false" class="p-1.5 hover:bg-gray-100 rounded-lg transition shrink-0">
+              <X class="w-5 h-5 text-gray-400" />
+            </button>
+          </div>
+          <div class="overflow-y-auto flex-1 p-4 space-y-4">
+            <div v-for="(paso, i) in denominacionSeleccionada.procedimiento" :key="i" class="space-y-2">
+              <div class="flex gap-3">
+                <div class="flex-none w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">{{ i + 1 }}</div>
+                <p class="text-sm text-gray-800 font-medium leading-relaxed pt-0.5">{{ paso.texto }}</p>
+              </div>
+              <div v-if="paso.imagenUrl" class="ml-9 rounded-lg overflow-hidden border border-gray-200">
+                <img :src="paso.imagenUrl" class="w-full max-h-64 object-contain bg-gray-900" />
+              </div>
+            </div>
+          </div>
+          <div class="p-4 border-t border-gray-100 shrink-0">
+            <button @click="showProcedimientoViewer = false" type="button" class="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

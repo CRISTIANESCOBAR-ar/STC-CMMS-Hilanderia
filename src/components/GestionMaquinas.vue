@@ -1,10 +1,12 @@
-```
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
-import { db } from '../firebase/config';
+import { db, storage } from '../firebase/config';
 import { collection, getDocs, query, doc, updateDoc } from 'firebase/firestore';
-import { Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-vue-next';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { catalogoService } from '../services/catalogoService';
+import { compressImage } from '../utils/imageCompressor';
+import { Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BookOpen, Camera } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -13,9 +15,25 @@ import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light-border.css';
 import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue } from '../constants/organization';
 import { maquinaService } from '../services/maquinaService';
+import catalogDataR60 from '../data/catalogo_full_r60.json';
+
 
 const maquinas = ref([]);
+const catalogoData = ref(catalogDataR60);
+const showCatalogModal = ref(false);
+const catalogoSearchQuery = ref('');
+const catalogoSectionFilter = ref('');
+const catalogoGroupFilter = ref('');
+const editingCatalogRowId = ref(null);
+const editingCatalogRow = ref({});
 const isLoading = ref(true);
+
+// Procedimiento editor
+const showProcedimientoModal = ref(false);
+const procedimientoItem = ref(null);
+const procedimientoPasos = ref([]);
+const isSavingProcedimiento = ref(false);
+const uploadingPasoIndex = ref(null);
 const searchQuery = ref('');
 const showModal = ref(false);
 const isEditing = ref(false);
@@ -59,6 +77,9 @@ const goToLast = () => { currentPage.value = totalPages.value; };
 // Resetear página al buscar o cambiar filtros
 watch([searchQuery, activoFilter, tipoFilter], () => { currentPage.value = 1; });
 
+// Resetear filtros del catálogo cuando cambia la sección
+watch(catalogoSectionFilter, () => { catalogoGroupFilter.value = ''; });
+
 onMounted(async () => {
   const timeoutId = setTimeout(() => {
     if (isLoading.value) {
@@ -85,6 +106,15 @@ onMounted(async () => {
     });
 
     isLoading.value = false;
+
+    // Cargar catálogo desde Firestore en segundo plano (para obtener IDs de documentos)
+    catalogoService.obtenerPuntosPorModelo('R-60').then(fsData => {
+      if (fsData.length > 0) {
+        catalogoData.value = fsData;
+      }
+    }).catch(err => {
+      console.warn('No se pudo cargar catálogo desde Firestore, usando datos locales:', err);
+    });
   } catch (error) {
     clearTimeout(timeoutId);
     console.error("Error cargando máquinas:", error);
@@ -186,13 +216,115 @@ const tiposOptions = [
   'OTRO'
 ];
 
-const exportToExcel = async () => {
+// Propiedades computadas para el catálogo R-60
+const catalogoSectionsDisponibles = computed(() => {
+  const sets = new Set(catalogoData.value.map(c => c.seccion));
+  return Array.from(sets).sort();
+});
+
+const catalogoGroupsDisponibles = computed(() => {
+  if (!catalogoSectionFilter.value) return [];
+  const filtrados = catalogoData.value.filter(c => c.seccion === catalogoSectionFilter.value);
+  const sets = new Set(filtrados.map(c => c.grupo));
+  return Array.from(sets).sort((a, b) => Number(a) - Number(b));
+});
+
+const filteredCatalogo = computed(() => {
+  let result = catalogoData.value;
+  if (catalogoSectionFilter.value) {
+    result = result.filter(c => c.seccion === catalogoSectionFilter.value);
+  }
+  if (catalogoGroupFilter.value) {
+    result = result.filter(c => c.grupo === catalogoGroupFilter.value);
+  }
+  if (catalogoSearchQuery.value) {
+    const q = catalogoSearchQuery.value.toLowerCase();
+    result = result.filter(c => 
+      c.denominacion.toLowerCase().includes(q) ||
+      c.numeroCatalogo.toLowerCase().includes(q) ||
+      c.numeroArticulo.toLowerCase().includes(q) ||
+      c.subGrupo.toLowerCase().includes(q)
+    );
+  }
+  return result;
+});
+
+const isR60Machine = (maquina = {}) => {
+  const modelo = String(maquina.modelo || '').toUpperCase().replace(/\s+/g, '');
+  const nombre = String(maquina.nombre_maquina || '').toUpperCase().replace(/\s+/g, '');
+  return maquina.tipo === 'OPEN END' && (
+    modelo === 'R-60' ||
+    modelo === 'R60' ||
+    nombre.includes('R-60') ||
+    nombre.includes('R60')
+  );
+};
+
+const inferBrand = (maquina = {}) => {
+  if (maquina.marca) return String(maquina.marca).trim();
+
+  const nombre = String(maquina.nombre_maquina || '').toUpperCase();
+  if (nombre.includes('RIETER')) return 'RIETER';
+  if (isR60Machine(maquina)) return 'RIETER';
+
+  return '';
+};
+
+const inferModel = (maquina = {}) => {
+  if (maquina.modelo) return String(maquina.modelo).trim();
+  return isR60Machine(maquina) ? 'R-60' : '';
+};
+
+const formatAcquisitionYear = (value) => {
+  if (!value) return '';
+
+  if (typeof value?.toDate === 'function') {
+    return String(value.toDate().getFullYear());
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return String(value.getFullYear());
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return '';
+
+  const yearMatch = raw.match(/(19|20)\d{2}/);
+  if (yearMatch) return yearMatch[0];
+
+  return raw;
+};
+
+const buildCatalogExportRows = (catalogItems) => {
+  const maquinasR60 = filteredMaquinas.value.filter(isR60Machine);
+
+  return maquinasR60.flatMap((maquina) => {
+    const marca = inferBrand(maquina);
+    const modelo = inferModel(maquina);
+
+    return catalogItems.map((item) => ({
+      marca,
+      modelo,
+      asignacion: '',
+      seccion: item.seccion || '',
+      abreviado: item.abreviado || '',
+      grupo: item.grupo || '',
+      subGrupo: item.subGrupo || '',
+      denominacion: item.denominacion || '',
+      numeroCatalogo: item.numeroCatalogo || '',
+      numeroArticulo: item.numeroArticulo || '',
+      tiempo: '',
+      observacion: ''
+    }));
+  });
+};
+
+const exportMaquinasToExcel = async () => {
   if (filteredMaquinas.value.length === 0) return;
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Catálogo de Máquinas');
+  const worksheet = workbook.addWorksheet('Máquinas');
 
-  // Configurar Columnas
   worksheet.columns = [
     { header: 'SECTOR', key: 'sector', width: 18 },
     { header: 'TIPO', key: 'tipo', width: 15 },
@@ -204,12 +336,10 @@ const exportToExcel = async () => {
     { header: 'SERIE', key: 'nro_serie', width: 20 },
     { header: 'ACTIVO', key: 'activo', width: 10 },
     { header: 'ADQUISICION', key: 'adquisicion', width: 15 },
-    { header: 'EXCEL_ID', key: 'excel_id', width: 12 },
     { header: 'GRP_TEAR', key: 'grp_tear', width: 12 },
     { header: 'G_CMEST', key: 'g_cmest', width: 12 },
   ];
 
-  // Agregar Datos
   filteredMaquinas.value.forEach(m => {
     worksheet.addRow({
       sector: m.sector || DEFAULT_SECTOR,
@@ -222,13 +352,74 @@ const exportToExcel = async () => {
       nro_serie: m.nro_serie || '---',
       activo: (m.activo ?? true) ? 'SI' : 'NO',
       adquisicion: m.adquisicion?.toDate?.()?.toLocaleDateString('es-AR') || '---',
-      excel_id: m.excel_id || '---',
       grp_tear: m.grp_tear || '---',
       g_cmest: m.g_cmest || '---',
     });
   });
 
-  // Estilo de Encabezado
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+      };
+      if (rowNumber > 1) {
+        cell.font = { size: 10 };
+        cell.alignment = { vertical: 'middle' };
+        if (rowNumber % 2 === 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+        }
+      }
+    });
+  });
+
+  worksheet.autoFilter = 'A1:L1';
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `Maquinas_${new Date().toISOString().split('T')[0]}.xlsx`);
+};
+
+const exportToExcel = async () => {
+  const rows = buildCatalogExportRows(catalogoData.value);
+
+  if (rows.length === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Sin máquinas R-60',
+      text: 'No hay máquinas OPEN END R-60 visibles para exportar el catálogo.'
+    });
+    return;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Catalogo Open End R-60');
+
+  worksheet.columns = [
+    { header: 'Marca', key: 'marca', width: 16 },
+    { header: 'Modelo', key: 'modelo', width: 14 },
+    { header: 'Asignación', key: 'asignacion', width: 20 },
+    { header: 'Sección', key: 'seccion', width: 28 },
+    { header: 'Abreviado', key: 'abreviado', width: 14 },
+    { header: 'Grupo', key: 'grupo', width: 12 },
+    { header: 'Sub Grupo', key: 'subGrupo', width: 14 },
+    { header: 'Denominación', key: 'denominacion', width: 44 },
+    { header: 'Numero Catalogo', key: 'numeroCatalogo', width: 18 },
+    { header: 'Numero Articulo', key: 'numeroArticulo', width: 18 },
+    { header: 'Tiempo', key: 'tiempo', width: 12 },
+    { header: 'Observación', key: 'observacion', width: 30 },
+  ];
+
+  rows.forEach((row) => {
+    worksheet.addRow(row);
+  });
+
   const headerRow = worksheet.getRow(1);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
   headerRow.fill = {
@@ -238,7 +429,6 @@ const exportToExcel = async () => {
   };
   headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  // Bordes y Zebra Stripes
   worksheet.eachRow((row, rowNumber) => {
     row.eachCell(cell => {
       cell.border = {
@@ -261,13 +451,160 @@ const exportToExcel = async () => {
     });
   });
 
-  // Filtros Automáticos
-  worksheet.autoFilter = 'A1:M1';
+  worksheet.autoFilter = 'A1:L1';
 
-  // Generar y Descargar
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `Catalogo_Maquinas_${new Date().toISOString().split('T')[0]}.xlsx`);
+  saveAs(blob, `Catalogo_Open_End_R60_${new Date().toISOString().split('T')[0]}.xlsx`);
+};
+
+const openCatalogModal = () => {
+  showCatalogModal.value = true;
+  catalogoSearchQuery.value = '';
+  catalogoSectionFilter.value = '';
+  catalogoGroupFilter.value = '';
+};
+
+const closeCatalogModal = () => {
+  showCatalogModal.value = false;
+  editingCatalogRowId.value = null;
+  editingCatalogRow.value = {};
+};
+
+const startCatalogEdit = (item) => {
+  editingCatalogRowId.value = item.denominacion;
+  editingCatalogRow.value = JSON.parse(JSON.stringify(item));
+};
+
+const cancelCatalogEdit = () => {
+  editingCatalogRowId.value = null;
+  editingCatalogRow.value = {};
+};
+
+const saveCatalogEdit = () => {
+  const idx = catalogoData.value.findIndex(item => item.denominacion === editingCatalogRowId.value);
+  if (idx !== -1) {
+    catalogoData.value[idx] = editingCatalogRow.value;
+    Swal.fire({ icon: 'success', title: '¡Guardado!', timer: 1500, showConfirmButton: false, toast: true, position: 'top-end' });
+    cancelCatalogEdit();
+  }
+};
+
+const openProcedimientoEditor = (item) => {
+  procedimientoItem.value = item;
+  procedimientoPasos.value = JSON.parse(JSON.stringify(item.procedimiento || []));
+  showProcedimientoModal.value = true;
+};
+
+const closeProcedimientoEditor = () => {
+  showProcedimientoModal.value = false;
+  procedimientoItem.value = null;
+  procedimientoPasos.value = [];
+};
+
+const agregarPaso = () => {
+  procedimientoPasos.value.push({ texto: '', imagenUrl: null });
+};
+
+const eliminarPaso = (index) => {
+  procedimientoPasos.value.splice(index, 1);
+};
+
+const onPasoImagenChange = async (index, event) => {
+  const file = event.target.files[0];
+  if (!file || !procedimientoItem.value?.id) return;
+  uploadingPasoIndex.value = index;
+  try {
+    const compressed = await compressImage(file, { maxWidth: 1024, quality: 0.75 });
+    const path = `catalogo/procedimientos/${procedimientoItem.value.id}/paso_${index}_${Date.now()}.jpg`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, compressed);
+    const url = await getDownloadURL(fileRef);
+    procedimientoPasos.value[index].imagenUrl = url;
+  } catch (err) {
+    console.error('Error subiendo imagen de paso:', err);
+    Swal.fire({ icon: 'error', title: 'Error al subir imagen', text: err.message, toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+  } finally {
+    uploadingPasoIndex.value = null;
+  }
+};
+
+const guardarProcedimiento = async () => {
+  if (!procedimientoItem.value?.id) return;
+  isSavingProcedimiento.value = true;
+  try {
+    await catalogoService.actualizarProcedimiento(procedimientoItem.value.id, procedimientoPasos.value);
+    // Actualizar dato local para que el visor en CargaNovedad lo tenga en la próxima carga
+    const idx = catalogoData.value.findIndex(c => c.id === procedimientoItem.value.id);
+    if (idx !== -1) {
+      catalogoData.value[idx].procedimiento = JSON.parse(JSON.stringify(procedimientoPasos.value));
+    }
+    Swal.fire({ icon: 'success', title: 'Procedimiento guardado', timer: 1500, showConfirmButton: false, toast: true, position: 'top-end' });
+    closeProcedimientoEditor();
+  } catch (err) {
+    console.error('Error guardando procedimiento:', err);
+    Swal.fire({ icon: 'error', title: 'Error al guardar', text: err.message });
+  } finally {
+    isSavingProcedimiento.value = false;
+  }
+};
+
+const exportCatalogToExcel = async () => {
+  const rows = buildCatalogExportRows(filteredCatalogo.value);
+
+  if (rows.length === 0) {
+    Swal.fire({ icon: 'info', title: 'Sin datos', text: 'No hay registros R-60 para exportar con los filtros actuales.' });
+    return;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Catálogo R-60');
+  worksheet.columns = [
+    { header: 'Marca', key: 'marca', width: 16 },
+    { header: 'Modelo', key: 'modelo', width: 14 },
+    { header: 'Asignación', key: 'asignacion', width: 20 },
+    { header: 'Sección', key: 'seccion', width: 28 },
+    { header: 'Abreviado', key: 'abreviado', width: 14 },
+    { header: 'Grupo', key: 'grupo', width: 12 },
+    { header: 'Sub Grupo', key: 'subGrupo', width: 14 },
+    { header: 'Denominación', key: 'denominacion', width: 44 },
+    { header: 'Numero Catalogo', key: 'numeroCatalogo', width: 18 },
+    { header: 'Numero Articulo', key: 'numeroArticulo', width: 18 },
+    { header: 'Tiempo', key: 'tiempo', width: 12 },
+    { header: 'Observación', key: 'observacion', width: 30 }
+  ];
+
+  rows.forEach((row) => {
+    worksheet.addRow(row);
+  });
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+  worksheet.eachRow((row, rowNumber) => {
+    row.eachCell(cell => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+      };
+      if (rowNumber > 1) {
+        cell.font = { size: 9 };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        if (rowNumber % 2 === 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        }
+      }
+    });
+  });
+
+  worksheet.autoFilter = 'A1:L1';
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blob, `Catalogo_R60_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 </script>
 
@@ -285,7 +622,7 @@ const exportToExcel = async () => {
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Catálogo</span>
           </div>
 
-          <div class="relative w-72 shrink-0">
+          <div class="relative flex-1 min-w-0 max-w-52">
             <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               v-model="searchQuery"
@@ -299,7 +636,7 @@ const exportToExcel = async () => {
             <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipo</label>
             <select
               v-model="tipoFilter"
-              class="h-8 min-w-40 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
+              class="h-8 w-28 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
             >
               <option value="">Todos</option>
               <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
@@ -321,23 +658,39 @@ const exportToExcel = async () => {
             </button>
           </div>
 
-          <div class="flex items-center gap-2 shrink-0 ml-auto">
+          <div class="flex items-center gap-1 shrink-0 ml-auto">
             <button
               v-if="userRole === 'admin'"
               @click="openAddModal"
               data-tippy-content="Agregar máquina"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg>
               <span>Agregar</span>
             </button>
             <button
-              @click="exportToExcel"
-              data-tippy-content="Exportar a Excel (XLSX)"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
+              @click="exportMaquinasToExcel"
+              data-tippy-content="Exportar listado de máquinas (XLSX)"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-              <span>Exportar</span>
+              <span>Máquinas</span>
+            </button>
+            <button
+              @click="exportToExcel"
+              data-tippy-content="Exportar catálogo R-60 (XLSX)"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
+              <span>Catálogo</span>
+            </button>
+            <button
+              @click="openCatalogModal"
+              data-tippy-content="Ver/gestionar catálogo R-60"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span>Ver</span>
             </button>
           </div>
         </div>
@@ -351,7 +704,9 @@ const exportToExcel = async () => {
             <option value="">Todos</option>
             <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
           </select>
-          <button @click="exportToExcel" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
+          <button @click="exportMaquinasToExcel" data-tippy-content="Exportar máquinas" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
+          <button @click="exportToExcel" data-tippy-content="Exportar catálogo R-60" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+          <button @click="openCatalogModal" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
           <button v-if="userRole === 'admin'" @click="openAddModal" data-tippy-content="Agregar máquina" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
         </div>
       </Teleport>
@@ -687,6 +1042,153 @@ const exportToExcel = async () => {
             </button>
           </div>
         </form>
+  </div>
+    </div>
+
+    <!-- Modal Catálogo R-60 -->
+          <div v-if="showCatalogModal" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
+            <div class="bg-white rounded-lg w-full max-w-6xl shadow-2xl overflow-hidden my-4">
+              <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50">
+                <div>
+                  <h3 class="text-2xl font-black text-gray-800 tracking-tight">Catálogo R-60</h3>
+                  <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">{{ filteredCatalogo.length }} registros encontrados</p>
+                </div>
+                <button @click="closeCatalogModal" class="p-2 hover:bg-white rounded-md transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
+              </div>
+              <div class="p-4 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-stretch">
+                <div class="flex-1">
+                  <label class="text-xs font-bold text-gray-500 block mb-1">Buscar</label>
+                  <input v-model="catalogoSearchQuery" type="text" placeholder="Denominación, artículo, catálogo..." class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                </div>
+                <div class="flex-1">
+                  <label class="text-xs font-bold text-gray-500 block mb-1">Sección</label>
+                  <select v-model="catalogoSectionFilter" class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <option value="">Todos</option>
+                    <option v-for="s in catalogoSectionsDisponibles" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
+                <div class="flex-1">
+                  <label class="text-xs font-bold text-gray-500 block mb-1" :class="{ 'opacity-50': !catalogoSectionFilter }">Grupo</label>
+                  <select v-model="catalogoGroupFilter" :disabled="!catalogoSectionFilter" class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                    <option value="">Todos</option>
+                    <option v-for="g in catalogoGroupsDisponibles" :key="g" :value="g">{{ g }}</option>
+                  </select>
+                </div>
+                <div class="flex items-end gap-2">
+                  <button @click="exportCatalogToExcel" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-sm transition-colors shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
+                    Excel
+                  </button>
+                </div>
+              </div>
+              <div class="overflow-x-auto max-h-96">
+                <table class="w-full text-sm text-left border-collapse">
+                  <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
+                    <tr>
+                      <th class="px-3 py-3 bg-gray-50 w-20">Sección</th>
+                      <th class="px-3 py-3 bg-gray-50 w-16">Grupo</th>
+                      <th class="px-3 py-3 bg-gray-50 w-16">Sub-G</th>
+                      <th class="px-3 py-3 bg-gray-50 min-w-48">Denominación</th>
+                      <th class="px-3 py-3 bg-gray-50 w-20">Catálogo</th>
+                      <th class="px-3 py-3 bg-gray-50 w-20">Artículo</th>
+                      <th v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-3 text-center bg-gray-50 w-28">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-50">
+                    <tr v-for="item in filteredCatalogo" :key="item.denominacion" :class="[editingCatalogRowId === item.denominacion ? 'bg-blue-50' : 'hover:bg-gray-50/50']" class="transition-colors">
+                      <template v-if="editingCatalogRowId === item.denominacion">
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.seccion" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.grupo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.subGrupo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.denominacion" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.numeroCatalogo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td class="px-3 py-2"><input v-model="editingCatalogRow.numeroArticulo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
+                        <td v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-2"><div class="flex justify-center gap-1">
+                          <button v-if="userRole === 'admin'" @click="saveCatalogEdit" class="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"><Check class="w-3 h-3" /></button>
+                          <button v-if="userRole === 'admin'" @click="cancelCatalogEdit" class="p-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors"><X class="w-3 h-3" /></button>
+                        </div></td>
+                      </template>
+                      <template v-else>
+                        <td class="px-3 py-2 text-xs text-gray-600 font-medium">{{ item.seccion }}</td>
+                        <td class="px-3 py-2 text-xs text-gray-600 font-medium">{{ item.grupo }}</td>
+                        <td class="px-3 py-2 text-xs text-gray-600 font-medium">{{ item.subGrupo }}</td>
+                        <td class="px-3 py-2 text-xs text-gray-700 font-medium">{{ item.denominacion }}</td>
+                        <td class="px-3 py-2 text-xs text-gray-500">{{ item.numeroCatalogo }}</td>
+                        <td class="px-3 py-2 text-xs text-gray-500">{{ item.numeroArticulo }}</td>
+                        <td v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-2"><div class="flex justify-center gap-1">
+                          <button v-if="userRole === 'admin'" @click="startCatalogEdit(item)" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Editar fila"><Edit3 class="w-3 h-3" /></button>
+                          <button v-if="item.id" @click="openProcedimientoEditor(item)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" :title="item.procedimiento?.length ? 'Editar procedimiento (' + item.procedimiento.length + ' pasos)' : 'Agregar procedimiento'"><BookOpen class="w-3 h-3" /></button>
+                        </div></td>
+                      </template>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                <button @click="closeCatalogModal" class="py-2.5 px-4 border border-gray-200 rounded-md font-bold text-gray-700 hover:bg-white transition-colors">Cerrar</button>
+              </div>
+            </div>
+          </div>
+    <!-- Modal Editor de Procedimiento -->
+    <div v-if="showProcedimientoModal" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/70 backdrop-blur-sm overflow-y-auto">
+      <div class="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden my-4">
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-violet-50">
+          <div>
+            <h3 class="text-lg font-black text-gray-800 tracking-tight">Procedimiento</h3>
+            <p class="text-xs text-gray-500 font-bold mt-0.5 max-w-sm truncate">{{ procedimientoItem?.denominacion }}</p>
+          </div>
+          <button @click="closeProcedimientoEditor" class="p-2 hover:bg-white rounded-md transition-colors"><X class="w-5 h-5 text-gray-500" /></button>
+        </div>
+
+        <div class="p-4 space-y-3 max-h-[55vh] overflow-y-auto">
+          <div v-if="procedimientoPasos.length === 0" class="text-center py-10 text-gray-400">
+            <BookOpen class="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p class="font-bold text-sm">Sin pasos definidos</p>
+            <p class="text-xs mt-1">Haga clic en "Agregar paso" para comenzar.</p>
+          </div>
+
+          <div v-for="(paso, i) in procedimientoPasos" :key="i" class="flex gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <div class="flex-none w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">{{ i + 1 }}</div>
+            <div class="flex-1 space-y-2 min-w-0">
+              <textarea
+                v-model="paso.texto"
+                rows="2"
+                placeholder="Descripción del paso..."
+                class="w-full bg-white border border-gray-200 text-sm text-gray-800 rounded-md p-2 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none resize-none"
+              ></textarea>
+              <div v-if="paso.imagenUrl" class="relative rounded-md overflow-hidden border border-gray-200">
+                <img :src="paso.imagenUrl" class="w-full max-h-48 object-contain bg-gray-900" />
+                <button @click="paso.imagenUrl = null" type="button" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 transition">
+                  <X class="w-3 h-3" />
+                </button>
+              </div>
+              <div v-else>
+                <label class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-md text-xs font-bold text-gray-500 hover:bg-gray-100 transition" :class="{ 'opacity-50 cursor-not-allowed': uploadingPasoIndex !== null }">
+                  <Camera class="w-3.5 h-3.5" />
+                  <span>{{ uploadingPasoIndex === i ? 'Subiendo...' : 'Agregar imagen' }}</span>
+                  <input type="file" accept="image/*" class="hidden" :disabled="uploadingPasoIndex !== null" @change="onPasoImagenChange(i, $event)" />
+                </label>
+              </div>
+            </div>
+            <button @click="eliminarPaso(i)" type="button" class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition shrink-0 self-start">
+              <Trash2 class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div class="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+          <button @click="agregarPaso" type="button" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"/><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Agregar paso
+          </button>
+          <div class="flex gap-2">
+            <button @click="closeProcedimientoEditor" type="button" class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-white transition">Cancelar</button>
+            <button @click="guardarProcedimiento" type="button" :disabled="isSavingProcedimiento" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-60 flex items-center gap-1.5">
+              <Save class="w-4 h-4" />
+              {{ isSavingProcedimiento ? 'Guardando...' : 'Guardar' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

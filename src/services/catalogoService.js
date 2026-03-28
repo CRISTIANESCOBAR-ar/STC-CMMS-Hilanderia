@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, writeBatch, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const COLLECTION_NAME = 'catalogo_puestos_control';
@@ -58,6 +58,34 @@ export const catalogoService = {
       console.error("Error en migración:", error);
       throw error;
     }
+  },
+
+  /**
+   * Obtiene los puntos de control filtrando por el campo 'tipo' del documento.
+   * Útil para catálogos de máquinas TELAR, etc.
+   * @param {string} tipo - Ejemplo: 'TELAR'
+   */
+  async obtenerPuntosPorTipo(tipo) {
+    try {
+      const q = query(collection(db, COLLECTION_NAME), where('tipo', '==', tipo));
+      const snap = await getDocs(q);
+      const catalog = [];
+      snap.forEach((d) => catalog.push({ id: d.id, ...d.data() }));
+      return catalog;
+    } catch (error) {
+      console.error('Error al obtener puntos de control por tipo:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Guarda el procedimiento (array de pasos) en un documento del catálogo.
+   * @param {string} docId - ID del documento en Firestore
+   * @param {Array<{texto: string, imagenUrl: string|null}>} pasos
+   */
+  async actualizarProcedimiento(docId, pasos) {
+    const ref = doc(db, COLLECTION_NAME, docId);
+    await updateDoc(ref, { procedimiento: pasos, procedimientoUpdatedAt: new Date() });
   },
 
   /**

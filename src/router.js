@@ -9,6 +9,8 @@ import LoginView from './components/LoginView.vue'
 import LlamarIntervencion from './components/LlamarIntervencion.vue'
 import IntervencionesView from './components/IntervencionesView.vue'
 import CodigosAdmin from './components/CodigosAdmin.vue'
+import SintomasAdmin from './components/SintomasAdmin.vue'
+import IntervencionDetalle from './components/IntervencionDetalle.vue'
 import { authService, userRole } from './services/authService'
 import { auth } from './firebase/config'
 
@@ -23,6 +25,8 @@ const routes = [
   { path: '/llamar', component: LlamarIntervencion, meta: { requiresAuth: true, role: ['admin', 'jefe_sector', 'supervisor', 'inspector'] } },
   { path: '/intervenciones', component: IntervencionesView, meta: { requiresAuth: true } },
   { path: '/codigos', component: CodigosAdmin, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/sintomas', component: SintomasAdmin, meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/intervenciones/:id', component: IntervencionDetalle, meta: { requiresAuth: true } },
 ]
 
 export const router = createRouter({

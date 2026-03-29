@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -61,6 +61,24 @@ export const intervencionService = {
   },
 
   /**
+   * Obtiene una intervención por ID (lectura única).
+   */
+  async obtenerPorId(id) {
+    const snap = await getDoc(doc(db, COLLECTION_NAME, id));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  },
+
+  /**
+   * Suscripción realtime a una intervención específica.
+   */
+  suscribirPorId(id, callback) {
+    return onSnapshot(doc(db, COLLECTION_NAME, id), (snap) => {
+      if (snap.exists()) callback({ id: snap.id, ...snap.data() });
+    });
+  },
+
+  /**
    * Actualiza el estado de una intervención.
    */
   async actualizarEstado(id, nuevoEstado, extra = {}) {
@@ -74,14 +92,16 @@ export const intervencionService = {
   },
 
   /**
-   * Suscripción realtime a intervenciones activas (PENDIENTE + EN_PROCESO) de un sector.
-   * Filtra por estado en el cliente para evitar índice compuesto en Firestore.
+   * Suscripción realtime a intervenciones activas (PENDIENTE + EN_PROCESO) de uno o varios sectores.
+   * Acepta string o array de sectores.
    */
   suscribirActivas(sector, callback) {
-    const q = query(
-      collection(db, COLLECTION_NAME),
-      where('sector', '==', normalizeSectorValue(sector))
-    );
+    const sectores = (Array.isArray(sector) ? sector : [sector])
+      .map(s => normalizeSectorValue(s))
+      .filter(Boolean);
+    const q = sectores.length === 1
+      ? query(collection(db, COLLECTION_NAME), where('sector', '==', sectores[0]))
+      : query(collection(db, COLLECTION_NAME), where('sector', 'in', sectores));
     return onSnapshot(q, (snap) => {
       const docs = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -106,6 +126,16 @@ export const intervencionService = {
     );
     return onSnapshot(q, (snap) => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  },
+
+  /**
+   * Guarda el diagnóstico del mecánico en una intervención.
+   */
+  async guardarDiagnostico(id, diagnostico) {
+    await updateDoc(doc(db, COLLECTION_NAME, id), {
+      ...diagnostico,
+      diagnosticoUpdatedAt: serverTimestamp(),
     });
   },
 

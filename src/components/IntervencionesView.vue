@@ -5,7 +5,7 @@ import { getAuth } from 'firebase/auth';
 import { intervencionService } from '../services/intervencionService';
 import { userProfile, userRole } from '../services/authService';
 import { sanitizeSectorList, normalizeSectorValue, DEFAULT_SECTOR, canDespacharIntervencion } from '../constants/organization';
-import { Wrench, Zap, Clock, ChevronRight, Check, AlertTriangle, BellOff, Plus } from 'lucide-vue-next';
+import { Wrench, Zap, ShieldAlert, Clock, ChevronRight, Check, AlertTriangle, BellOff, Plus, OctagonX, CirclePlay } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 const router = useRouter();
@@ -26,10 +26,10 @@ const sectorPrincipal = computed(() => sectoresUsuario.value[0] || DEFAULT_SECTO
 // ── Suscripción realtime ───────────────────────────────────────────────────────
 let unsubscribe = null;
 
-watch(sectorPrincipal, (sector) => {
+watch(sectoresUsuario, (sectores) => {
   if (unsubscribe) unsubscribe();
   loading.value = true;
-  unsubscribe = intervencionService.suscribirActivas(sector, (docs) => {
+  unsubscribe = intervencionService.suscribirActivas(sectores, (docs) => {
     intervenciones.value = docs;
     loading.value = false;
   });
@@ -66,8 +66,14 @@ const timeAgo = (ts) => {
 };
 
 const tipoConfig = {
-  MECANICO:  { label: 'Mecánico',  bg: 'bg-blue-100 text-blue-700',   bar: 'bg-blue-500' },
+  MECANICO:  { label: 'Mecánico',  bg: 'bg-blue-100 text-blue-700',   bar: 'bg-blue-500'  },
   ELECTRICO: { label: 'Eléctrico', bg: 'bg-amber-100 text-amber-700', bar: 'bg-amber-400' },
+  CALIDAD:   { label: 'Calidad',   bg: 'bg-red-100 text-red-700',     bar: 'bg-red-500'   },
+};
+const estadoMaqConfig = {
+  EN_MARCHA:    { label: 'En marcha',    ic: CirclePlay,    color: 'text-green-600' },
+  CON_PROBLEMA: { label: 'Con problema', ic: AlertTriangle, color: 'text-amber-600' },
+  PARADA:       { label: 'Parada',       ic: OctagonX,      color: 'text-red-600'   },
 };
 const estadoConfig = {
   PENDIENTE:  { label: 'Pendiente',  bg: 'bg-orange-100 text-orange-700' },
@@ -162,7 +168,7 @@ const onCompletar = async (item) => {
         <span v-if="filtroEstado === 'PENDIENTE'">pendientes</span>
         <span v-else-if="filtroEstado === 'EN_PROCESO'">en proceso</span>
       </p>
-      <p class="text-xs text-gray-300 mt-1 font-medium">Sector {{ sectorPrincipal }}</p>
+      <p class="text-xs text-gray-300 mt-1 font-medium">{{ sectoresUsuario.join(' · ') }}</p>
     </div>
 
     <!-- ── Lista ─────────────────────────────────────────────────────────────── -->
@@ -170,8 +176,9 @@ const onCompletar = async (item) => {
       <div
         v-for="item in intervencionesFiltered"
         :key="item.id"
-        class="bg-white rounded-2xl border overflow-hidden shadow-sm transition-shadow"
-        :class="item.critico ? 'border-red-200 shadow-red-100' : 'border-gray-100'"
+        @click="router.push('/intervenciones/' + item.id)"
+        class="bg-white rounded-2xl border overflow-hidden shadow-sm transition-all cursor-pointer active:scale-[0.99] hover:shadow-md"
+        :class="item.estadoMaquina === 'PARADA' ? 'border-red-300 shadow-red-100' : item.critico ? 'border-red-200 shadow-red-50' : 'border-gray-100'"
       >
         <!-- Franja de color -->
         <div class="h-1.5" :class="tipoConfig[item.tipoIntervencion]?.bar || 'bg-gray-300'"></div>
@@ -195,6 +202,15 @@ const onCompletar = async (item) => {
               CRÍTICO
             </span>
 
+            <!-- Estado máquina -->
+            <span v-if="item.estadoMaquina"
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-gray-100"
+              :class="estadoMaqConfig[item.estadoMaquina]?.color"
+            >
+              <component :is="estadoMaqConfig[item.estadoMaquina]?.ic" class="w-3 h-3" />
+              {{ estadoMaqConfig[item.estadoMaquina]?.label }}
+            </span>
+
             <span
               class="ml-auto inline-flex px-2.5 py-1 rounded-full text-[11px] font-black"
               :class="estadoConfig[item.estado]?.bg || 'bg-gray-100 text-gray-600'"
@@ -203,16 +219,15 @@ const onCompletar = async (item) => {
             </span>
           </div>
 
-          <!-- Máquina -->
           <p class="font-black text-gray-900 text-lg leading-tight">
             {{ item.tipoMaquina }} {{ item.numeroMaquina }}
             <span v-if="item.lado && item.lado !== 'U'" class="text-gray-400 font-semibold text-base"> ({{ item.lado }})</span>
           </p>
-          <p class="text-xs text-gray-400 font-semibold mb-2.5 tracking-wide">{{ item.sector }}</p>
+          <p class="text-xs text-gray-400 font-semibold mb-2 tracking-wide">{{ item.sector }}</p>
 
-          <!-- Denominación -->
-          <p v-if="item.denominacion" class="text-sm text-gray-700 font-semibold leading-snug">
-            {{ [item.seccion, item.grupo, item.denominacion].filter(Boolean).join(' › ') }}
+          <!-- Síntoma -->
+          <p v-if="item.sintomaNombre" class="text-sm font-semibold text-gray-700 leading-snug mb-1">
+            {{ item.sintomaNombre }}
           </p>
 
           <!-- Observaciones -->
@@ -244,7 +259,7 @@ const onCompletar = async (item) => {
             <!-- Botón Tomar -->
             <button
               v-if="item.estado === 'PENDIENTE'"
-              @click="onTomar(item)"
+              @click.stop="onTomar(item)"
               :disabled="actualizando === item.id"
               class="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-xl text-xs font-black active:scale-95 transition disabled:opacity-50 shadow-sm shadow-orange-500/20"
             >
@@ -258,7 +273,7 @@ const onCompletar = async (item) => {
             <!-- Botón Completar (solo si me asignaron a mí) -->
             <button
               v-else-if="item.estado === 'EN_PROCESO' && isAssignedToMe(item)"
-              @click="onCompletar(item)"
+              @click.stop="onCompletar(item)"
               :disabled="actualizando === item.id"
               class="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black active:scale-95 transition disabled:opacity-50 shadow-sm shadow-emerald-500/20"
             >

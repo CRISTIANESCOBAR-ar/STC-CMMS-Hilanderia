@@ -79,6 +79,22 @@ export const catalogoService = {
   },
 
   /**
+   * Obtiene todas las piezas del catálogo para un modelo específico (ej: 'JA2S-190TP-EF-T710')
+   * ordenadas por sección > grupo > denominación.
+   */
+  async obtenerPorModelo(modelo) {
+    const q = query(collection(db, COLLECTION_NAME), where('modelo', '==', modelo));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        if (a.seccion !== b.seccion) return a.seccion.localeCompare(b.seccion);
+        if (a.grupo   !== b.grupo)   return String(a.grupo).localeCompare(String(b.grupo));
+        return a.denominacion.localeCompare(b.denominacion);
+      });
+  },
+
+  /**
    * Guarda el procedimiento (array de pasos) en un documento del catálogo.
    * @param {string} docId - ID del documento en Firestore
    * @param {Array<{texto: string, imagenUrl: string|null}>} pasos

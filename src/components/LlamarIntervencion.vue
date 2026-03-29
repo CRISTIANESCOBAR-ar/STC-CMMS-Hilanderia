@@ -6,14 +6,15 @@ import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
 import { userProfile } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
-import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert } from 'lucide-vue-next';
+import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert, CirclePlay, AlertTriangle, OctagonX } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import { compressImage, formatSize } from '../utils/imageCompressor';
 
 // ── Tipos de intervención (extensible) ────────────────────────────────────────
 const TIPOS_INTERVENCION = [
-  { id: 'MECANICO',   label: 'Mecánico',   ic: Wrench, activeBg: 'bg-blue-600 border-blue-600 shadow-blue-500/25',   activeText: 'text-white' },
-  { id: 'ELECTRICO',  label: 'Eléctrico',  ic: Zap,    activeBg: 'bg-amber-500 border-amber-500 shadow-amber-500/25', activeText: 'text-white' },
+  { id: 'MECANICO',  label: 'Mecánico',  ic: Wrench,      activeBg: 'bg-blue-600 border-blue-600 shadow-blue-500/25',   activeText: 'text-white' },
+  { id: 'ELECTRICO', label: 'Eléctrico', ic: Zap,         activeBg: 'bg-amber-500 border-amber-500 shadow-amber-500/25', activeText: 'text-white' },
+  { id: 'CALIDAD',   label: 'Calidad',   ic: ShieldAlert, activeBg: 'bg-red-600 border-red-600 shadow-red-500/25',       activeText: 'text-white' },
 ];
 
 // ── Máquinas ──────────────────────────────────────────────────────────────────
@@ -34,12 +35,27 @@ const isSubmitting           = ref(false);
 const uploadProgress         = ref(0);
 const isCompressing          = ref(false);
 
-// ── Motivos de parada ────────────────────────────────────────────────────────────────
-const todosMotivos         = ref([]);
-const motivoSeleccionado   = ref(null);
-const tipoFallaSeleccionada = ref(null); // tipoDeFalla activo (pill)
-const verTodos             = ref(false);
-const ITEMS_VISIBLES       = 6;
+// ── Estado de la máquina ─────────────────────────────────────────────────────
+const ESTADOS_MAQUINA = [
+  { id: 'EN_MARCHA',    label: 'En marcha',    ic: CirclePlay,    activeBg: 'bg-green-50 border-green-400',  iconColor: 'text-green-600',  textColor: 'text-green-700'  },
+  { id: 'CON_PROBLEMA', label: 'Con problema', ic: AlertTriangle, activeBg: 'bg-amber-50 border-amber-400',  iconColor: 'text-amber-600',  textColor: 'text-amber-700'  },
+  { id: 'PARADA',       label: 'Parada',       ic: OctagonX,      activeBg: 'bg-red-50 border-red-400',      iconColor: 'text-red-600',    textColor: 'text-red-700'    },
+];
+const estadoMaquina  = ref('CON_PROBLEMA');
+const criticoForzado = computed(() => estadoMaquina.value === 'PARADA');
+
+// ── Síntomas de tejeduría ─────────────────────────────────────────────────────
+const todosSintomas       = ref([]);
+const sintomaSeleccionado = ref(null);
+
+const DERIVA_COLOR = {
+  MECANICO:  { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Mecánico'  },
+  ELECTRICO: { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'Eléctrico' },
+  AMBOS:     { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Ambos'     },
+  TEJEDOR:   { bg: 'bg-green-100',  text: 'text-green-700',  label: 'Tejedor'   },
+  CALIDAD:   { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Calidad'   },
+};
+
 const router = useRouter();
 // ── Sectores del usuario ──────────────────────────────────────────────────────
 const sectoresUsuario = computed(() => {
@@ -51,17 +67,17 @@ const sectorPrincipalUsuario = computed(() => sectoresUsuario.value[0] || DEFAUL
 // ── Carga de máquinas ─────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const [snapMaq, snapMot] = await Promise.all([
+    const [snapMaq, snapSint] = await Promise.all([
       getDocs(collection(db, 'maquinas')),
-      getDocs(query(collection(db, 'codigos_paradas'), where('activo', '==', true))),
+      getDocs(query(collection(db, 'sintomas_tejeduria'), where('activo', '==', true))),
     ]);
     maquinas.value = snapMaq.docs.map(d => ({
       id: d.id, ...d.data(),
       sector: normalizeSectorValue(d.data().sector || DEFAULT_SECTOR)
     }));
-    todosMotivos.value = snapMot.docs
+    todosSintomas.value = snapSint.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => a.codigo - b.codigo);
+      .sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
   } catch { maquinasError.value = true; }
 });
 
@@ -128,47 +144,34 @@ const gmSeleccionado = computed(() => esTipoTelar.value ? formatGCmest(detallesM
 
 watch(tipoSeleccionado, () => { gpSeleccionado.value = ''; maquinaSeleccionadaId.value = ''; });
 watch(gpSeleccionado,   () => { maquinaSeleccionadaId.value = ''; });
-watch(tipoIntervencion, () => {
-  motivoSeleccionado.value    = null;
-  tipoFallaSeleccionada.value = null;
-  verTodos.value              = false;
+// PARADA => crítico forzado
+watch(estadoMaquina, (estado) => {
+  if (estado === 'PARADA') critico.value = true;
+});
+
+// Si el usuario cambia el tipo manualmente, limpiar el síntoma solo si no es compatible
+watch(tipoIntervencion, (nuevoTipo) => {
+  const d = sintomaSeleccionado.value?.derivaA;
+  if (d && d !== 'AMBOS' && d !== nuevoTipo) sintomaSeleccionado.value = null;
 });
 watch(tiposDisponibles, (tipos) => {
   if (!tipos.includes(tipoSeleccionado.value)) tipoSeleccionado.value = tipos[0] || '';
 }, { immediate: true });
 
-// Motivos del grupo según tipo de intervención (MECANICO=2, ELECTRICO=4)
-const motivosFiltrados = computed(() => {
-  const grupoTarget = tipoIntervencion.value === 'MECANICO' ? 2 : 4;
-  return todosMotivos.value.filter(m => m.grupo === grupoTarget);
+// Binding para el <select> de síntomas
+const sintomaIdSel = computed({
+  get: () => sintomaSeleccionado.value?.id ?? '',
+  set: (id) => {
+    sintomaSeleccionado.value = todosSintomas.value.find(s => s.id === id) ?? null;
+  },
 });
 
-// Tipos de falla disponibles (solo los que tienen códigos)
-const motivosTipos = computed(() => {
-  const tipos = [...new Set(
-    motivosFiltrados.value.map(m => m.tipoDeFalla).filter(Boolean)
-  )].sort();
-  return tipos;
-});
-
-// Lista final: destacados primero, luego el resto (orden por codigo)
-const motivosParaListbox = computed(() => {
-  let lista = motivosFiltrados.value;
-  if (tipoFallaSeleccionada.value) {
-    lista = lista.filter(m => m.tipoDeFalla === tipoFallaSeleccionada.value);
-  }
-  const destacados = lista.filter(m => m.destacado).sort((a, b) => (a.codigo ?? 0) - (b.codigo ?? 0));
-  const resto      = lista.filter(m => !m.destacado).sort((a, b) => (a.codigo ?? 0) - (b.codigo ?? 0));
-  return [...destacados, ...resto];
-});
-
-// Por defecto solo los destacados; si no hay ninguno muestra los primeros 6
-const motivosVisibles = computed(() => {
-  const destacados = motivosParaListbox.value.filter(m => m.destacado);
-  if (!verTodos.value) {
-    return destacados.length ? destacados : motivosParaListbox.value.slice(0, ITEMS_VISIBLES);
-  }
-  return motivosParaListbox.value;
+// Auto-setear tipo de intervención desde derivaA del síntoma
+watch(sintomaSeleccionado, (s) => {
+  if (!s) return;
+  if (s.derivaA === 'MECANICO')  tipoIntervencion.value = 'MECANICO';
+  if (s.derivaA === 'ELECTRICO') tipoIntervencion.value = 'ELECTRICO';
+  if (s.derivaA === 'CALIDAD')   tipoIntervencion.value = 'CALIDAD';
 });
 
 // ── Imagen ────────────────────────────────────────────────────────────────────
@@ -201,16 +204,23 @@ const onSubmit = async () => {
     const sectorNovedad = normalizeSectorValue(m.sector || sectorPrincipalUsuario.value);
 
     const datos = {
-      maquinaId:        m.id,
-      numeroMaquina:    m.maquina,
-      tipoMaquina:      m.tipo,
-      modeloMaquina:    m.modelo || '',
-      sector:           sectorNovedad,
-      local_fisico:     m.local_fisico,
-      lado:             m.lado,
+      maquinaId:            m.id,
+      numeroMaquina:        m.maquina,
+      tipoMaquina:          m.tipo,
+      modeloMaquina:        m.modelo || '',
+      sector:               sectorNovedad,
+      local_fisico:         m.local_fisico,
+      grupoTelar:           esTipoTelar.value ? formatGrpTear(m.grp_tear) : null,
+      gmTelar:              esTipoTelar.value ? gmSeleccionado.value : null,
+      nombreMaquinaDisplay: formatNombreDescriptivo(m.nombre_maquina, m.maquina, m.sector, m.tipo),
+      lado:                 m.lado,
       tipoIntervencion: tipoIntervencion.value,
-      motivoCodigo:     motivoSeleccionado.value?.codigo || null,
-      motivoDescripcion: motivoSeleccionado.value?.motivo_es || null,
+      sintomaId:         sintomaSeleccionado.value?.id || null,
+      sintomaNombre:     sintomaSeleccionado.value?.nombre || null,
+      derivaA:           sintomaSeleccionado.value?.derivaA || null,
+      motivoCodigo:      null,   // el mecánico lo asocia al cerrar
+      motivoDescripcion: sintomaSeleccionado.value?.nombre || null,
+      estadoMaquina:    estadoMaquina.value,
       critico:          critico.value,
       observaciones:    observaciones.value,
     };
@@ -221,16 +231,22 @@ const onSubmit = async () => {
     maquinaSeleccionadaId.value = '';
     critico.value = false;
     observaciones.value = '';
-    motivoSeleccionado.value = null;
+    sintomaSeleccionado.value = null;
+    estadoMaquina.value = 'CON_PROBLEMA';
     imagenFile.value = null;
     imagenPreview.value = null;
 
+    const notifTexts = {
+      MECANICO:  'El equipo mecánico fue notificado.',
+      ELECTRICO: 'El equipo eléctrico fue notificado.',
+      CALIDAD:   'El inspector de calidad / supervisor fue notificado.',
+    };
     Swal.fire({
       toast: true,
       position: 'top',
       icon: 'success',
       title: '¡Solicitud enviada!',
-      text: 'El equipo de mantenimiento fue notificado.',
+      text: notifTexts[tipoIntervencion.value] ?? 'El equipo fue notificado.',
       showConfirmButton: false,
       timer: 3500,
       timerProgressBar: true,
@@ -260,19 +276,19 @@ const onSubmit = async () => {
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
             <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">TIPO DE INTERVENCIÓN</label>
           </div>
-          <div class="flex gap-2">
+          <div class="grid grid-cols-3 gap-2">
             <button
               v-for="tipo in TIPOS_INTERVENCION"
               :key="tipo.id"
               type="button"
               @click="tipoIntervencion = tipo.id"
-              class="flex-1 flex flex-col items-center gap-2 py-3.5 rounded-xl border-2 transition-all active:scale-[0.97] shadow-sm"
+              class="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all active:scale-[0.97] shadow-sm"
               :class="tipoIntervencion === tipo.id
                 ? tipo.activeBg + ' shadow-lg'
                 : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'"
             >
               <component :is="tipo.ic" class="w-5 h-5" :class="tipoIntervencion === tipo.id ? 'text-white' : 'text-gray-400'" />
-              <span class="text-xs font-black tracking-wide" :class="tipoIntervencion === tipo.id ? 'text-white' : 'text-gray-500'">
+              <span class="text-[11px] font-black tracking-wide" :class="tipoIntervencion === tipo.id ? 'text-white' : 'text-gray-500'">
                 {{ tipo.label }}
               </span>
             </button>
@@ -340,120 +356,92 @@ const onSubmit = async () => {
           </div>
         </div>
 
-        <!-- ── Motivo de parada ───────────────────────────────────────────── -->
-        <div v-if="maquinaSeleccionadaId && motivosFiltrados.length" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in fade-in duration-200">
+        <!-- ── ¿Qué está pasando? (Síntoma) ──────────────────────────────── -->
+        <div v-if="maquinaSeleccionadaId" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in fade-in duration-200">
 
           <!-- Header -->
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
               <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">MOTIVO DE PARADA</label>
+              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
             </div>
-            <button v-if="motivoSeleccionado" type="button"
-              @click="motivoSeleccionado = null"
+            <button v-if="sintomaSeleccionado" type="button"
+              @click="sintomaSeleccionado = null"
               class="text-[10px] font-bold text-gray-400 hover:text-red-500 transition">
               ✕ Limpiar
             </button>
           </div>
 
-          <!-- Tipo de falla: pills -->
-          <div v-if="motivosTipos.length" class="flex flex-wrap gap-1.5 mb-3">
-            <button
-              v-for="t in motivosTipos"
-              :key="t"
-              type="button"
-              @click="tipoFallaSeleccionada = tipoFallaSeleccionada === t ? null : t; verTodos = false; motivoSeleccionado = null"
-              class="px-3.5 py-1.5 rounded-full text-xs font-black border-2 transition-all active:scale-95"
-              :class="tipoFallaSeleccionada === t
-                ? (tipoIntervencion === 'MECANICO' ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/30' : 'bg-amber-500 border-amber-500 text-white shadow-sm shadow-amber-500/30')
-                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'"
+          <!-- Select de síntomas -->
+          <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
+            :class="sintomaSeleccionado ? 'bg-orange-50 border-orange-300' : 'bg-gray-50 border-gray-200'"
+          >
+            <select
+              v-model="sintomaIdSel"
+              class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
+              :class="sintomaSeleccionado ? 'text-orange-700' : 'text-gray-400'"
             >
-              {{ t }}
-            </button>
-            <button
-              v-if="tipoFallaSeleccionada"
-              type="button"
-              @click="tipoFallaSeleccionada = null; verTodos = false"
-              class="px-2.5 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 transition border border-dashed border-gray-200 rounded-full"
-            >✕ Todos</button>
+              <option value="" disabled>Seleccionar síntoma…</option>
+              <option v-for="s in todosSintomas" :key="s.id" :value="s.id">
+                {{ s.destacado ? '★ ' : '' }}{{ s.nombre }}
+              </option>
+            </select>
           </div>
 
-          <!-- Listbox de motivos -->
-          <div class="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          <!-- Badge: derivación automática -->
+          <div v-if="sintomaSeleccionado" class="mt-2 flex flex-wrap items-center gap-2">
+            <span class="text-[9px] font-extrabold text-gray-400 tracking-widest">SE NOTIFICA A:</span>
+            <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full"
+              :class="[DERIVA_COLOR[sintomaSeleccionado.derivaA]?.bg, DERIVA_COLOR[sintomaSeleccionado.derivaA]?.text]">
+              {{ DERIVA_COLOR[sintomaSeleccionado.derivaA]?.label }}
+            </span>
+            <span v-if="sintomaSeleccionado.derivaA === 'TEJEDOR'"
+              class="text-[10px] text-green-700 font-bold">— Resolución por tejedor / atador</span>
+          </div>
+
+          <!-- Selector de tipo si derivaA === AMBOS -->
+          <div v-if="sintomaSeleccionado?.derivaA === 'AMBOS'" class="mt-2 flex gap-2">
             <button
-              v-for="(m, idx) in motivosVisibles"
-              :key="m.codigo"
+              v-for="tipo in TIPOS_INTERVENCION.filter(t => t.id !== 'CALIDAD')"
+              :key="tipo.id"
               type="button"
-              @click="motivoSeleccionado = motivoSeleccionado?.codigo === m.codigo ? null : m"
-              class="w-full flex items-center gap-3 px-3 py-3.5 text-left transition-all active:scale-[0.99] relative"
-              :class="[
-                motivoSeleccionado?.codigo === m.codigo
-                  ? (tipoIntervencion === 'MECANICO' ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white')
-                  : 'bg-white hover:bg-gray-50 text-gray-700',
-                idx < motivosVisibles.length - 1 ? 'border-b border-gray-100' : ''
-              ]"
+              @click="tipoIntervencion = tipo.id"
+              class="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border-2 text-xs font-black transition-all active:scale-95"
+              :class="tipoIntervencion === tipo.id
+                ? tipo.activeBg + ' text-white shadow-sm'
+                : 'bg-white border-gray-200 text-gray-500'"
             >
-              <!-- Barra lateral de color (solo cuando no está seleccionado) -->
-              <span
-                v-if="motivoSeleccionado?.codigo !== m.codigo"
-                class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
-                :class="m.destacado
-                  ? (tipoIntervencion === 'MECANICO' ? 'bg-blue-400' : 'bg-amber-400')
-                  : 'bg-transparent'"
-              ></span>
-
-              <!-- Código badge -->
-              <span class="text-[10px] font-black px-1.5 py-0.5 rounded shrink-0"
-                :class="motivoSeleccionado?.codigo === m.codigo
-                  ? 'bg-white/20 text-white'
-                  : 'bg-gray-100 text-gray-500'"
-              >{{ m.codigo }}</span>
-
-              <!-- Texto principal + subtexto técnico -->
-              <span class="flex-1 leading-tight min-w-0">
-                <span class="text-sm font-bold block truncate">{{ m.alias || m.motivo_es }}</span>
-                <span v-if="m.alias"
-                  class="text-[10px] block mt-0.5 truncate"
-                  :class="motivoSeleccionado?.codigo === m.codigo ? 'text-white/60' : 'text-gray-400'"
-                >{{ m.motivo_es }}</span>
-              </span>
-
-              <!-- Estrella si destacado (sin seleccionar) -->
-              <span v-if="m.destacado && motivoSeleccionado?.codigo !== m.codigo"
-                class="text-amber-400 text-xs shrink-0">★</span>
-
-              <!-- Check si seleccionado -->
-              <span v-if="motivoSeleccionado?.codigo === m.codigo"
-                class="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-white text-xs font-black shrink-0">✓</span>
-            </button>
-
-            <!-- Ver todos / Ver menos -->
-            <button
-              v-if="motivosParaListbox.length > ITEMS_VISIBLES"
-              type="button"
-              @click="verTodos = !verTodos"
-              class="w-full py-2.5 text-center text-xs font-bold bg-gray-50 border-t border-gray-100 transition-colors hover:bg-gray-100"
-              :class="verTodos ? 'text-gray-500' : 'text-orange-600'"
-            >
-              {{ verTodos ? '↑ Ver menos' : `↓ Ver todos los motivos (${motivosParaListbox.length})` }}
+              <component :is="tipo.ic" class="w-4 h-4" />
+              {{ tipo.label }}
             </button>
           </div>
         </div>
 
-        <!-- ── Defecto de Calidad ────────────────────────────────────────────── -->
-        <div v-if="maquinaSeleccionadaId" class="px-4 py-3 border-b border-gray-100 animate-in fade-in duration-200">
+        <!-- ── Estado de la máquina ──────────────────────────────────────────── -->
+        <div v-if="maquinaSeleccionadaId" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in fade-in duration-200">
           <div class="flex items-center gap-2 mb-2">
-            <span class="w-5 h-5 rounded-full bg-red-100 text-red-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-            <p class="text-[10px] font-extrabold text-gray-400 tracking-widest">ATENCIÓN DE CALIDAD</p>
+            <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
+            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">ESTADO DE LA MÁQUINA</label>
           </div>
-          <button
-            type="button"
-            @click="Swal.fire({ icon: 'info', title: 'Módulo en desarrollo', text: 'El módulo de Defectos de Calidad estará disponible próximamente.', confirmButtonColor: '#dc2626' })"
-            class="w-full flex items-center justify-center gap-2.5 py-4 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-black text-sm tracking-widest rounded-xl shadow-md shadow-red-600/30 transition-all"
-          >
-            <ShieldAlert class="w-5 h-5 shrink-0" />
-            DETENER POR DEFECTO DE CALIDAD
-          </button>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="e in ESTADOS_MAQUINA" :key="e.id"
+              type="button"
+              @click="estadoMaquina = e.id"
+              class="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all active:scale-[0.97]"
+              :class="estadoMaquina === e.id ? e.activeBg : 'bg-white border-gray-200'"
+            >
+              <component :is="e.ic" class="w-4 h-4"
+                :class="estadoMaquina === e.id ? e.iconColor : 'text-gray-300'" />
+              <span class="text-[10px] font-black leading-tight text-center"
+                :class="estadoMaquina === e.id ? e.textColor : 'text-gray-400'">
+                {{ e.label }}
+              </span>
+            </button>
+          </div>
+          <p v-if="estadoMaquina === 'PARADA'" class="mt-2 text-[10px] font-bold text-red-600 flex items-center gap-1">
+            <OctagonX class="w-3 h-3 shrink-0" /> Se marcará como Crítico automáticamente
+          </p>
         </div>
 
         <!-- ── Observaciones ──────────────────────────────────────────────────── -->
@@ -501,13 +489,20 @@ const onSubmit = async () => {
         <div class="flex items-center gap-3">
 
           <!-- Criticidad -->
-          <label class="flex items-center gap-2 cursor-pointer group shrink-0">
+          <label class="flex items-center gap-2 shrink-0"
+            :class="criticoForzado ? 'cursor-not-allowed' : 'cursor-pointer group'"
+          >
             <div class="relative flex items-center w-10 h-6">
-              <input type="checkbox" v-model="critico" class="sr-only peer">
-              <div class="w-full h-full bg-gray-100 rounded-full peer peer-checked:bg-red-500 transition-colors border border-gray-200 peer-checked:border-red-600"></div>
-              <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-4 shadow-sm"></div>
+              <input type="checkbox" v-model="critico" :disabled="criticoForzado" class="sr-only peer">
+              <div class="w-full h-full rounded-full transition-colors border"
+                :class="criticoForzado ? 'bg-red-500 border-red-600' : 'bg-gray-100 border-gray-200 peer-checked:bg-red-500 peer-checked:border-red-600'"></div>
+              <div class="absolute top-1 bg-white w-4 h-4 rounded-full shadow-sm transition-transform"
+                :class="(critico || criticoForzado) ? 'left-1 translate-x-4' : 'left-1'"></div>
             </div>
-            <span class="text-[10px] font-black transition-colors" :class="critico ? 'text-red-600' : 'text-gray-400 group-hover:text-gray-600'">Crítico</span>
+            <span class="text-[10px] font-black transition-colors"
+              :class="criticoForzado ? 'text-red-600' : (critico ? 'text-red-600' : 'text-gray-400 group-hover:text-gray-600')">
+              {{ criticoForzado ? '¡Parada!' : 'Crítico' }}
+            </span>
           </label>
 
           <!-- Cámara -->

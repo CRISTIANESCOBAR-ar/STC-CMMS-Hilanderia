@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter } from 'lucide-vue-next';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope } from 'lucide-vue-next';
 import { canAccessJefePanel, canDespacharIntervencion } from './constants/organization';
 import Swal from 'sweetalert2';
 
@@ -125,7 +125,8 @@ const pageTitle = computed(() => {
   if (path === '/usuarios') return 'Gestión de Usuarios';
   if (path === '/llamar') return 'Solicitar Intervención';
   if (path === '/intervenciones') return 'Intervenciones';
-  if (path === '/codigos') return 'Códigos de Defectos y Paradas';
+  if (path === '/codigos')   return 'Códigos de Defectos y Paradas';
+  if (path === '/sintomas')  return 'Síntomas de Tejeduría';
   if (path === '/login') return 'Ingreso al Sistema';
   return 'CMMS STC';
 });
@@ -174,7 +175,10 @@ const userRoleLabelClass = computed(() => {
           <!-- Título Global (Se oculta en vistas que usan el Portal Mobile) -->
           <span 
             v-if="!['/maquinas', '/historico', '/usuarios', '/jefe'].includes(router.currentRoute.value.path)" 
-            class="font-bold text-lg tracking-tight truncate max-w-37.5 sm:max-w-none"
+            class="font-bold tracking-tight"
+            :class="router.currentRoute.value.path === '/llamar'
+              ? 'text-xl uppercase'
+              : 'text-lg truncate max-w-37.5 sm:max-w-none'"
           >
             {{ pageTitle }}
           </span>
@@ -308,6 +312,17 @@ const userRoleLabelClass = computed(() => {
             >
               <ListFilter class="w-6 h-6 mr-4" />
               Códigos y Tipos de Falla
+            </router-link>
+
+            <router-link 
+              v-if="userRole === 'admin'"
+              to="/sintomas" 
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-teal-600 text-white shadow-lg shadow-teal-900/20"
+            >
+              <Stethoscope class="w-6 h-6 mr-4" />
+              Síntomas de Tejeduría
             </router-link>
 
             <div class="h-px bg-gray-100 my-4 mx-4"></div>

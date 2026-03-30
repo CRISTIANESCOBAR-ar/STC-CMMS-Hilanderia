@@ -1,14 +1,15 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
-import { userProfile } from '../services/authService';
+import { userProfile, userRole } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
-import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert, CirclePlay, AlertTriangle, OctagonX } from 'lucide-vue-next';
+import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert, CirclePlay, AlertTriangle, OctagonX, Share2 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import { compressImage, formatSize } from '../utils/imageCompressor';
+import CameraCapture from './CameraCapture.vue';
 
 // ── Tipos de intervención (extensible) ────────────────────────────────────────
 const TIPOS_INTERVENCION = [
@@ -34,6 +35,8 @@ const imagenOriginalSize     = ref(null);
 const isSubmitting           = ref(false);
 const uploadProgress         = ref(0);
 const isCompressing          = ref(false);
+const isPreloading           = ref(false);
+const showCamera             = ref(false);
 
 // ── Estado de la máquina ─────────────────────────────────────────────────────
 const ESTADOS_MAQUINA = [
@@ -57,6 +60,7 @@ const DERIVA_COLOR = {
 };
 
 const router = useRouter();
+const route = useRoute();
 // ── Sectores del usuario ──────────────────────────────────────────────────────
 const sectoresUsuario = computed(() => {
   if (!userProfile.value) return [DEFAULT_SECTOR];
@@ -78,6 +82,29 @@ onMounted(async () => {
     todosSintomas.value = snapSint.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
+
+    // Default TELAR para inspector
+    if (!route.query.maqId && userRole.value === 'inspector') {
+      tipoSeleccionado.value = 'TELAR';
+    }
+
+    // Precarga desde query params (patrulla u otros orígenes)
+    const q = route.query;
+    if (q.maqId) {
+      isPreloading.value = true;
+      await nextTick();
+      if (q.tipo) tipoSeleccionado.value = q.tipo;
+      await nextTick();
+      if (q.grp) gpSeleccionado.value = q.grp;
+      await nextTick();
+      maquinaSeleccionadaId.value = q.maqId;
+      if (q.obs) observaciones.value = q.obs;
+      await nextTick();
+      isPreloading.value = false;
+    } else {
+      // Restaurar formulario si el SO mató la pestaña al abrir cámara
+      await restoreFormState();
+    }
   } catch { maquinasError.value = true; }
 });
 
@@ -142,8 +169,8 @@ const detallesMaquina = computed(() =>
 
 const gmSeleccionado = computed(() => esTipoTelar.value ? formatGCmest(detallesMaquina.value?.g_cmest) : '');
 
-watch(tipoSeleccionado, () => { gpSeleccionado.value = ''; maquinaSeleccionadaId.value = ''; });
-watch(gpSeleccionado,   () => { maquinaSeleccionadaId.value = ''; });
+watch(tipoSeleccionado, () => { if (!isPreloading.value) { gpSeleccionado.value = ''; maquinaSeleccionadaId.value = ''; } });
+watch(gpSeleccionado,   () => { if (!isPreloading.value) { maquinaSeleccionadaId.value = ''; } });
 // PARADA => crítico forzado
 watch(estadoMaquina, (estado) => {
   if (estado === 'PARADA') critico.value = true;
@@ -175,20 +202,183 @@ watch(sintomaSeleccionado, (s) => {
 });
 
 // ── Imagen ────────────────────────────────────────────────────────────────────
-const onFileChange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  isCompressing.value = true;
-  if (imagenPreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagenPreview.value);
+const FORM_STATE_KEY = 'cmms_intervencion_draft';
+const IMG_DB = 'cmms_img_backup';
+const IMG_STORE = 'imgs';
+
+// ── IndexedDB helpers para respaldar la foto ──
+const openImgDB = () => new Promise((resolve, reject) => {
+  const r = indexedDB.open(IMG_DB, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(IMG_STORE);
+  r.onsuccess = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+});
+
+const saveImageToDB = async (key, blob) => {
   try {
-    const compressed = await compressImage(file, { maxWidth: 1024, quality: 0.7 });
-    imagenFile.value = compressed;
-    imagenOriginalSize.value = file.size;
-    imagenPreview.value = URL.createObjectURL(compressed);
+    const idb = await openImgDB();
+    const tx = idb.transaction(IMG_STORE, 'readwrite');
+    tx.objectStore(IMG_STORE).put({ blob, ts: Date.now() }, key);
+    idb.close();
+  } catch { /* ignore */ }
+};
+
+const loadImageFromDB = async (key) => {
+  try {
+    const idb = await openImgDB();
+    return new Promise(resolve => {
+      const req = idb.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE).get(key);
+      req.onsuccess = () => {
+        idb.close();
+        const d = req.result;
+        if (d && Date.now() - d.ts < 10 * 60 * 1000) resolve(d.blob);
+        else resolve(null);
+      };
+      req.onerror = () => { idb.close(); resolve(null); };
+    });
+  } catch { return null; }
+};
+
+const clearImageFromDB = async (key) => {
+  try {
+    const idb = await openImgDB();
+    idb.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE).delete(key);
+    idb.close();
+  } catch { /* ignore */ }
+};
+
+const saveFormState = () => {
+  try {
+    const state = {
+      tipoIntervencion: tipoIntervencion.value,
+      tipoSeleccionado: tipoSeleccionado.value,
+      gpSeleccionado: gpSeleccionado.value,
+      maquinaSeleccionadaId: maquinaSeleccionadaId.value,
+      estadoMaquina: estadoMaquina.value,
+      critico: critico.value,
+      observaciones: observaciones.value,
+      sintomaId: sintomaSeleccionado.value?.id || null,
+      ts: Date.now(),
+    };
+    sessionStorage.setItem(FORM_STATE_KEY, JSON.stringify(state));
+  } catch { /* quota exceeded, ignore */ }
+};
+
+const restoreFormState = async () => {
+  try {
+    const raw = sessionStorage.getItem(FORM_STATE_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    // Solo restaurar si tiene menos de 10 min (la cámara no debería tardar más)
+    if (Date.now() - state.ts > 10 * 60 * 1000) {
+      sessionStorage.removeItem(FORM_STATE_KEY);
+      return false;
+    }
+    isPreloading.value = true;
+    if (state.tipoIntervencion) tipoIntervencion.value = state.tipoIntervencion;
+    if (state.tipoSeleccionado) tipoSeleccionado.value = state.tipoSeleccionado;
+    await nextTick();
+    if (state.gpSeleccionado) gpSeleccionado.value = state.gpSeleccionado;
+    await nextTick();
+    if (state.maquinaSeleccionadaId) maquinaSeleccionadaId.value = state.maquinaSeleccionadaId;
+    if (state.estadoMaquina) estadoMaquina.value = state.estadoMaquina;
+    if (state.critico) critico.value = state.critico;
+    if (state.observaciones) observaciones.value = state.observaciones;
+    if (state.sintomaId) {
+      await nextTick();
+      sintomaSeleccionado.value = todosSintomas.value.find(s => s.id === state.sintomaId) || null;
+    }
+    isPreloading.value = false;
+    sessionStorage.removeItem(FORM_STATE_KEY);
+    // Restaurar imagen desde IndexedDB si sobrevivió
+    const savedImg = await loadImageFromDB(FORM_STATE_KEY);
+    if (savedImg) {
+      imagenFile.value = savedImg;
+      imagenPreview.value = URL.createObjectURL(savedImg);
+      clearImageFromDB(FORM_STATE_KEY);
+    }
+    return true;
   } catch {
-    imagenFile.value = file;
-    imagenPreview.value = URL.createObjectURL(file);
-  } finally { isCompressing.value = false; }
+    return false;
+  }
+};
+
+const openCamera = () => {
+  saveFormState();
+  if (imagenPreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagenPreview.value);
+  showCamera.value = true;
+};
+
+const onCameraCapture = async (blob) => {
+  showCamera.value = false;
+  sessionStorage.removeItem(FORM_STATE_KEY);
+  isCompressing.value = true;
+  try {
+    // Si viene de galería (File grande) comprimir; si viene de getUserMedia ya es pequeño
+    const needsCompress = blob.size > 200 * 1024;
+    const final = needsCompress
+      ? await compressImage(blob, { maxWidth: 800, quality: 0.65 })
+      : blob;
+    imagenFile.value = final;
+    imagenOriginalSize.value = blob.size;
+    imagenPreview.value = URL.createObjectURL(final);
+    saveImageToDB(FORM_STATE_KEY, final);
+  } catch {
+    imagenFile.value = blob;
+    imagenPreview.value = URL.createObjectURL(blob);
+    saveImageToDB(FORM_STATE_KEY, blob);
+  } finally {
+    isCompressing.value = false;
+  }
+};
+
+// ── Compartir por WhatsApp ────────────────────────────────────────────────────
+const buildShareText = (d) => {
+  const prioridad = d.critico ? '🔴 URGENTE' : d.estado === 'Con problema' ? '🟡 MEDIA' : '⚪ NORMAL';
+  let msg = `⚙️ *SOLICITUD DE INTERVENCIÓN*\n\n`;
+  msg += `🏭 *${d.nombre}*`;
+  if (d.grupo) msg += ` · GP ${d.grupo}`;
+  if (d.gm) msg += ` · GM ${d.gm}`;
+  msg += `\n📍 ${d.sector}\n`;
+  msg += `🔧 Tipo: *${d.tipo}*\n`;
+  msg += `${prioridad} · ${d.estado}\n`;
+  if (d.sintoma) msg += `🩺 Síntoma: *${d.sintoma}*\n`;
+  if (d.obs) msg += `💬 *${d.obs}*\n`;
+  msg += `\n📱 _Enviado desde CMMS STC_`;
+  return msg;
+};
+
+const compartirWhatsApp = async (data, imageFile) => {
+  const text = buildShareText(data);
+
+  // Intentar Web Share API con imagen
+  if (imageFile && navigator.canShare) {
+    try {
+      const sharePayload = {
+        text,
+        files: [new File([imageFile], 'intervencion.jpg', { type: imageFile.type || 'image/jpeg' })],
+      };
+      if (navigator.canShare(sharePayload)) {
+        await navigator.share(sharePayload);
+        return;
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return; // Usuario canceló
+    }
+  }
+
+  // Intentar Web Share API solo texto
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+
+  // Fallback: abrir WhatsApp con texto
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 };
 
 // ── Submit ────────────────────────────────────────────────────────────────────
@@ -227,6 +417,20 @@ const onSubmit = async () => {
 
     await intervencionService.crearIntervencion(datos, imagenFile.value, (p) => { uploadProgress.value = p; });
 
+    // Capturar datos para compartir ANTES de limpiar el form
+    const shareData = {
+      nombre: datos.nombreMaquinaDisplay,
+      sector: datos.sector,
+      tipo: datos.tipoIntervencion,
+      estado: datos.estadoMaquina === 'PARADA' ? 'PARADA' : datos.estadoMaquina === 'CON_PROBLEMA' ? 'Con problema' : 'En marcha',
+      critico: datos.critico,
+      sintoma: datos.sintomaNombre,
+      obs: datos.observaciones,
+      grupo: datos.grupoTelar,
+      gm: datos.gmTelar,
+    };
+    const shareImageFile = imagenFile.value;
+
     if (imagenPreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagenPreview.value);
     maquinaSeleccionadaId.value = '';
     critico.value = false;
@@ -235,24 +439,24 @@ const onSubmit = async () => {
     estadoMaquina.value = 'CON_PROBLEMA';
     imagenFile.value = null;
     imagenPreview.value = null;
+    clearImageFromDB(FORM_STATE_KEY);
 
-    const notifTexts = {
-      MECANICO:  'El equipo mecánico fue notificado.',
-      ELECTRICO: 'El equipo eléctrico fue notificado.',
-      CALIDAD:   'El inspector de calidad / supervisor fue notificado.',
-    };
-    Swal.fire({
-      toast: true,
-      position: 'top',
+    // Mostrar diálogo de compartir
+    const { isConfirmed } = await Swal.fire({
       icon: 'success',
       title: '¡Solicitud enviada!',
-      text: notifTexts[tipoIntervencion.value] ?? 'El equipo fue notificado.',
-      showConfirmButton: false,
-      timer: 3500,
-      timerProgressBar: true,
-      iconColor: '#ea580c',
+      html: '<p class="text-sm text-gray-500">¿Compartir por WhatsApp?</p>',
+      showCancelButton: true,
+      confirmButtonText: '📲 Compartir',
+      cancelButtonText: 'No, gracias',
+      confirmButtonColor: '#25D366',
+      cancelButtonColor: '#9ca3af',
+      allowOutsideClick: true,
     });
-    router.push('/intervenciones');
+
+    if (isConfirmed) {
+      await compartirWhatsApp(shareData, shareImageFile);
+    }
   } catch (error) {
     Swal.fire({ icon: 'error', title: 'Error al registrar', text: error.message || 'Error desconocido' });
   } finally { isSubmitting.value = false; }
@@ -260,7 +464,7 @@ const onSubmit = async () => {
 </script>
 
 <template>
-  <div class="bg-transparent pb-28">
+  <div class="bg-transparent pb-40">
 
     <main class="max-w-sm mx-auto pt-2">
 
@@ -484,7 +688,7 @@ const onSubmit = async () => {
     </main>
 
     <!-- ── Barra inferior fija ──────────────────────────────────────────────── -->
-    <div class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2">
+    <div class="fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2">
       <div class="max-w-sm mx-auto bg-white border border-gray-200 rounded-[1.4rem] shadow-[0_-10px_35px_rgba(15,23,42,0.14)] p-3">
         <div class="flex items-center gap-3">
 
@@ -505,12 +709,11 @@ const onSubmit = async () => {
             </span>
           </label>
 
-          <!-- Cámara -->
-          <label class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition active:scale-90 relative shadow-sm group">
+          <!-- Cámara / Galería -->
+          <button type="button" @click="openCamera" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition active:scale-90 relative shadow-sm group">
             <Camera class="w-6 h-6" :class="imagenPreview ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-600'" />
             <div v-if="imagenPreview" class="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white ring-2 ring-orange-500/20"></div>
-            <input type="file" accept="image/*" capture="environment" class="hidden" @change="onFileChange" />
-          </label>
+          </button>
 
           <!-- Botón principal: Solicitar -->
           <button
@@ -534,4 +737,7 @@ const onSubmit = async () => {
     </div>
 
   </div>
+
+  <!-- Cámara nativa -->
+  <CameraCapture v-if="showCamera" @capture="onCameraCapture" @cancel="showCamera = false" />
 </template>

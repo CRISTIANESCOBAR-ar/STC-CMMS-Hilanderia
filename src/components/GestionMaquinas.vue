@@ -609,7 +609,7 @@ const exportCatalogToExcel = async () => {
 </script>
 
 <template>
-  <div class="h-[calc(100vh-64px)] bg-gray-50 flex flex-col overflow-hidden">
+  <div class="h-[calc(100vh-120px)] bg-gray-50 flex flex-col overflow-hidden">
     <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-0 lg:pt-4 pb-2 flex flex-col space-y-1 lg:space-y-3 overflow-hidden">
 
       <!-- Portal para Navbar (Desktop) -->

@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy, writeBatch } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -92,7 +92,29 @@ export const intervencionService = {
   },
 
   /**
-   * Suscripción realtime a intervenciones activas (PENDIENTE + EN_PROCESO) de uno o varios sectores.
+   * Toma múltiples intervenciones en batch atómico (máx 500).
+   * @param {string[]} ids - IDs de intervenciones
+   * @param {string} nuevoEstado - EN_PROCESO o COMPLETADO
+   * @param {Object} extra - campos adicionales (asignadoA, asignadoNombre, etc.)
+   */
+  async actualizarEstadoBatch(ids, nuevoEstado, extra = {}) {
+    if (!ids.length) return;
+    const batch = writeBatch(db);
+    for (const id of ids) {
+      const ref = doc(db, COLLECTION_NAME, id);
+      const updates = { estado: nuevoEstado, ...extra };
+      if (nuevoEstado === 'EN_PROCESO') {
+        updates.fechaInicio = serverTimestamp();
+        if (!updates.fechaAsignacion) updates.fechaAsignacion = serverTimestamp();
+      }
+      if (nuevoEstado === 'COMPLETADO') updates.fechaFin = serverTimestamp();
+      batch.update(ref, updates);
+    }
+    await batch.commit();
+  },
+
+  /**
+   * Suscripción realtime a intervenciones (PENDIENTE + EN_PROCESO + COMPLETADO recientes) de uno o varios sectores.
    * Acepta string o array de sectores.
    */
   suscribirActivas(sector, callback) {
@@ -103,11 +125,21 @@ export const intervencionService = {
       ? query(collection(db, COLLECTION_NAME), where('sector', '==', sectores[0]))
       : query(collection(db, COLLECTION_NAME), where('sector', 'in', sectores));
     return onSnapshot(q, (snap) => {
+      const ahora = Date.now() / 1000;
       const docs = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(d => ['PENDIENTE', 'EN_PROCESO'].includes(d.estado))
+        .filter(d => {
+          if (['PENDIENTE', 'EN_PROCESO'].includes(d.estado)) return true;
+          // Mostrar COMPLETADO de las últimas 24h
+          if (d.estado === 'COMPLETADO') {
+            const fin = d.fechaFin?.seconds || 0;
+            return (ahora - fin) < 86400;
+          }
+          return false;
+        })
         .sort((a, b) => {
-          if (a.estado !== b.estado) return a.estado === 'PENDIENTE' ? -1 : 1;
+          const order = { PENDIENTE: 0, EN_PROCESO: 1, COMPLETADO: 2 };
+          if (a.estado !== b.estado) return (order[a.estado] ?? 9) - (order[b.estado] ?? 9);
           return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
         });
       callback(docs);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cmms-cache-v3';
+const CACHE_NAME = 'cmms-cache-v4';
 
 self.addEventListener('install', event => {
   // Comentado intencionalmente: NO usar self.skipWaiting() aquí.
@@ -51,4 +51,10 @@ self.addEventListener('fetch', event => {
       });
     }
   })());
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

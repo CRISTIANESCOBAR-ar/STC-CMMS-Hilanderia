@@ -21,6 +21,21 @@ const loading      = ref(true);
 const guardando    = ref(false);
 let   unsub        = null;
 
+// ── Timer en vivo ─────────────────────────────────────────────────────────────
+const ahora        = ref(Date.now());
+let   timerInterval = null;
+
+// Minutos desde que se tomó la intervención (EN_PROCESO) — se actualiza cada 30s
+const minutosTranscurridos = computed(() => {
+  const iv = intervencion.value;
+  if (!iv?.fechaInicio?.seconds) return null;
+  const fin = iv.fechaFin?.seconds || (ahora.value / 1000);
+  return Math.max(1, Math.round((fin - iv.fechaInicio.seconds) / 60));
+});
+
+// tiempoAuto: siempre calculado, solo lectura
+// tiempoReal: campo manual del mecánico (override / ajuste)
+
 // ── Grupo y GM telar (pueden no estar en intervenciones antiguas) ─────────────
 const grupoTelarResuelto = ref(null);
 const gmTelarResuelto    = ref(null);
@@ -54,7 +69,8 @@ const diagnostico = ref({
   accionTomada:  '',
   piezaId:       null,
   piezaNombre:   null,
-  tiempoReal:    '',
+  tiempoReal:    '',   // ajuste manual del mecánico
+  tiempoAuto:    null, // calculado automáticamente (fechaFin - fechaInicio)
   numeroCatalogo: null,
   numeroArticulo: null,
 });
@@ -68,11 +84,13 @@ onMounted(() => {
     if (data.causaRaiz     && !diagnostico.value.causaRaiz)    diagnostico.value.causaRaiz    = data.causaRaiz;
     if (data.accionTomada  && !diagnostico.value.accionTomada) diagnostico.value.accionTomada = data.accionTomada;
     if (data.piezaId       && !diagnostico.value.piezaId)      Object.assign(diagnostico.value, { piezaId: data.piezaId, piezaNombre: data.piezaNombre, numeroCatalogo: data.numeroCatalogo, numeroArticulo: data.numeroArticulo });
-    if (data.tiempoReal    && !diagnostico.value.tiempoReal)   diagnostico.value.tiempoReal   = data.tiempoReal;
+    if (data.tiempoReal && !diagnostico.value.tiempoReal) diagnostico.value.tiempoReal = data.tiempoReal;
   });
+  // Actualizar el reloj cada 30 s para el timer en vivo
+  timerInterval = setInterval(() => { ahora.value = Date.now(); }, 30_000);
 });
 
-onUnmounted(() => unsub?.());
+onUnmounted(() => { unsub?.(); clearInterval(timerInterval); });
 
 // ── Cargar catálogo + resolver grupo cuando se conoce el modelo ──────────────
 watch(intervencion, async (iv) => {
@@ -111,9 +129,17 @@ const gruposDisponibles = computed(() => {
 });
 const denominacionesDisponibles = computed(() => {
   if (!grupoSeleccionado.value) return [];
-  return catalogo.value.filter(c =>
+  const items = catalogo.value.filter(c =>
     c.seccion === seccionSeleccionada.value && c.grupo === grupoSeleccionado.value
   );
+  const seen = new Set();
+  return items.filter(c => {
+    const sub = (c.subGrupo || '').trim().replace(/^-$/, '');
+    const key = `${c.denominacion}||${sub}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 });
 
 watch(seccionSeleccionada, () => { grupoSeleccionado.value = ''; denominacionSeleccionada.value = null; });
@@ -169,6 +195,11 @@ const estadoMaqConfig = {
 };
 
 // Nombre de máquina como lo ve el operador
+const modeloCorto = computed(() => {
+  const m = intervencion.value?.modeloMaquina || '';
+  return m.slice(-4) || m || '—';
+});
+
 const nombreMaquinaDisplay = computed(() => {
   const iv = intervencion.value;
   if (!iv) return '';
@@ -200,6 +231,24 @@ const puedeEditar = computed(() =>
   intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value
 );
 
+const puedeTomarIntervencion = computed(() =>
+  intervencion.value?.estado === 'PENDIENTE'
+);
+
+const tomando = ref(false);
+const tomarIntervencion = async () => {
+  const user = getAuth().currentUser;
+  tomando.value = true;
+  try {
+    await intervencionService.actualizarEstado(route.params.id, 'EN_PROCESO', {
+      asignadoA:      user?.uid || null,
+      asignadoNombre: user?.displayName || user?.email || 'Usuario',
+    });
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+  } finally { tomando.value = false; }
+};
+
 // ── Guardar diagnóstico ───────────────────────────────────────────────────────
 const guardarDiagnostico = async () => {
   guardando.value = true;
@@ -225,6 +274,9 @@ const completar = async () => {
   if (!confirm.isConfirmed) return;
   guardando.value = true;
   try {
+    // Siempre guardar tiempoAuto al completar; tiempoReal es el campo manual
+    diagnostico.value.tiempoAuto = minutosTranscurridos.value !== null ? String(minutosTranscurridos.value) : null;
+    // Si el mecánico no ingresó nada en tiempoReal, lo dejamos null (no pisamos el auto)
     await intervencionService.guardarDiagnostico(route.params.id, diagnostico.value);
     await intervencionService.actualizarEstado(route.params.id, 'COMPLETADO');
     router.push('/intervenciones');
@@ -244,25 +296,36 @@ const completar = async () => {
 
     <template v-else-if="intervencion">
 
+      <!-- ── Navbar portal: solo badges tipo + crítico ─────── -->
+      <Teleport to="#navbar-header-portal">
+        <div class="flex items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
+            :class="tipoConfig[intervencion.tipoIntervencion]?.bg || 'bg-gray-100 text-gray-500'">
+            <component :is="tipoConfig[intervencion.tipoIntervencion]?.ic" class="w-2.5 h-2.5" />
+            {{ tipoConfig[intervencion.tipoIntervencion]?.label }}
+          </span>
+          <span v-if="intervencion.critico"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">
+            <AlertTriangle class="w-2.5 h-2.5" /> CRÍTICO
+          </span>
+        </div>
+      </Teleport>
+
       <main class="max-w-sm mx-auto pt-2">
         <div class="bg-white border-y border-gray-100">
 
           <!-- ── ① MÁQUINA (solo lectura) ──────────────────────── -->
-          <div class="px-4 py-3 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-3">
+          <div class="px-4 py-2 border-b border-gray-100">
+            <div class="flex items-center gap-2 mb-2 min-w-0">
               <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">MÁQUINA</label>
-              <!-- Badges tipo + crítico -->
-              <div class="ml-auto flex items-center gap-1.5">
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
-                  :class="tipoConfig[intervencion.tipoIntervencion]?.bg || 'bg-gray-100 text-gray-500'">
-                  <component :is="tipoConfig[intervencion.tipoIntervencion]?.ic" class="w-2.5 h-2.5" />
-                  {{ tipoConfig[intervencion.tipoIntervencion]?.label }}
-                </span>
-                <span v-if="intervencion.critico"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">
-                  <AlertTriangle class="w-2.5 h-2.5" /> CRÍTICO
-                </span>
+              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest shrink-0">MÁQUINA</label>
+              <div class="flex items-center gap-1 text-[10px] text-gray-400 min-w-0 overflow-hidden ml-1">
+                <span class="font-bold text-gray-500 shrink-0">{{ modeloCorto }}</span>
+                <span class="text-gray-300 mx-0.5">·</span>
+                <Clock class="w-3 h-3 text-gray-300 shrink-0" />
+                <span class="ml-0.5 shrink-0">{{ timeAgo(intervencion.createdAt) }}</span>
+                <span class="text-gray-300 mx-0.5">·</span>
+                <span class="truncate">{{ intervencion.creadoPorNombre }}</span>
               </div>
             </div>
 
@@ -300,15 +363,6 @@ const completar = async () => {
               </div>
             </div>
 
-            <!-- Modelo + tiempo -->
-            <div class="flex items-center gap-2 mt-2">
-              <span class="text-[10px] text-gray-400 font-semibold">{{ intervencion.modeloMaquina || '—' }}</span>
-              <span class="text-gray-200">·</span>
-              <Clock class="w-3 h-3 text-gray-300" />
-              <span class="text-[10px] text-gray-400">{{ timeAgo(intervencion.createdAt) }}</span>
-              <span class="text-gray-200">·</span>
-              <span class="text-[10px] text-gray-400">{{ intervencion.creadoPorNombre }}</span>
-            </div>
           </div>
 
           <!-- ── ② ¿QUÉ ESTÁ PASANDO? (solo lectura) ───────────── -->
@@ -316,6 +370,14 @@ const completar = async () => {
             <div class="flex items-center gap-2 mb-2">
               <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
               <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
+              <!-- Badge derivaA inline al título -->
+              <div v-if="intervencion.derivaA" class="ml-auto flex items-center gap-1.5">
+                <span class="text-[9px] font-extrabold text-gray-400 tracking-widest">SE NOTIFICA A:</span>
+                <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full"
+                  :class="[DERIVA_COLOR[intervencion.derivaA]?.bg, DERIVA_COLOR[intervencion.derivaA]?.text]">
+                  {{ DERIVA_COLOR[intervencion.derivaA]?.label }}
+                </span>
+              </div>
             </div>
 
             <!-- Síntoma -->
@@ -327,15 +389,6 @@ const completar = async () => {
             </div>
             <div v-else class="border border-gray-200 bg-gray-50 rounded-lg px-2.5 py-1.5 mb-2">
               <span class="text-sm text-gray-400 italic">Sin síntoma registrado</span>
-            </div>
-
-            <!-- Badge derivaA -->
-            <div v-if="intervencion.derivaA" class="flex items-center gap-2">
-              <span class="text-[9px] font-extrabold text-gray-400 tracking-widest">SE NOTIFICA A:</span>
-              <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full"
-                :class="[DERIVA_COLOR[intervencion.derivaA]?.bg, DERIVA_COLOR[intervencion.derivaA]?.text]">
-                {{ DERIVA_COLOR[intervencion.derivaA]?.label }}
-              </span>
             </div>
 
             <!-- Observaciones del operador -->
@@ -358,12 +411,12 @@ const completar = async () => {
             </div>
             <div class="grid grid-cols-3 gap-2">
               <div v-for="e in ESTADOS_MAQUINA" :key="e.id"
-                class="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all"
+                class="flex flex-row items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border-2 transition-all"
                 :class="intervencion.estadoMaquina === e.id ? e.activeBg : 'bg-white border-gray-100 opacity-40'"
               >
-                <component :is="e.ic" class="w-4 h-4"
+                <component :is="e.ic" class="w-3.5 h-3.5 shrink-0"
                   :class="intervencion.estadoMaquina === e.id ? e.iconColor : 'text-gray-300'" />
-                <span class="text-[10px] font-black leading-tight text-center"
+                <span class="text-[10px] font-black leading-tight"
                   :class="intervencion.estadoMaquina === e.id ? e.textColor : 'text-gray-300'">
                   {{ e.label }}
                 </span>
@@ -371,42 +424,11 @@ const completar = async () => {
             </div>
           </div>
 
-          <!-- ── ④ DIAGNÓSTICO DEL MECÁNICO ────────────────────── -->
-          <div class="px-4 pt-3 pb-3 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">DIAGNÓSTICO</label>
-            </div>
-
-            <!-- Causa raíz -->
-            <div class="mb-3">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">CAUSA RAÍZ</label>
-              <textarea v-model="diagnostico.causaRaiz" :disabled="!puedeEditar" rows="2"
-                placeholder="¿Qué causó el problema?"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-            </div>
-
-            <!-- Acción tomada -->
-            <div class="mb-3">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">ACCIÓN TOMADA</label>
-              <textarea v-model="diagnostico.accionTomada" :disabled="!puedeEditar" rows="2"
-                placeholder="¿Qué se hizo para resolverlo?"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-            </div>
-
-            <!-- Tiempo real -->
-            <div>
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">TIEMPO REAL (min)</label>
-              <input v-model="diagnostico.tiempoReal" :disabled="!puedeEditar" type="text" placeholder="Ej: 25"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block px-3 py-2 outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-            </div>
-          </div>
-
-          <!-- ── ⑤ CATÁLOGO — cascada igual a Reportar Falla ────── -->
+          <!-- ── ④ CATÁLOGO DE PIEZAS ──────────────────────────────── -->
           <div v-if="catalogo.length" class="border-t border-gray-100">
             <!-- Header sección -->
             <div class="px-4 pt-3 pb-1 flex items-center gap-2">
-              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
+              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
               <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">CATÁLOGO DE PIEZAS</label>
             </div>
 
@@ -496,27 +518,92 @@ const completar = async () => {
             Sin catálogo para {{ intervencion.modeloMaquina || 'este modelo' }}.
           </div>
 
+          <!-- ── ⑤ DIAGNÓSTICO DEL MECÁNICO ────────────────────── -->
+          <div class="px-4 pt-3 pb-3 border-b border-gray-100">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
+              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">DIAGNÓSTICO</label>
+            </div>
+
+            <!-- Causa raíz -->
+            <div class="mb-3">
+              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">CAUSA RAÍZ</label>
+              <textarea v-model="diagnostico.causaRaiz" :disabled="!puedeEditar" rows="2"
+                placeholder="¿Qué causó el problema?"
+                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
+            </div>
+
+            <!-- Acción tomada -->
+            <div class="mb-3">
+              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">ACCIÓN TOMADA</label>
+              <textarea v-model="diagnostico.accionTomada" :disabled="!puedeEditar" rows="2"
+                placeholder="¿Qué se hizo para resolverlo?"
+                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
+            </div>
+
+            <!-- Tiempo real -->
+            <div>
+              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-2">TIEMPO (min)</label>
+              <div class="flex gap-2">
+                <!-- Auto (solo lectura) -->
+                <div class="flex-1">
+                  <p class="text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">AUTO</p>
+                  <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                    <Clock class="w-3.5 h-3.5 text-emerald-500 shrink-0"
+                      :class="puedeEditar ? 'animate-pulse' : ''" />
+                    <span class="text-sm font-black text-emerald-700">
+                      {{ minutosTranscurridos !== null ? minutosTranscurridos + ' min' : '—' }}
+                    </span>
+                    <span v-if="puedeEditar" class="text-[9px] text-emerald-400 ml-auto">en curso</span>
+                  </div>
+                </div>
+                <!-- Manual (editable) -->
+                <div class="flex-1">
+                  <p class="text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">AJUSTE MANUAL</p>
+                  <input
+                    v-model="diagnostico.tiempoReal"
+                    :disabled="!puedeEditar"
+                    type="number" min="1"
+                    placeholder="Ej: 25"
+                    class="w-full bg-white border border-gray-200 text-gray-900 text-sm font-bold rounded-xl focus:ring-orange-400 focus:border-orange-400 block px-3 py-2 outline-none disabled:bg-gray-50 disabled:text-gray-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </main>
 
       <!-- ── Barra inferior fija ──────────────────────────────────── -->
-      <div v-if="puedeEditar" class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2">
+      <div v-if="puedeEditar || puedeTomarIntervencion" class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2">
         <div class="max-w-sm mx-auto bg-white border border-gray-200 rounded-[1.4rem] shadow-[0_-10px_35px_rgba(15,23,42,0.14)] p-3">
           <div class="flex items-center gap-2">
             <button @click="router.back()"
               class="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition active:scale-90">
               <ArrowLeft class="w-5 h-5 text-gray-500" />
             </button>
-            <button @click="guardarDiagnostico" :disabled="guardando"
-              class="flex-1 flex items-center justify-center gap-2 h-12 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm">
-              <Save class="w-4 h-4" />
-              Guardar
+
+            <!-- Tomar intervención (PENDIENTE → EN_PROCESO) -->
+            <button v-if="puedeTomarIntervencion" @click="tomarIntervencion" :disabled="tomando"
+              class="flex-1 flex items-center justify-center gap-2 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm shadow-orange-500/20">
+              <span v-if="tomando" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+              <Wrench v-else class="w-4 h-4" />
+              Tomar intervención
             </button>
-            <button @click="completar" :disabled="guardando"
-              class="flex-1 flex items-center justify-center gap-2 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm shadow-emerald-500/20">
-              <CheckCircle2 class="w-4 h-4" />
-              Completar
-            </button>
+
+            <!-- Guardar + Completar (EN_PROCESO, asignado a mí) -->
+            <template v-else-if="puedeEditar">
+              <button @click="guardarDiagnostico" :disabled="guardando"
+                class="flex-1 flex items-center justify-center gap-2 h-12 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm">
+                <Save class="w-4 h-4" />
+                Guardar
+              </button>
+              <button @click="completar" :disabled="guardando"
+                class="flex-1 flex items-center justify-center gap-2 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm shadow-emerald-500/20">
+                <CheckCircle2 class="w-4 h-4" />
+                Completar
+              </button>
+            </template>
           </div>
         </div>
       </div>

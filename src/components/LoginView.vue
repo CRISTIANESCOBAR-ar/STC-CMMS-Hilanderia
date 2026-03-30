@@ -17,8 +17,9 @@ onMounted(async () => {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       for (let reg of regs) {
-        // Detectar si ya hay un update en cola
-        if (reg.waiting) {
+        // Solo mostrar banner si hay un SW esperando Y ya hay un controlador activo
+        // (si no hay controlador, es la primera instalación, no una actualización)
+        if (reg.waiting && navigator.serviceWorker.controller) {
           hasUpdate.value = true;
         }
         // Escuchar si llega un update mientras la pantalla de login está abierta
@@ -70,11 +71,13 @@ const handleAnonLogin = async () => {
 const limpiarCacheYActualizar = async () => {
   isLoading.value = 'update';
   try {
-    // 1. Desregistrar Service Workers
+    // 1. Si hay un SW en espera, decirle que se active
     if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (let registration of registrations) {
-        await registration.unregister();
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (let reg of regs) {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
       }
     }
     // 2. Limpiar Caches de la PWA
@@ -84,8 +87,10 @@ const limpiarCacheYActualizar = async () => {
         await caches.delete(key);
       }
     }
-    // 3. Recargar la página forzando la red
-    window.location.reload(true);
+    // 3. Esperar brevemente para que el SW se active
+    await new Promise(r => setTimeout(r, 300));
+    // 4. Recargar la página
+    window.location.reload();
   } catch (err) {
     console.error("Error al limpiar caché:", err);
     errorMsg.value = "No se pudo actualizar. Intenta borrar caché del navegador manualmente.";

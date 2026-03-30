@@ -1,18 +1,21 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { catalogoService } from '../services/catalogoService';
-import { userProfile } from '../services/authService';
-import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
+import { userProfile, userRole } from '../services/authService';
+import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList, getQuickActions } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, BellRing, ScanLine, Eye as EyeIcon, ClipboardCheck, Route as RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
+import CameraCapture from './CameraCapture.vue';
 
 const maquinas = ref([]);
+const router = useRouter();
 const tipoSeleccionado = ref('');
 const gpSeleccionado = ref('');
 const maquinaSeleccionadaId = ref('');
@@ -40,16 +43,9 @@ const maquinasError = ref(false);
 const isCompressing = ref(false);
 const menuAccionesAbierto = ref(false);
 
-const accionesRapidas = [
-  { id: 'accion-1', nombre: 'Opcion 1' },
-  { id: 'accion-2', nombre: 'Opcion 2' },
-  { id: 'accion-3', nombre: 'Opcion 3' },
-  { id: 'accion-4', nombre: 'Opcion 4' },
-  { id: 'accion-5', nombre: 'Opcion 5' },
-  { id: 'accion-6', nombre: 'Opcion 6' },
-  { id: 'accion-7', nombre: 'Opcion 7' },
-  { id: 'accion-8', nombre: 'Opcion 8' }
-];
+const iconMap = { AlertTriangle, BellRing, ScanLine, Eye: EyeIcon, ClipboardCheck, Route: RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users };
+
+const accionesRapidas = computed(() => getQuickActions(userRole.value));
 
 const sectoresUsuario = computed(() => {
   if (!userProfile.value) return [DEFAULT_SECTOR];
@@ -61,7 +57,7 @@ const sectorPrincipalUsuario = computed(() => sectoresUsuario.value[0] || DEFAUL
 // Cargar lista de máquinas desde Firestore al montar
 onMounted(() => {
   // 1. Cargar máquinas inmediatamente
-  cargarMaquinas();
+  cargarMaquinas().then(() => restoreNovedadState());
 
   // 2. Inicializar catálogo en segundo plano (si es necesario)
   inicializarCatalogo();
@@ -238,10 +234,18 @@ const gruposDisponibles = computed(() => {
 
 const denominacionesDisponibles = computed(() => {
     if (!grupoSeleccionado.value) return [];
-    return catalogoCompleto.value.filter(c => 
-        c.seccion === seccionSeleccionada.value && 
+    const items = catalogoCompleto.value.filter(c =>
+        c.seccion === seccionSeleccionada.value &&
         c.grupo === grupoSeleccionado.value
     );
+    const seen = new Set();
+    return items.filter(c => {
+        const sub = (c.subGrupo || '').trim().replace(/^-$/, '');
+        const key = `${c.denominacion}||${sub}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 });
 
 // Al cambiar una jerarquía superior, resetear las inferiores
@@ -249,27 +253,116 @@ watch(seccionSeleccionada, () => { grupoSeleccionado.value = ''; denominacionSel
 watch(grupoSeleccionado, () => { denominacionSeleccionada.value = null; });
 watch(denominacionSeleccionada, () => { showProcedimientoViewer.value = false; });
 
-const onFileChange = async (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    try {
-      isCompressing.value = true;
-      imagenOriginalSize.value = file.size;
-      
-      if (imagenPreview.value && imagenPreview.value.startsWith('blob:')) {
-        URL.revokeObjectURL(imagenPreview.value);
-      }
+const NOVEDAD_IMG_KEY = 'cmms_novedad_img';
+const IMG_DB = 'cmms_img_backup';
+const IMG_STORE = 'imgs';
 
-      const compressed = await compressImage(file, { maxWidth: 1024, quality: 0.7 });
-      imagenFile.value = compressed;
-      imagenPreview.value = URL.createObjectURL(compressed);
-    } catch (err) {
-      console.error("Error comprimiendo imagen:", err);
-      imagenFile.value = file;
-      imagenPreview.value = URL.createObjectURL(file);
-    } finally {
-      isCompressing.value = false;
+const openImgDB = () => new Promise((resolve, reject) => {
+  const r = indexedDB.open(IMG_DB, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(IMG_STORE);
+  r.onsuccess = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+});
+
+const saveImageToDB = async (key, blob) => {
+  try {
+    const idb = await openImgDB();
+    const tx = idb.transaction(IMG_STORE, 'readwrite');
+    tx.objectStore(IMG_STORE).put({ blob, ts: Date.now() }, key);
+    idb.close();
+  } catch { /* ignore */ }
+};
+
+const loadImageFromDB = async (key) => {
+  try {
+    const idb = await openImgDB();
+    return new Promise(resolve => {
+      const req = idb.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE).get(key);
+      req.onsuccess = () => {
+        idb.close();
+        const d = req.result;
+        if (d && Date.now() - d.ts < 10 * 60 * 1000) resolve(d.blob);
+        else resolve(null);
+      };
+      req.onerror = () => { idb.close(); resolve(null); };
+    });
+  } catch { return null; }
+};
+
+const clearImageFromDB = async (key) => {
+  try {
+    const idb = await openImgDB();
+    idb.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE).delete(key);
+    idb.close();
+  } catch { /* ignore */ }
+};
+
+const saveNovedadState = () => {
+  try {
+    sessionStorage.setItem('cmms_novedad_draft', JSON.stringify({
+      tipoSeleccionado: tipoSeleccionado.value,
+      gpSeleccionado: gpSeleccionado.value,
+      maquinaSeleccionadaId: maquinaSeleccionadaId.value,
+      tipoProblema: tipoProblema.value,
+      isCritico: isCritico.value,
+      observaciones: observaciones.value,
+      ts: Date.now(),
+    }));
+  } catch { /* ignore */ }
+};
+
+const restoreNovedadState = async () => {
+  try {
+    const raw = sessionStorage.getItem('cmms_novedad_draft');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (Date.now() - s.ts > 10 * 60 * 1000) { sessionStorage.removeItem('cmms_novedad_draft'); return; }
+    if (s.tipoSeleccionado) tipoSeleccionado.value = s.tipoSeleccionado;
+    await nextTick();
+    if (s.gpSeleccionado) gpSeleccionado.value = s.gpSeleccionado;
+    await nextTick();
+    if (s.maquinaSeleccionadaId) maquinaSeleccionadaId.value = s.maquinaSeleccionadaId;
+    if (s.tipoProblema) tipoProblema.value = s.tipoProblema;
+    if (s.isCritico) isCritico.value = s.isCritico;
+    if (s.observaciones) observaciones.value = s.observaciones;
+    sessionStorage.removeItem('cmms_novedad_draft');
+    // Restaurar imagen desde IndexedDB
+    const savedImg = await loadImageFromDB(NOVEDAD_IMG_KEY);
+    if (savedImg) {
+      imagenFile.value = savedImg;
+      imagenPreview.value = URL.createObjectURL(savedImg);
+      clearImageFromDB(NOVEDAD_IMG_KEY);
     }
+  } catch { /* ignore */ }
+};
+
+const showCamera = ref(false);
+
+const openCamera = () => {
+  saveNovedadState();
+  if (imagenPreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagenPreview.value);
+  showCamera.value = true;
+};
+
+const onCameraCapture = async (blob) => {
+  showCamera.value = false;
+  sessionStorage.removeItem('cmms_novedad_draft');
+  isCompressing.value = true;
+  try {
+    const needsCompress = blob.size > 200 * 1024;
+    const final = needsCompress
+      ? await compressImage(blob, { maxWidth: 800, quality: 0.65 })
+      : blob;
+    imagenFile.value = final;
+    imagenOriginalSize.value = blob.size;
+    imagenPreview.value = URL.createObjectURL(final);
+    saveImageToDB(NOVEDAD_IMG_KEY, final);
+  } catch {
+    imagenFile.value = blob;
+    imagenPreview.value = URL.createObjectURL(blob);
+    saveImageToDB(NOVEDAD_IMG_KEY, blob);
+  } finally {
+    isCompressing.value = false;
   }
 };
 
@@ -331,6 +424,7 @@ const onSubmit = async () => {
     observaciones.value = '';
     imagenFile.value = null;
     imagenPreview.value = null;
+    clearImageFromDB(NOVEDAD_IMG_KEY);
     resetCatalogo();
 
     setTimeout(() => { successMessage.value = ''; }, 4000);
@@ -352,8 +446,10 @@ const cerrarMenuAcciones = () => {
 };
 
 const seleccionarAccionRapida = (accion) => {
-  console.log('Accion rapida seleccionada:', accion.id);
   menuAccionesAbierto.value = false;
+  if (accion.route) {
+    router.push(accion.route);
+  }
 };
 </script>
 
@@ -585,13 +681,13 @@ const seleccionarAccionRapida = (accion) => {
                   v-for="accion in accionesRapidas"
                   :key="accion.id"
                   type="button"
-                  class="h-20 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1"
+                  class="h-20 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1.5"
                   @click="seleccionarAccionRapida(accion)"
                 >
-                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-blue-600 font-black text-xs">
-                    {{ accion.id.split('-')[1] }}
+                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-blue-600">
+                    <component :is="iconMap[accion.icon]" v-if="iconMap[accion.icon]" class="w-4 h-4" />
                   </span>
-                  <span class="text-[11px] font-bold text-gray-600 leading-tight">{{ accion.nombre }}</span>
+                  <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">{{ accion.label }}</span>
                 </button>
               </div>
             </div>
@@ -609,11 +705,10 @@ const seleccionarAccionRapida = (accion) => {
               <span class="text-[10px] font-black transition-colors" :class="isCritico ? 'text-red-600' : 'text-gray-400 group-hover:text-gray-600'">Crítico</span>
             </label>
 
-            <label class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition-all active:scale-90 relative shadow-sm group">
+            <button type="button" @click="openCamera" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition-all active:scale-90 relative shadow-sm group">
               <Camera class="w-6 h-6" :class="imagenPreview ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'" />
               <div v-if="imagenPreview" class="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full border-2 border-white ring-2 ring-blue-600/20"></div>
-              <input type="file" accept="image/*" capture="environment" class="hidden" @change="onFileChange" />
-            </label>
+            </button>
 
             <button
               type="button"
@@ -682,5 +777,8 @@ const seleccionarAccionRapida = (accion) => {
       </div>
     </Teleport>
   </div>
+
+  <!-- Cámara nativa -->
+  <CameraCapture v-if="showCamera" @capture="onCameraCapture" @cancel="showCamera = false" />
 </template>
 

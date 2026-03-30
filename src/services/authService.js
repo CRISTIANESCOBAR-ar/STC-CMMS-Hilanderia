@@ -2,23 +2,31 @@ import { signInWithPopup, GoogleAuthProvider, signInAnonymously, signOut, onAuth
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { ref } from 'vue';
-import { DEFAULT_SECTOR, sanitizeSectorList, normalizeSectorValue } from '../constants/organization';
+import { DEFAULT_SECTOR, ROLE_SECTOR_DEFAULT, sanitizeSectorList, normalizeSectorValue, isJefeRole } from '../constants/organization';
 
 const googleProvider = new GoogleAuthProvider();
 
 // Estado reactivo del rol
 export const userRole = ref(null);
 export const userProfile = ref(null);
+export const previewSector = ref(null);
+
+// Promesa que se resuelve cuando Firebase Auth restaura la sesión desde IndexedDB
+// Evita que el router redirija a /login antes de saber si hay usuario autenticado
+let _authReadyResolve;
+export const authReady = new Promise(resolve => { _authReadyResolve = resolve; });
+onAuthStateChanged(auth, () => { _authReadyResolve(); });
 
 const normalizePerfil = (data = {}) => {
   const role = data.role || 'mecanico';
-  const sectorDefault = normalizeSectorValue(data.sectorDefault || DEFAULT_SECTOR);
+  const roleSectorFallback = ROLE_SECTOR_DEFAULT[role] || DEFAULT_SECTOR;
+  const sectorDefault = normalizeSectorValue(data.sectorDefault || roleSectorFallback);
   const sectoresAsignados = sanitizeSectorList(data.sectoresAsignados, sectorDefault);
 
   let alcance = data.alcance || (role === 'admin' ? 'global' : 'sector');
   if (role !== 'admin' && alcance === 'global') alcance = 'sector';
 
-  const jefeDeSectores = role === 'jefe_sector'
+  const jefeDeSectores = isJefeRole(role)
     ? sanitizeSectorList(data.jefeDeSectores?.length ? data.jefeDeSectores : [sectorDefault], sectorDefault)
     : [];
 

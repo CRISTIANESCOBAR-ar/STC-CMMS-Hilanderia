@@ -655,7 +655,7 @@ const seleccionarAccionRapida = (accion) => {
         ></div>
 
         <!-- Acciones Fijas (Bottom Bar Compacta e Integrada) -->
-        <div class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2 sm:px-3">
+        <div class="fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2 sm:px-3">
           <div
             class="max-w-sm mx-auto bg-white border border-gray-200 shadow-[0_-10px_35px_rgba(15,23,42,0.14)] overflow-hidden transition-all duration-200"
             :class="menuAccionesAbierto ? 'rounded-[1.75rem]' : 'rounded-[1.4rem]'"

@@ -99,6 +99,14 @@ onMounted(async () => {
       await nextTick();
       maquinaSeleccionadaId.value = q.maqId;
       if (q.obs) observaciones.value = q.obs;
+      // Precargar síntoma por nombre (ej: "Corte de trama" desde Roturas)
+      if (q.sintomaName) {
+        await nextTick();
+        const match = todosSintomas.value.find(
+          s => s.nombre?.toLowerCase() === q.sintomaName.toLowerCase()
+        );
+        if (match) sintomaSeleccionado.value = match;
+      }
       await nextTick();
       isPreloading.value = false;
     } else {
@@ -457,6 +465,11 @@ const onSubmit = async () => {
     if (isConfirmed) {
       await compartirWhatsApp(shareData, shareImageFile);
     }
+
+    // Si viene de roturas, volver automáticamente
+    if (route.query.origen === 'roturas') {
+      router.push('/patrulla/roturas');
+    }
   } catch (error) {
     Swal.fire({ icon: 'error', title: 'Error al registrar', text: error.message || 'Error desconocido' });
   } finally { isSubmitting.value = false; }
@@ -465,6 +478,15 @@ const onSubmit = async () => {
 
 <template>
   <div class="bg-transparent pb-40">
+
+    <!-- Botón volver a Roturas (solo si viene de ahí) -->
+    <div v-if="route.query.origen === 'roturas'" class="max-w-sm mx-auto px-4 pt-2">
+      <button type="button" @click="router.push('/patrulla/roturas')"
+        class="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 active:scale-95 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Volver a Control de Roturas
+      </button>
+    </div>
 
     <main class="max-w-sm mx-auto pt-2">
 

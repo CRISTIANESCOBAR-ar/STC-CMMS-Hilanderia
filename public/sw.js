@@ -1,15 +1,10 @@
-const CACHE_NAME = 'cmms-cache-v4';
+const CACHE_NAME = 'cmms-cache-v5';
 
 self.addEventListener('install', event => {
-  // Comentado intencionalmente: NO usar self.skipWaiting() aquí.
-  // Esto permite que el Service Worker pase al estado "waiting", 
-  // lo cual detona el evento en LoginView para mostrar el cartel verde de "Actualización Disponible".
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(['/', '/index.html']).catch(() => {
-      // En entornos con red inestable no queremos abortar la instalacion del SW.
-    });
-  })());
+  // No precachear nada - solo activar rápido.
+  // Los assets con hash se cachean en fetch. El HTML nunca se cachea
+  // para evitar servir versiones viejas.
+  event.waitUntil(caches.open(CACHE_NAME));
 });
 
 self.addEventListener('activate', event => {
@@ -28,29 +23,42 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
-  // Estrategia: Network First con fallback robusto.
-  event.respondWith((async () => {
-    try {
-      const networkResponse = await fetch(event.request);
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(event.request, networkResponse.clone()).catch(() => {});
-      return networkResponse;
-    } catch (error) {
-      const cachedResponse = await caches.match(event.request);
-      if (cachedResponse) return cachedResponse;
+  const url = new URL(event.request.url);
 
-      if (event.request.mode === 'navigate') {
-        const appShell = await caches.match('/index.html');
-        if (appShell) return appShell;
-      }
+  // NUNCA cachear el HTML (navegación) - siempre ir a la red.
+  // Esto evita que el SW sirva una versión vieja de la app.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/index.html') || new Response('Sin conexión', { status: 503 }))
+    );
+    return;
+  }
 
-      return new Response('Sin conexion', {
-        status: 503,
-        statusText: 'Offline',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-      });
-    }
-  })());
+  // Assets con hash inmutables (/assets/xxx-HASH.js) → Cache First
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(resp => {
+          const clone = resp.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone)).catch(() => {});
+          return resp;
+        });
+      })
+    );
+    return;
+  }
+
+  // Todo lo demás: Network First
+  event.respondWith(
+    fetch(event.request)
+      .then(resp => {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, clone)).catch(() => {});
+        return resp;
+      })
+      .catch(() => caches.match(event.request).then(c => c || new Response('Sin conexión', { status: 503 })))
+  );
 });
 
 self.addEventListener('message', (event) => {

@@ -140,8 +140,29 @@ async function verificarUmbral(telar, campo, valor) {
   }
 }
 
-// ── Solicitar intervención → navegar a /llamar con datos precargados ────
-function solicitarIntervencion(telar) {
+// ── Solicitar intervención → guardar ronda + navegar a /llamar con datos precargados ──
+async function solicitarIntervencion(telar) {
+  // Guardar ronda en Firestore antes de salir para no perder datos
+  if (patrullaId.value && tieneRegistros.value) {
+    try {
+      const datos = {};
+      for (const [maqId, vals] of Object.entries(registros.value)) {
+        const roU = parseFloat(vals.roU);
+        const roT = parseFloat(vals.roT);
+        if (!isNaN(roU) || !isNaN(roT)) {
+          datos[maqId] = {
+            roU: isNaN(roU) ? null : roU,
+            roT: isNaN(roT) ? null : roT,
+            hora: vals.hora || new Date().toISOString(),
+          };
+        }
+      }
+      await guardarRondaRoturas(patrullaId.value, rondaSeleccionada.value, datos);
+    } catch (e) {
+      console.warn('Auto-save ronda antes de navegar:', e);
+    }
+  }
+
   const r = registros.value[telar.id];
   const roU = r ? r.roU : '';
   const roT = r ? r.roT : '';
@@ -158,7 +179,8 @@ function solicitarIntervencion(telar) {
       tipo: 'TELAR',
       grp: String(telar.grp_tear || '').trim(),
       obs,
-      origen: 'patrulla',
+      sintomaName: 'Corte de trama',
+      origen: 'roturas',
     },
   });
 }

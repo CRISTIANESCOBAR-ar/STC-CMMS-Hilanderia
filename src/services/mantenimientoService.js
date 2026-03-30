@@ -24,7 +24,8 @@ export const mantenimientoService = {
 
       if (foto) {
         // Generar un nombre único para la imagen
-        const fileName = `${Date.now()}_${foto.name.replace(/\s+/g, '_')}`;
+        const safeName = (foto.name || 'foto.jpg').replace(/\s+/g, '_');
+        const fileName = `${Date.now()}_${safeName}`;
         const storageRef = ref(storage, `novedades/${fileName}`);
         
         try {

@@ -35,7 +35,8 @@ export const intervencionService = {
     }
 
     return new Promise((resolve, reject) => {
-      const fileName = `${Date.now()}_${foto.name.replace(/\s+/g, '_')}`;
+      const safeName = (foto.name || 'foto.jpg').replace(/\s+/g, '_');
+      const fileName = `${Date.now()}_${safeName}`;
       const fileRef = storageRef(storage, `intervenciones/${fileName}`);
       const uploadTask = uploadBytesResumable(fileRef, foto);
 

@@ -9,6 +9,8 @@ import { cargarPatrullaActiva, crearPatrulla, guardarRondaTrama } from '../servi
 import Swal from 'sweetalert2';
 import { Save, Loader2, ChevronDown, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 
+const emit = defineEmits(['completada']);
+
 // ── Estado ───────────────────────────────────────────────────────
 const telares = ref([]);
 const registros = ref({});  // { maq_id: { defectos: [], sinDefectos: false, metros: '', hora: null } }
@@ -33,7 +35,7 @@ const telaresOrdenados = computed(() => {
   if (grupoSeleccionado.value) {
     list = list.filter(t => String(t.grp_tear || '').trim() === grupoSeleccionado.value);
   }
-  return list.sort((a, b) => (a.local_fisico || 0) - (b.local_fisico || 0));
+  return list.sort((a, b) => (a.orden_patrulla || 999) - (b.orden_patrulla || 999));
 });
 
 const gruposDisponibles = computed(() => {
@@ -132,6 +134,7 @@ async function guardarYCerrar() {
         }
       }
       await guardarRondaTrama(patrullaId.value, datos);
+      emit('completada');
     } catch (e) {
       console.error('Error guardando trama:', e);
       Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar.' });

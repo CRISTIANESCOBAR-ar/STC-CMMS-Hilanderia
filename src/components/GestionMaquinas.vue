@@ -52,10 +52,11 @@ const normalizeMachineRecord = (maquina = {}) => ({
   sector: normalizeSectorValue(maquina.sector || DEFAULT_SECTOR),
   activo: maquina.activo ?? true,
   grp_tear: maquina.grp_tear ?? '',
-  g_cmest: maquina.g_cmest ?? ''
+  g_cmest: maquina.g_cmest ?? '',
+  orden_patrulla: maquina.orden_patrulla ?? null
 });
 
-const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR, activo: true, grp_tear: '', g_cmest: '' };
+const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR, activo: true, grp_tear: '', g_cmest: '', orden_patrulla: null };
 const form = ref({ ...initialForm });
 
 // Paginación
@@ -338,6 +339,7 @@ const exportMaquinasToExcel = async () => {
     { header: 'ADQUISICION', key: 'adquisicion', width: 15 },
     { header: 'GRP_TEAR', key: 'grp_tear', width: 12 },
     { header: 'G_CMEST', key: 'g_cmest', width: 12 },
+    { header: 'ORD_PATRULLA', key: 'orden_patrulla', width: 14 },
   ];
 
   filteredMaquinas.value.forEach(m => {
@@ -354,6 +356,7 @@ const exportMaquinasToExcel = async () => {
       adquisicion: m.adquisicion?.toDate?.()?.toLocaleDateString('es-AR') || '---',
       grp_tear: m.grp_tear || '---',
       g_cmest: m.g_cmest || '---',
+      orden_patrulla: m.orden_patrulla ?? '---',
     });
   });
 
@@ -762,6 +765,9 @@ const exportCatalogToExcel = async () => {
                   <span class="px-2 py-0.5 text-[10px] font-black rounded border bg-amber-50 text-amber-700 border-amber-200">
                     CMEST: {{ m.g_cmest || '---' }}
                   </span>
+                  <span v-if="m.orden_patrulla" class="px-2 py-0.5 text-[10px] font-black rounded border bg-violet-50 text-violet-700 border-violet-200">
+                    PAT: {{ m.orden_patrulla }}
+                  </span>
                 </div>
                 <!-- Badge Activo -->
                 <div class="pt-1">
@@ -818,6 +824,7 @@ const exportCatalogToExcel = async () => {
                   <th class="px-4 py-4 bg-gray-50 w-30">Serie</th>
                   <th class="px-4 py-4 bg-gray-50 w-24">GRP_TEAR</th>
                   <th class="px-4 py-4 bg-gray-50 w-24">G_CMEST</th>
+                  <th class="px-4 py-4 bg-gray-50 w-20">Ord.Pat.</th>
                   <th class="px-4 py-4 bg-gray-50 w-28 text-center">Activo</th>
                   <th v-if="userRole === 'admin'" class="px-4 py-4 text-center bg-gray-50 w-25">Acciones</th>
                 </tr>
@@ -842,6 +849,7 @@ const exportCatalogToExcel = async () => {
                     <td class="px-4 py-3"><input v-model="editingRow.nro_serie" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.grp_tear" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
                     <td class="px-4 py-3"><input v-model="editingRow.g_cmest" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                    <td class="px-4 py-3"><input v-model.number="editingRow.orden_patrulla" type="number" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" placeholder="—" /></td>
                     <!-- Toggle activo edición inline -->
                     <td class="px-4 py-3 text-center">
                       <button type="button" @click="editingRow.activo = !editingRow.activo" class="flex items-center gap-2 mx-auto">
@@ -869,6 +877,7 @@ const exportCatalogToExcel = async () => {
                     <td class="px-4 py-4 text-gray-500 text-sm">{{ m.nro_serie || '—' }}</td>
                     <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.grp_tear || '—' }}</td>
                     <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.g_cmest || '—' }}</td>
+                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.orden_patrulla ?? '—' }}</td>
                     <!-- Columna Activo (solo lectura / toggle admin) -->
                     <td class="px-4 py-4 text-center">
                       <button
@@ -1019,6 +1028,12 @@ const exportCatalogToExcel = async () => {
             <div class="space-y-1.5">
               <label class="text-xs font-bold text-gray-400 ml-1">G_CMEST</label>
               <input v-model="form.g_cmest" type="text" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-gray-400 ml-1">Orden Patrulla</label>
+              <input v-model.number="form.orden_patrulla" type="number" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-md text-base outline-none" placeholder="Sin asignar" />
             </div>
           </div>
           <!-- Toggle Activo en Modal (estilo "Crítico") -->

@@ -21,6 +21,7 @@ const routes = [
   { path: '/intervenciones/:id', component: () => import('./components/IntervencionDetalle.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla/:sub', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
+  { path: '/calidad', component: () => import('./components/CalidadSala.vue'), meta: { requiresAuth: true } },
 ]
 
 export const router = createRouter({

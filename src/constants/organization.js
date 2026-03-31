@@ -203,45 +203,53 @@ export const ROLE_QUICK_ACTIONS = {
   supervisor: [
     { id: 'reportar',       icon: 'AlertTriangle',  label: 'Reportar Falla',   action: 'stay' },
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'historico',      icon: 'History',         label: 'Historial',        route: '/historico' },
   ],
   supervisor_mecanico: [
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'historico',      icon: 'History',         label: 'Historial',        route: '/historico' },
   ],
   supervisor_electrico: [
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'historico',      icon: 'History',         label: 'Historial',        route: '/historico' },
   ],
   jefe_sector: [
     { id: 'jefe',           icon: 'ShieldCheck',    label: 'Panel Control',    route: '/jefe' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'maquinas',       icon: 'Settings2',      label: 'Máquinas',         route: '/maquinas' },
   ],
   jefe_electricos: [
     { id: 'jefe',           icon: 'ShieldCheck',    label: 'Panel Control',    route: '/jefe' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'maquinas',       icon: 'Settings2',      label: 'Máquinas',         route: '/maquinas' },
   ],
   jefe_produccion: [
     { id: 'jefe',           icon: 'ShieldCheck',    label: 'Panel Control',    route: '/jefe' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'maquinas',       icon: 'Settings2',      label: 'Máquinas',         route: '/maquinas' },
   ],
   gerente_produccion: [
     { id: 'jefe',           icon: 'ShieldCheck',    label: 'Panel Control',    route: '/jefe' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'historico',      icon: 'History',         label: 'Historial',        route: '/historico' },
     { id: 'maquinas',       icon: 'Settings2',      label: 'Máquinas',         route: '/maquinas' },
   ],
   admin: [
     { id: 'jefe',           icon: 'ShieldCheck',    label: 'Panel Control',    route: '/jefe' },
+    { id: 'calidad',        icon: 'ClipboardCheck', label: 'Calidad Sala',     route: '/calidad' },
     { id: 'llamar',         icon: 'BellRing',       label: 'Solicitar Intv.',  route: '/llamar' },
     { id: 'intervenciones', icon: 'ClipboardList',  label: 'Intervenciones',   route: '/intervenciones' },
     { id: 'usuarios',       icon: 'Users',          label: 'Usuarios',         route: '/usuarios' },
@@ -262,4 +270,16 @@ export const DEFECTOS_TRAMA = [
   { id: 'hilo_fino',       label: 'Hilo fino' },
   { id: 'mancha_aceite',   label: 'Mancha de aceite' },
   { id: 'trama_faltante',  label: 'Trama faltante' },
+];
+
+// ── Estados de Telar para Rondas de Paro/Defecto (2, 4, 5) ──────
+export const ESTADOS_TELAR = [
+  { id: 'trabajando',      label: 'Trabajando',         icon: '✓', color: 'emerald' },
+  { id: 'paro_mecanico',   label: 'Paro Mecánico',      icon: '🔧', color: 'red' },
+  { id: 'paro_electrico',  label: 'Paro Eléctrico',     icon: '⚡', color: 'amber' },
+  { id: 'cambio_articulo', label: 'Cambio de Artículo',  icon: '🔄', color: 'blue' },
+  { id: 'sin_urdido',      label: 'Sin Urdido',         icon: '⏸', color: 'purple' },
+  { id: 'paro_calidad',    label: 'Paro por Calidad',   icon: '🛑', color: 'rose' },
+  { id: 'mantenimiento',   label: 'Mantenimiento Prev.', icon: '🛠', color: 'cyan' },
+  { id: 'otro',            label: 'Otro',               icon: '•',  color: 'gray' },
 ];

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cmms-cache-v5';
+const CACHE_NAME = 'cmms-cache-v6';
 
 self.addEventListener('install', event => {
   // No precachear nada - solo activar rápido.

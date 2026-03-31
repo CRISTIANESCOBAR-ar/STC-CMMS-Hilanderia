@@ -169,9 +169,14 @@ const pageTitle = computed(() => {
   if (path === '/sintomas')  return 'Síntomas de Tejeduría';
   if (path === '/login') return 'Ingreso al Sistema';
   if (path === '/patrulla') return 'Patrulla de Calidad';
-  if (path.startsWith('/patrulla/roturas')) return 'Control de Roturas';
-  if (path.startsWith('/patrulla/trama')) return 'Prueba Trama Negra';
-  if (path.startsWith('/patrulla/seguimiento')) return 'Seguimiento Defectos';
+  if (path.startsWith('/patrulla/roturas')) return 'R1 — ROTURAS';
+  if (path.startsWith('/patrulla/paro2')) return 'R2 — PAROS / DEFECTOS';
+  if (path.startsWith('/patrulla/trama')) return 'R3 — TRAMA NEGRA';
+  if (path.startsWith('/patrulla/paro4')) return 'R4 — PAROS / DEFECTOS';
+  if (path.startsWith('/patrulla/paro5')) return 'R5 — PAROS / DEFECTOS';
+  if (path.startsWith('/patrulla/roturas6')) return 'R6 — ROTURAS';
+  if (path.startsWith('/patrulla/seguimiento')) return 'R7 — EVALUACIÓN';
+  if (path === '/calidad') return 'CALIDAD DE SALA';
   return 'CMMS STC';
 });
 
@@ -258,7 +263,7 @@ const navigateTab = (action) => {
             class="font-bold tracking-tight"
             :class="router.currentRoute.value.path === '/llamar'
               ? 'text-xl uppercase'
-              : 'text-lg truncate max-w-37.5 sm:max-w-none'"
+              : 'text-lg sm:max-w-none'"
           >
             {{ pageTitle }}
           </span>

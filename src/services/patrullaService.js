@@ -62,6 +62,24 @@ export async function cargarPatrullaActiva(inspectorUid) {
 }
 
 /**
+ * Carga TODAS las patrullas activas del turno actual (para vista de calidad global).
+ */
+export async function cargarPatrullasTurnoActual() {
+  const hoy = new Date();
+  const fechaStr = hoy.toISOString().slice(0, 10);
+  const turno = getTurnoActual(hoy);
+
+  const q = query(
+    collection(db, COL_PATRULLAS),
+    where('fecha', '==', fechaStr),
+    where('turno', '==', turno),
+    where('estado', '==', 'en_curso'),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+/**
  * Crea una nueva patrulla para el turno actual.
  */
 export async function crearPatrulla({ inspectorUid, inspectorNombre, sector }) {
@@ -81,7 +99,42 @@ export async function crearPatrulla({ inspectorUid, inspectorNombre, sector }) {
 }
 
 /**
- * Guarda los datos de una ronda de roturas dentro de una patrulla existente.
+ * Auto-guardado parcial: guarda datos sin marcar completada.
+ */
+export async function guardarRondaParcial(patrullaId, rondaKey, datos) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}.tipo`]: 'roturas',
+    [`rondas.${rondaKey}.datos`]: datos,
+    [`rondas.${rondaKey}.ultimoGuardado`]: new Date().toISOString(),
+  });
+}
+
+/**
+ * Auto-guardado parcial genérico (paro_defecto u otro tipo).
+ */
+export async function guardarRondaParcialGenerico(patrullaId, rondaKey, tipo, datos) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}.tipo`]: tipo,
+    [`rondas.${rondaKey}.datos`]: datos,
+    [`rondas.${rondaKey}.ultimoGuardado`]: new Date().toISOString(),
+  });
+}
+
+/**
+ * Marca el inicio de una ronda (timestamp).
+ */
+export async function iniciarRonda(patrullaId, rondaKey, tipo) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}.tipo`]: tipo,
+    [`rondas.${rondaKey}.horaInicio`]: new Date().toISOString(),
+  });
+}
+
+/**
+ * Guarda los datos de una ronda de roturas y marca como completada.
  * @param {string} patrullaId
  * @param {string} rondaKey - 'ronda_1' | 'ronda_6'
  * @param {Object} datos - { maq_id: { roU: number, roT: number }, ... }
@@ -108,6 +161,21 @@ export async function guardarRondaTrama(patrullaId, datos) {
   await updateDoc(ref, {
     ['rondas.ronda_3']: {
       tipo: 'trama_negra',
+      completada: true,
+      hora: new Date().toISOString(),
+      datos,
+    },
+  });
+}
+
+/**
+ * Guarda datos de una ronda de paro/defecto y marca completada.
+ */
+export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}`]: {
+      tipo: 'paro_defecto',
       completada: true,
       hora: new Date().toISOString(),
       datos,

@@ -182,3 +182,33 @@ export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos) {
     },
   });
 }
+
+/**
+ * Guarda datos de una ronda de eficiencia y marca completada.
+ * @param {string} patrullaId
+ * @param {string} rondaKey - 'ronda_e1' | 'ronda_e2' | 'ronda_e3'
+ * @param {Object} datos - { maq_id: { eficiencia: number, hora: string }, ... }
+ */
+export async function guardarRondaEficiencia(patrullaId, rondaKey, datos) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}`]: {
+      tipo: 'eficiencia',
+      completada: true,
+      hora: new Date().toISOString(),
+      datos,
+    },
+  });
+}
+
+/**
+ * Auto-guardado parcial de eficiencia (sin marcar completada).
+ */
+export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}.tipo`]: 'eficiencia',
+    [`rondas.${rondaKey}.datos`]: datos,
+    [`rondas.${rondaKey}.ultimoGuardado`]: new Date().toISOString(),
+  });
+}

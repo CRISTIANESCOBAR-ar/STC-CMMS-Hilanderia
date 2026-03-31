@@ -8,7 +8,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare, Wrench, Zap, Filter, Sparkles, Copy, ChevronUp, ChevronDown, TrendingUp, RefreshCw, Calendar } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
-import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue, sanitizeSectorList, isJefeRole, ROLE_SECTOR_DEFAULT } from '../constants/organization';
+import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue, sanitizeSectorList, isJefeRole, ROLE_SECTOR_DEFAULT, TURNOS } from '../constants/organization';
 import { Building2 } from 'lucide-vue-next';
 
 // Hora del build incrustada por Vite (definida en `vite.config.js` como __BUILD_TIME__)
@@ -71,6 +71,10 @@ const execError = ref(false);
 const execFromCache = ref(false);
 const execCollapsed = ref(false);
 const execPeriodo = ref(7);
+const execModo = ref('preset');  // 'preset' | 'custom'
+const execFechaDesde = ref('');
+const execFechaHasta = ref('');
+const execTurno = ref('');  // '' = todos, 'A', 'B', 'C'
 
 let authUnsubscribe = null;
 let timeoutId = null;
@@ -239,7 +243,13 @@ const cargarResumenEjecutivo = async (forceRegenerate = false) => {
   isExecLoading.value = true;
   execError.value = false;
   try {
-    const response = await aiService.generarResumenEjecutivo(forceRegenerate, execPeriodo.value, sectoresVisibles.value);
+    const opts = {};
+    if (execModo.value === 'custom' && execFechaDesde.value && execFechaHasta.value) {
+      opts.fechaDesde = execFechaDesde.value;
+      opts.fechaHasta = execFechaHasta.value;
+    }
+    if (execTurno.value) opts.turno = execTurno.value;
+    const response = await aiService.generarResumenEjecutivo(forceRegenerate, execPeriodo.value, sectoresVisibles.value, opts);
     execSummaryRaw.value = response.text;
     execSummary.value = formatMarkdown(response.text);
     execFromCache.value = response.fromCache;
@@ -320,7 +330,7 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
       </div>
     </Teleport>
 
-    <main class="px-4 max-w-5xl mx-auto pt-4 lg:pt-8">
+    <main class="px-2 max-w-5xl mx-auto pt-2 lg:pt-4">
       
       <!-- Estado de Carga (Solo si no hay datos) -->
       <div v-if="isLoading && novedades.length === 0" class="text-center py-20 flex flex-col items-center animate-in fade-in duration-500">
@@ -347,7 +357,7 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
       </div>
 
       <!-- Panel de Inteligencia Artificial -->
-      <div v-if="novedades.length > 0 && !errorCarga" class="mb-8 bg-linear-to-r from-indigo-50 to-purple-50 rounded-3xl p-4 md:p-6 lg:mx-8 border border-indigo-100 shadow-sm relative overflow-hidden">
+      <div v-if="novedades.length > 0 && !errorCarga" class="mb-4 bg-linear-to-r from-indigo-50 to-purple-50 rounded-xl p-3 md:p-4 border border-indigo-100 shadow-sm relative overflow-hidden">
          <div class="absolute top-0 right-0 p-4 opacity-10">
             <Sparkles class="w-24 h-24 text-indigo-600" />
          </div>
@@ -410,26 +420,50 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
       </div>
 
       <!-- Panel Resumen Ejecutivo Semanal -->
-      <div v-if="!errorCarga" class="mb-8 bg-linear-to-r from-emerald-50 to-teal-50 rounded-3xl p-4 md:p-6 lg:mx-8 border border-emerald-100 shadow-sm relative overflow-hidden">
+      <div v-if="!errorCarga" class="mb-4 bg-linear-to-r from-emerald-50 to-teal-50 rounded-xl p-3 md:p-4 border border-emerald-100 shadow-sm relative overflow-hidden">
          <div class="absolute top-0 right-0 p-4 opacity-10">
             <TrendingUp class="w-24 h-24 text-emerald-600" />
          </div>
          
-         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-emerald-100/50 pb-2">
+         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-emerald-100/50 pb-2 flex-wrap gap-2">
            <h3 class="flex items-center text-lg md:text-xl font-black text-emerald-900 truncate pr-2" @click="execCollapsed = !execCollapsed">
              <TrendingUp class="w-5 h-5 md:w-6 md:h-6 mr-1.5 md:mr-2 text-emerald-600 shrink-0" /> 
              <span class="truncate cursor-pointer select-none hover:opacity-80 transition-opacity">Informe Ejecutivo</span>
-             <span class="ml-2 text-xs font-bold bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">{{ execPeriodo }}d</span>
+             <span class="ml-2 text-xs font-bold bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
+               {{ execModo === 'custom' && execFechaDesde && execFechaHasta ? 'Personalizado' : execPeriodo + 'd' }}
+             </span>
+             <span v-if="execTurno" class="ml-1 text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shrink-0">T{{ execTurno }}</span>
            </h3>
            
-           <div class="flex items-center gap-1.5 shrink-0">
-             <!-- Selector de período -->
+           <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
+             <!-- Selector de período preset -->
              <div v-if="!isExecLoading" class="flex items-center bg-white rounded-lg border border-emerald-200 shadow-sm overflow-hidden">
                <button v-for="p in [7, 15, 30]" :key="p" 
-                 @click="execPeriodo = p; cargarResumenEjecutivo(true)"
-                 :class="execPeriodo === p ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
+                 @click="execModo = 'preset'; execPeriodo = p; cargarResumenEjecutivo(true)"
+                 :class="execModo === 'preset' && execPeriodo === p ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
                  class="px-2 py-1 text-[10px] font-black transition">
                  {{ p }}d
+               </button>
+               <button 
+                 @click="execModo = execModo === 'custom' ? 'preset' : 'custom'"
+                 :class="execModo === 'custom' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
+                 class="px-2 py-1 text-[10px] font-black transition flex items-center gap-0.5">
+                 <Calendar class="w-3 h-3" /> Rango
+               </button>
+             </div>
+
+             <!-- Filtro de turno -->
+             <div v-if="!isExecLoading" class="flex items-center bg-white rounded-lg border border-emerald-200 shadow-sm overflow-hidden">
+               <button @click="execTurno = ''; cargarResumenEjecutivo(true)"
+                 :class="!execTurno ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
+                 class="px-2 py-1 text-[10px] font-black transition">
+                 Todos
+               </button>
+               <button v-for="t in TURNOS" :key="t.id"
+                 @click="execTurno = t.id; cargarResumenEjecutivo(true)"
+                 :class="execTurno === t.id ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
+                 class="px-2 py-1 text-[10px] font-black transition">
+                 T{{ t.id }}
                </button>
              </div>
              
@@ -460,10 +494,31 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
            </div>
          </div>
 
+         <!-- Datepickers para rango personalizado -->
+         <div v-if="execModo === 'custom' && !execCollapsed && !isExecLoading" class="flex flex-wrap items-end gap-3 mb-3 z-10 relative bg-white/60 rounded-xl p-3 border border-emerald-200">
+           <div class="flex-1 min-w-[140px]">
+             <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Desde</label>
+             <input type="date" v-model="execFechaDesde"
+               class="w-full border border-emerald-200 rounded-lg px-3 py-1.5 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none bg-white" />
+           </div>
+           <div class="flex-1 min-w-[140px]">
+             <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Hasta</label>
+             <input type="date" v-model="execFechaHasta"
+               class="w-full border border-emerald-200 rounded-lg px-3 py-1.5 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none bg-white" />
+           </div>
+           <button @click="cargarResumenEjecutivo(true)"
+             :disabled="!execFechaDesde || !execFechaHasta"
+             class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-black rounded-lg transition shadow-sm flex items-center gap-1.5">
+             <TrendingUp class="w-4 h-4" /> Generar
+           </button>
+         </div>
+
          <div v-show="!execCollapsed" class="overflow-hidden transition-all duration-300">
            <div v-if="isExecLoading" class="flex flex-col items-center justify-center py-6 z-10 relative">
              <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-3"></div>
-             <p class="text-xs text-emerald-600 font-bold uppercase tracking-wide">Analizando últimos {{ execPeriodo }} días...</p>
+             <p class="text-xs text-emerald-600 font-bold uppercase tracking-wide">
+               Analizando {{ execModo === 'custom' ? 'rango personalizado' : `últimos ${execPeriodo} días` }}{{ execTurno ? ` · Turno ${execTurno}` : '' }}...
+             </p>
              <p class="text-[10px] text-emerald-400 mt-1">Novedades + Intervenciones</p>
            </div>
            
@@ -484,7 +539,7 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
       </div>
 
       <!-- Título y Filtros SIEMPRE VISIBLES si hay datos cargados (incluso si los filtrados dan 0) -->
-      <div v-if="!errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
+      <div v-if="!errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
         <div class="flex items-center gap-3">
            <h2 class="text-2xl font-black text-gray-800 tracking-tight hidden lg:block">Panel de control</h2>
         </div>
@@ -525,11 +580,11 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
       <!-- Listado con Novedades -->
       <div v-if="!errorCarga && novedadesFiltradas.length > 0">
         <!-- Grid de Novedades -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div 
             v-for="novedad in novedadesFiltradas" 
             :key="novedad.id" 
-            class="rounded-3xl border p-6 shadow-md flex flex-col justify-between transition-transform transform hover:-translate-y-1 relative"
+            class="rounded-xl border p-4 shadow-md flex flex-col justify-between transition-transform transform hover:-translate-y-1 relative"
             :class="getCardColorClass(novedad)">
             
             <!-- Badge Tipo Problema -->
@@ -595,7 +650,7 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
 
     <!-- Modal de Gestión -->
     <div v-if="modalAprobacion" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div class="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+        <div class="bg-white rounded-xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
         <h3 class="text-3xl font-black text-gray-900 mb-2">Gestionar Novedad</h3>
         <p class="text-xl text-gray-500 mb-6">Máquina: <span class="font-black border-b-4 border-orange-400 text-gray-800">{{ novedadActual.numeroMaquina }}</span></p>
         
@@ -605,7 +660,7 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
             <textarea 
               v-model="feedback" 
               rows="4" 
-              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-2xl focus:ring-blue-500 focus:border-blue-500 block p-4 transition shadow-inner" 
+              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-4 transition shadow-inner" 
               placeholder="Ej: Repuestos en pañol, proceder con reparación..."></textarea>
           </div>
 

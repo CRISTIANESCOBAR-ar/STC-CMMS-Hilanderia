@@ -7,7 +7,7 @@ import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR } from '../constants/organization';
 import { loadPatrullaConfig, cargarPatrullaActiva, crearPatrulla, guardarRondaRoturas, guardarRondaParcial } from '../services/patrullaService';
 import { useRouter } from 'vue-router';
-import { Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Share2, CloudUpload } from 'lucide-vue-next';
+import { Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Share2, CloudUpload, Zap } from 'lucide-vue-next';
 import { intervencionService } from '../services/intervencionService';
 
 const props = defineProps({
@@ -32,6 +32,7 @@ const guardando = ref(false);
 const grupoSeleccionado = ref('');
 const telarActivo = ref(null);
 const mensajeToast = ref(null); // { tipo: 'success'|'error', texto: '' }
+const autoEnvio = ref(false); // checkbox de envío automático
 let _toastTimer = null;
 
 // Auto-guardado
@@ -559,6 +560,14 @@ function toggleTelar(telarId) {
 }
 
 function avanzarSiguiente() {
+  // Auto-envío: si el telar actual supera umbral y no fue enviado, enviar automáticamente
+  if (autoEnvio.value && telarActivo.value) {
+    const telarAct = telaresOrdenados.value.find(t => t.id === telarActivo.value);
+    if (telarAct && telarTieneAlerta(telarAct.id) && !enviado.value[telarAct.id] && !enviando.value[telarAct.id]) {
+      enviarIntervencionFocus(telarAct);
+    }
+  }
+
   programarAutoSave();
   const lista = telaresOrdenados.value;
   const idx = lista.findIndex(t => t.id === telarActivo.value);
@@ -659,6 +668,16 @@ function mostrarToast(tipo, texto) {
           <span>·</span>
           <span>{{ telaresOrdenados.length }} telares</span>
         </div>
+        <!-- Auto-envío checkbox -->
+        <label class="flex items-center gap-2 mt-1 cursor-pointer select-none rounded-lg px-2 py-1.5 transition-colors"
+               :class="autoEnvio ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'">
+          <input type="checkbox" v-model="autoEnvio"
+                 class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400 accent-amber-500" />
+          <Zap class="w-3.5 h-3.5" :class="autoEnvio ? 'text-amber-500' : 'text-gray-300'" />
+          <span class="text-[10px] font-bold" :class="autoEnvio ? 'text-amber-700' : 'text-gray-400'">
+            Envío automático al pasar
+          </span>
+        </label>
         <div v-if="rondaSeleccionada === 'ronda_6' && maqIdsRonda1" class="text-[10px] text-blue-600 font-medium bg-blue-50 rounded-lg px-2 py-1">
           Mostrando solo los {{ telaresOrdenados.length }} telares controlados en Ronda 1
         </div>
@@ -732,6 +751,10 @@ function mostrarToast(tipo, texto) {
                 <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
                 Supera umbral — ¿Solicitar intervención?
               </p>
+              <div v-if="autoEnvio" class="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 bg-amber-50 rounded-lg px-2 py-1">
+                <Zap class="w-3 h-3" />
+                Se enviará automáticamente al pasar al siguiente
+              </div>
               <div class="grid grid-cols-2 gap-2">
                 <button @click="enviarIntervencionFocus(t)" :disabled="enviando[t.id]"
                         class="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.97] transition-all shadow-sm disabled:opacity-50">

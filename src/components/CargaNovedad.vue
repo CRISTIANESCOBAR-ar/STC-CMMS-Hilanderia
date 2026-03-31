@@ -7,7 +7,7 @@ import { catalogoService } from '../services/catalogoService';
 import { userProfile, userRole } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList, getQuickActions } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, BellRing, ScanLine, Eye as EyeIcon, ClipboardCheck, Route as RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, BellRing, ScanLine, Eye as EyeIcon, ClipboardCheck, Route as RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users, Gauge } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 
@@ -43,7 +43,7 @@ const maquinasError = ref(false);
 const isCompressing = ref(false);
 const menuAccionesAbierto = ref(false);
 
-const iconMap = { AlertTriangle, BellRing, ScanLine, Eye: EyeIcon, ClipboardCheck, Route: RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users };
+const iconMap = { AlertTriangle, BellRing, ScanLine, Eye: EyeIcon, ClipboardCheck, Route: RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users, Gauge };
 
 const accionesRapidas = computed(() => getQuickActions(userRole.value));
 

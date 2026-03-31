@@ -1,0 +1,433 @@
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { collection, getDocs, query } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { parseShiftReportCSV, transformRows, generarReportePRD } from '../services/shiftReportService';
+import { guardarReporteCSV, guardarRegistro, suscribirReporte } from '../services/shiftReportFirestore';
+import { Upload, Download, Cloud, X, Save, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import Swal from 'sweetalert2';
+
+const isLoading = ref(false);
+const isSaving = ref(false);
+const csvMeta = ref(null);
+const csvLoaded = ref(false);
+const telaresMaquinas = ref([]);
+const telarAbiertoIdx = ref(null); // null = ninguno abierto
+
+const registros = ref({});
+
+const fechaHoy = () => {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+};
+const fechaReporte = ref(fechaHoy());
+
+const fechaInput = computed({
+  get: () => fechaReporte.value.replace(/\//g, '-'),
+  set: (v) => { fechaReporte.value = v.replace(/-/g, '/'); }
+});
+
+let unsubscribeFn = null;
+const pendingSaves = new Set();
+
+function suscribir() {
+  if (unsubscribeFn) unsubscribeFn();
+  unsubscribeFn = suscribirReporte(fechaReporte.value, (data) => {
+    if (data) {
+      const incoming = data.registros || {};
+      const merged = { ...incoming };
+      for (const key of pendingSaves) {
+        if (registros.value[key]) merged[key] = registros.value[key];
+      }
+      registros.value = merged;
+      csvMeta.value = data.csvMeta || null;
+      csvLoaded.value = Object.values(incoming).some(r => r.source === 'csv');
+    } else if (pendingSaves.size === 0) {
+      registros.value = {};
+      csvMeta.value = null;
+      csvLoaded.value = false;
+    }
+  });
+}
+
+onMounted(async () => {
+  try {
+    const snap = await getDocs(query(collection(db, 'maquinas')));
+    telaresMaquinas.value = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m.tipo === 'TELAR' && (m.activo ?? true))
+      .sort((a, b) => (a.orden_patrulla || 999) - (b.orden_patrulla || 999));
+  } catch (e) {
+    console.error('Error cargando telares:', e);
+  }
+  suscribir();
+});
+
+watch(fechaReporte, () => {
+  registros.value = {};
+  csvMeta.value = null;
+  csvLoaded.value = false;
+  telarAbiertoIdx.value = null;
+  suscribir();
+});
+
+onUnmounted(() => { if (unsubscribeFn) unsubscribeFn(); });
+
+// Telar abierto
+const telarAbierto = computed(() => {
+  if (telarAbiertoIdx.value == null) return null;
+  const m = telaresMaquinas.value[telarAbiertoIdx.value];
+  if (!m) return null;
+  const loom = String(m.maquina);
+  return {
+    loom,
+    label: loom.slice(-2).replace(/^0/, ''),
+    turnos: ['A', 'B', 'C'].map(turno => {
+      const key = `${loom}_${turno}`;
+      const r = registros.value[key] || {};
+      return {
+        turno,
+        tieneCSV: r.source === 'csv',
+        rpm: r.rpm ?? null,
+        picks: r.picks ?? null,
+        weftCount: r.weftCount ?? null,
+        warpCount: r.warpCount ?? null,
+        otherCount: r.otherCount ?? null,
+      };
+    })
+  };
+});
+
+function toggleTelar(idx) {
+  telarAbiertoIdx.value = telarAbiertoIdx.value === idx ? null : idx;
+}
+function cerrarTelar() {
+  telarAbiertoIdx.value = null;
+}
+function navTelar(dir) {
+  const next = telarAbiertoIdx.value + dir;
+  if (next >= 0 && next < telaresMaquinas.value.length) telarAbiertoIdx.value = next;
+}
+
+// Resumen para lista
+const telaresResumen = computed(() => {
+  return telaresMaquinas.value.map((m, idx) => {
+    const loom = String(m.maquina);
+    let tieneData = false;
+    for (const turno of ['A', 'B', 'C']) {
+      const r = registros.value[`${loom}_${turno}`];
+      if (r && (r.source === 'csv' || r.rpm != null || r.picks != null)) { tieneData = true; break; }
+    }
+    return { idx, loom, label: loom.slice(-2).replace(/^0/, ''), ordenPatrulla: m.orden_patrulla || idx + 1, tieneData };
+  });
+});
+
+// PRD export
+const todosRegistrosMerged = computed(() => {
+  const result = [];
+  for (const turno of ['A', 'B', 'C']) {
+    telaresMaquinas.value.forEach(m => {
+      const loom = String(m.maquina);
+      const r = registros.value[`${loom}_${turno}`] || {};
+      result.push({ loom, turno, fecha: fechaReporte.value, rpm: r.rpm ?? null, picks: r.picks ?? 0, weftCount: r.weftCount ?? 0, warpCount: r.warpCount ?? 0, otherCount: r.otherCount ?? 0 });
+    });
+  }
+  return result;
+});
+
+// Stats
+const stats = computed(() => {
+  const total = telaresMaquinas.value.length;
+  let conCSV = 0, conRpm = 0, rotTotal = 0;
+  for (const m of telaresMaquinas.value) {
+    const loom = String(m.maquina);
+    let loomCSV = false, loomRpm = false;
+    for (const turno of ['A', 'B', 'C']) {
+      const r = registros.value[`${loom}_${turno}`];
+      if (r?.source === 'csv') loomCSV = true;
+      if (r?.rpm) loomRpm = true;
+      rotTotal += (r?.weftCount || 0) + (r?.warpCount || 0) + (r?.otherCount || 0);
+    }
+    if (loomCSV) conCSV++;
+    if (loomRpm) conRpm++;
+  }
+  return { total, sinCSV: total - conCSV, sinRpm: total - conRpm, rotTotal };
+});
+
+// Input manual — sin debounce, guardado explícito con botón
+function getVal(loom, turno, field) {
+  const key = `${loom}_${turno}`;
+  return registros.value[key]?.[field] ?? null;
+}
+
+function setVal(loom, turno, field, value) {
+  const key = `${loom}_${turno}`;
+  if (!registros.value[key]) {
+    registros.value[key] = { loom, turno, rpm: null, picks: null, weftCount: null, warpCount: null, otherCount: null, style: '', beam: '', source: 'manual' };
+  }
+  const num = parseInt(value, 10);
+  registros.value[key] = { ...registros.value[key], [field]: isNaN(num) ? null : num };
+}
+
+// Auto-advance: salta al próximo input cuando se completa maxlength
+// Orden de campos por turno: picks(3), weftCount(2), warpCount(2), otherCount(2), rpm(3)
+// Flujo: A_picks → A_weft → A_warp → A_other → A_rpm → B_picks → ... → C_rpm → Guardar
+const fieldOrder = [
+  { turno: 'A', field: 'picks', max: 3 }, { turno: 'A', field: 'weftCount', max: 2 }, { turno: 'A', field: 'warpCount', max: 2 }, { turno: 'A', field: 'otherCount', max: 2 }, { turno: 'A', field: 'rpm', max: 3 },
+  { turno: 'B', field: 'picks', max: 3 }, { turno: 'B', field: 'weftCount', max: 2 }, { turno: 'B', field: 'warpCount', max: 2 }, { turno: 'B', field: 'otherCount', max: 2 }, { turno: 'B', field: 'rpm', max: 3 },
+  { turno: 'C', field: 'picks', max: 3 }, { turno: 'C', field: 'weftCount', max: 2 }, { turno: 'C', field: 'warpCount', max: 2 }, { turno: 'C', field: 'otherCount', max: 2 }, { turno: 'C', field: 'rpm', max: 3 },
+];
+
+function onInput(ev, loom, turno, field, maxLen) {
+  // Solo dígitos, limitar a maxLen
+  const cleaned = ev.target.value.replace(/\D/g, '').slice(0, maxLen);
+  ev.target.value = cleaned;
+  setVal(loom, turno, field, cleaned);
+
+  if (cleaned.length >= maxLen) {
+    const curIdx = fieldOrder.findIndex(f => f.turno === turno && f.field === field);
+    if (curIdx === -1) return;
+
+    for (let i = curIdx + 1; i < fieldOrder.length; i++) {
+      const next = fieldOrder[i];
+      const val = getVal(loom, next.turno, next.field);
+      if (val == null) {
+        nextTick(() => {
+          const el = document.querySelector(`[data-sr="${next.turno}_${next.field}"]`);
+          if (el) el.focus();
+        });
+        return;
+      }
+    }
+    // Todos completos → foco en Guardar
+    nextTick(() => {
+      const btn = document.querySelector('[data-sr-save]');
+      if (btn) btn.focus();
+    });
+  }
+}
+
+async function guardarTelar() {
+  if (!telarAbierto.value) return;
+  const loom = telarAbierto.value.loom;
+  isSaving.value = true;
+  try {
+    for (const turno of ['A', 'B', 'C']) {
+      const key = `${loom}_${turno}`;
+      if (registros.value[key]) {
+        pendingSaves.add(key);
+        await guardarRegistro(fechaReporte.value, loom, turno, registros.value[key]);
+        pendingSaves.delete(key);
+      }
+    }
+    Swal.fire({ icon: 'success', title: 'Guardado', timer: 1200, showConfirmButton: false });
+    // Saltar al siguiente telar o cerrar si es el último
+    const nextIdx = telarAbiertoIdx.value + 1;
+    if (nextIdx < telaresMaquinas.value.length) {
+      telarAbiertoIdx.value = nextIdx;
+    } else {
+      telarAbiertoIdx.value = null;
+    }
+  } catch (e) {
+    console.error(e);
+    Swal.fire('Error', 'No se pudo guardar', 'error');
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+// CSV
+async function cargarCSV() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    isLoading.value = true;
+    try {
+      const text = await file.text();
+      const { meta, rows } = parseShiftReportCSV(text);
+      const records = transformRows(rows);
+      const fecha = records[0]?.fecha || fechaReporte.value;
+      await guardarReporteCSV(fecha, meta, records);
+      if (fecha !== fechaReporte.value) fechaReporte.value = fecha;
+      const telaresCSV = new Set(records.map(r => r.loom));
+      const telaresMatch = telaresMaquinas.value.filter(m => telaresCSV.has(String(m.maquina))).length;
+      Swal.fire({ icon: 'success', title: 'CSV cargado', text: `${telaresMatch} telar(es) con datos`, timer: 2500, showConfirmButton: false });
+    } catch (err) {
+      Swal.fire('Error', err.message, 'error');
+    } finally { isLoading.value = false; }
+  };
+  input.click();
+}
+
+function exportarPRD() {
+  const merged = todosRegistrosMerged.value;
+  const incompletos = merged.filter(r => !r.rpm);
+  if (incompletos.length > 0) {
+    Swal.fire({ icon: 'warning', title: 'Datos incompletos', html: `<b>${incompletos.length}</b> telar(es) sin RPM.<br>¿Exportar?`, showCancelButton: true, confirmButtonText: 'Exportar', cancelButtonText: 'Cancelar', confirmButtonColor: '#2563eb' }).then(res => { if (res.isConfirmed) descargarTXT(merged); });
+    return;
+  }
+  descargarTXT(merged);
+}
+
+function descargarTXT(records) {
+  const contenido = generarReportePRD(records);
+  const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const parts = (fechaReporte.value || '').split('/');
+  const nombre = parts.length === 3 ? `TD${parts[2]}${parts[1]}${parts[0].slice(2)}.txt` : 'TD_reporte.txt';
+  a.href = url; a.download = nombre; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+<template>
+  <div class="min-h-[calc(100vh-110px)] bg-gray-50 flex flex-col">
+    <main class="flex-1 max-w-4xl mx-auto w-full px-3 pt-3 pb-6 flex flex-col space-y-3 overflow-y-auto">
+
+      <!-- Header compacto -->
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="px-3 py-2 flex items-center gap-2">
+          <input type="date" v-model="fechaInput" class="px-2 py-1.5 rounded-lg border border-gray-300 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500" />
+          <Cloud class="w-4 h-4 shrink-0 transition-colors" :class="isSaving ? 'text-amber-500 animate-pulse' : 'text-emerald-500'" />
+          <div class="flex-1" />
+          <button @click="cargarCSV" :disabled="isLoading" class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 active:scale-95 disabled:opacity-50">
+            <Upload class="w-4 h-4" /> CSV
+          </button>
+        </div>
+
+        <div v-if="csvMeta" class="px-3 py-1.5 bg-blue-50/50 border-t border-blue-100 text-xs font-bold text-blue-700 flex flex-wrap gap-3">
+          <span>{{ csvMeta.generatedAt }}</span>
+          <span>{{ csvMeta.rangoDesde }} → {{ csvMeta.rangoHasta }}</span>
+        </div>
+
+        <!-- Stats -->
+        <div class="px-3 py-2 border-t border-gray-100">
+          <div class="grid grid-cols-4 gap-1.5">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-center">
+              <p class="text-lg font-black text-gray-800">{{ stats.total }}</p>
+              <p class="text-[10px] font-bold text-gray-400 uppercase">Telares</p>
+            </div>
+            <div class="border rounded-lg p-2 text-center" :class="stats.sinCSV ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50 border-emerald-200'">
+              <p class="text-lg font-black" :class="stats.sinCSV ? 'text-orange-700' : 'text-emerald-700'">{{ stats.sinCSV }}</p>
+              <p class="text-[10px] font-bold uppercase" :class="stats.sinCSV ? 'text-orange-500' : 'text-emerald-500'">Sin CSV</p>
+            </div>
+            <div class="border rounded-lg p-2 text-center" :class="stats.sinRpm ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'">
+              <p class="text-lg font-black" :class="stats.sinRpm ? 'text-amber-700' : 'text-emerald-700'">{{ stats.sinRpm }}</p>
+              <p class="text-[10px] font-bold uppercase" :class="stats.sinRpm ? 'text-amber-500' : 'text-emerald-500'">Sin RPM</p>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
+              <p class="text-lg font-black text-red-700">{{ stats.rotTotal }}</p>
+              <p class="text-[10px] font-bold text-red-400 uppercase">Roturas</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de telares con tarjeta expandible -->
+      <div class="space-y-1">
+        <div v-for="t in telaresResumen" :key="t.loom">
+          <!-- Fila del telar -->
+          <button
+            @click="toggleTelar(t.idx)"
+            class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98]"
+            :class="telarAbiertoIdx === t.idx
+              ? 'bg-blue-600 text-white shadow-md'
+              : t.tieneData
+                ? 'bg-emerald-50 border border-emerald-200 text-gray-800'
+                : 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50'"
+          >
+            <div class="flex items-center gap-3">
+              <span class="text-lg font-black" :class="telarAbiertoIdx === t.idx ? 'text-white' : ''">Toyota {{ t.label }}</span>
+              <span v-if="t.tieneData && telarAbiertoIdx !== t.idx" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            </div>
+            <span class="text-xs font-bold" :class="telarAbiertoIdx === t.idx ? 'text-blue-200' : 'text-gray-400'">#{{ t.ordenPatrulla }}</span>
+          </button>
+
+          <!-- Tarjeta de carga (expandida, centrada) -->
+          <div v-if="telarAbiertoIdx === t.idx && telarAbierto" class="mt-1 bg-white rounded-2xl border border-blue-200 shadow-lg overflow-hidden mx-auto max-w-md">
+            <!-- Cabecera tarjeta -->
+            <div class="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-100">
+              <button @click="navTelar(-1)" :disabled="telarAbiertoIdx === 0" class="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90" :class="telarAbiertoIdx === 0 ? 'text-gray-300' : 'text-blue-600 hover:bg-blue-100'">
+                <ChevronLeft class="w-5 h-5" />
+              </button>
+              <span class="text-sm font-black text-blue-800">Telar {{ telarAbierto.label }}</span>
+              <div class="flex items-center gap-1">
+                <button @click="navTelar(1)" :disabled="telarAbiertoIdx === telaresMaquinas.length - 1" class="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90" :class="telarAbiertoIdx === telaresMaquinas.length - 1 ? 'text-gray-300' : 'text-blue-600 hover:bg-blue-100'">
+                  <ChevronRight class="w-5 h-5" />
+                </button>
+                <button @click="cerrarTelar" class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 active:scale-90">
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Tabla compacta -->
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-200">
+                  <th class="px-2 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase w-9">Tur</th>
+                  <th class="px-1 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase">Pts</th>
+                  <th class="px-1 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase">RoT</th>
+                  <th class="px-1 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase">RoU</th>
+                  <th class="px-1 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase">RoO</th>
+                  <th class="px-1 py-1.5 text-center text-[10px] font-black text-gray-400 uppercase">RPM</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-for="row in telarAbierto.turnos" :key="row.turno">
+                  <td class="px-2 py-1 text-center">
+                    <span class="text-xs font-black" :class="row.tieneCSV ? 'text-emerald-600' : 'text-gray-400'">{{ row.turno }}</span>
+                  </td>
+
+                  <td class="px-0.5 py-0.5 text-center">
+                    <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.picks }}</span>
+                    <input v-else :data-sr="`${row.turno}_picks`" type="text" inputmode="numeric" maxlength="3" :value="getVal(telarAbierto.loom, row.turno, 'picks') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'picks', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                  </td>
+
+                  <td class="px-0.5 py-0.5 text-center">
+                    <span v-if="row.tieneCSV" class="text-sm font-bold" :class="row.weftCount > 10 ? 'text-red-600' : 'text-gray-700'">{{ row.weftCount }}</span>
+                    <input v-else :data-sr="`${row.turno}_weftCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'weftCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'weftCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                  </td>
+
+                  <td class="px-0.5 py-0.5 text-center">
+                    <span v-if="row.tieneCSV" class="text-sm font-bold" :class="row.warpCount > 5 ? 'text-red-600' : 'text-gray-700'">{{ row.warpCount }}</span>
+                    <input v-else :data-sr="`${row.turno}_warpCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'warpCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'warpCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                  </td>
+
+                  <td class="px-0.5 py-0.5 text-center">
+                    <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.otherCount }}</span>
+                    <input v-else :data-sr="`${row.turno}_otherCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'otherCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'otherCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                  </td>
+
+                  <td class="px-0.5 py-0.5 text-center">
+                    <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.rpm }}</span>
+                    <input v-else :data-sr="`${row.turno}_rpm`" type="text" inputmode="numeric" maxlength="3" :value="getVal(telarAbierto.loom, row.turno, 'rpm') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'rpm', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Botón guardar siempre visible -->
+            <div class="px-3 py-2 border-t border-gray-100">
+              <button data-sr-save @click="guardarTelar" :disabled="isSaving" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50">
+                <Save class="w-4 h-4" /> Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botón exportar -->
+      <div class="pb-4 pt-2">
+        <button @click="exportarPRD" class="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-base font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-md active:scale-[0.98]">
+          <Download class="w-5 h-5" /> Exportar TXT para PRD
+        </button>
+      </div>
+
+    </main>
+  </div>
+</template>

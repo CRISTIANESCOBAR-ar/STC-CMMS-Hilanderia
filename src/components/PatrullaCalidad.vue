@@ -5,11 +5,12 @@ import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
 import { cargarPatrullaActiva } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2 } from 'lucide-vue-next';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge } from 'lucide-vue-next';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
 import PruebaTramaNegra from './PruebaTramaNegra.vue';
 import SeguimientoRoturas from './SeguimientoRoturas.vue';
+
 
 const router = useRouter();
 const route = useRoute();
@@ -109,6 +110,19 @@ onMounted(async () => {
         </div>
 
         <template v-else>
+          <!-- Card Eficiencia para supervisores -->
+          <div v-if="['supervisor','supervisor_mecanico','admin'].includes(userRole)"
+               @click="router.push('/eficiencia')"
+               class="flex items-center gap-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl px-4 py-3 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-3">
+            <div class="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center">
+              <Gauge class="w-5 h-5 text-violet-600" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-black text-violet-800">Registro de Eficiencia</p>
+              <p class="text-[10px] text-violet-500 font-medium">3 mediciones por turno</p>
+            </div>
+          </div>
+
           <div class="space-y-0 relative">
             <!-- Línea vertical conectora -->
             <div class="absolute left-[19px] top-6 bottom-6 w-0.5 bg-gray-200 z-0"></div>
@@ -212,6 +226,8 @@ onMounted(async () => {
       <template v-else-if="subVista === 'seguimiento'">
         <SeguimientoRoturas @completada="onRondaCompletada" />
       </template>
+
+
     </main>
   </div>
 </template>

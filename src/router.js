@@ -22,6 +22,10 @@ const routes = [
   { path: '/patrulla', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla/:sub', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
   { path: '/calidad', component: () => import('./components/CalidadSala.vue'), meta: { requiresAuth: true } },
+  { path: '/shiftreport', component: () => import('./components/ShiftReport.vue'), meta: { requiresAuth: true } },
+  { path: '/eficiencia', component: () => import('./components/RegistroEficiencia.vue'), meta: { requiresAuth: true } },
+  { path: '/paros-anudado', component: () => import('./components/ParosAnudado.vue'), meta: { requiresAuth: true } },
+  { path: '/operarios', component: () => import('./components/OperariosTejeduria.vue'), meta: { requiresAuth: true } },
 ]
 
 export const router = createRouter({

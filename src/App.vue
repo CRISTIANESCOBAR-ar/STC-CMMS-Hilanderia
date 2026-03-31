@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole, previewSector } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route } from 'lucide-vue-next';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge } from 'lucide-vue-next';
 import { ROLE_LABEL, ROLE_OPTIONS, SECTOR_OPTIONS, isJefeRole, getQuickActions } from './constants/organization';
 import { canAccessView, getDefaultRoute } from './services/profileService';
 import Swal from 'sweetalert2';
@@ -177,6 +177,10 @@ const pageTitle = computed(() => {
   if (path.startsWith('/patrulla/roturas6')) return 'R6 — ROTURAS';
   if (path.startsWith('/patrulla/seguimiento')) return 'R7 — EVALUACIÓN';
   if (path === '/calidad') return 'CALIDAD DE SALA';
+  if (path === '/eficiencia') return 'Registro de Eficiencia';
+  if (path === '/shiftreport') return 'Shift Report';
+  if (path === '/paros-anudado') return 'Paros / Anudados';
+  if (path === '/operarios') return 'Operarios Tejeduría';
   return 'CMMS STC';
 });
 
@@ -349,6 +353,17 @@ const navigateTab = (action) => {
             </router-link>
 
             <router-link
+              v-if="canAccessView(userRole, 'eficiencia')"
+              to="/eficiencia"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-violet-600 text-white shadow-lg shadow-violet-900/20"
+            >
+              <Gauge class="w-6 h-6 mr-4" />
+              Registro de Eficiencia
+            </router-link>
+
+            <router-link
               v-if="canAccessView(userRole, 'intervenciones')"
               to="/intervenciones"
               @click="closeMenu"
@@ -423,6 +438,38 @@ const navigateTab = (action) => {
             >
               <Stethoscope class="w-6 h-6 mr-4" />
               Síntomas de Tejeduría
+            </router-link>
+
+            <router-link
+              v-if="canAccessView(userRole, 'shiftreport')"
+              to="/shiftreport"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+            >
+              <FileText class="w-6 h-6 mr-4" />
+              Shift Report
+            </router-link>
+
+            <router-link
+              to="/operarios"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
+            >
+              <Users class="w-6 h-6 mr-4" />
+              Operarios Tejeduría
+            </router-link>
+
+            <router-link
+              v-if="canAccessView(userRole, 'paros-anudado')"
+              to="/paros-anudado"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-orange-600 text-white shadow-lg shadow-orange-900/20"
+            >
+              <Scissors class="w-6 h-6 mr-4" />
+              Paros / Anudados
             </router-link>
 
             <div class="h-px bg-gray-100 my-4 mx-4"></div>

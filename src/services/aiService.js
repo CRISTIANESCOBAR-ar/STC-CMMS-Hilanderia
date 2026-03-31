@@ -161,21 +161,29 @@ export const aiService = {
    * @param {number} dias - Días a analizar (default 7).
    * @param {string[]|null} sectores - Sectores a incluir (null = todos).
    */
-  async generarResumenEjecutivo(force = false, dias = 7, sectores = null) {
+  async generarResumenEjecutivo(force = false, dias = 7, sectores = null, { fechaDesde, fechaHasta, turno } = {}) {
     try {
       const ahora = new Date();
-      const desde = new Date(ahora);
-      desde.setDate(desde.getDate() - dias);
-      desde.setHours(0, 0, 0, 0);
+      let desde, hasta;
 
-      const hasta = new Date(ahora);
-      hasta.setHours(23, 59, 59, 999);
+      if (fechaDesde && fechaHasta) {
+        desde = new Date(fechaDesde + 'T00:00:00');
+        hasta = new Date(fechaHasta + 'T23:59:59.999');
+      } else {
+        desde = new Date(ahora);
+        desde.setDate(desde.getDate() - dias);
+        desde.setHours(0, 0, 0, 0);
+        hasta = new Date(ahora);
+        hasta.setHours(23, 59, 59, 999);
+      }
 
       const yyyy = ahora.getFullYear();
       const mm = String(ahora.getMonth() + 1).padStart(2, '0');
       const dd = String(ahora.getDate()).padStart(2, '0');
       const sectorSuffix = sectores ? `_${sectores.sort().join('-')}` : '';
-      const cacheId = `exec_${yyyy}-${mm}-${dd}_${dias}d${sectorSuffix}`;
+      const turnoSuffix = turno ? `_t${turno}` : '';
+      const periodoKey = fechaDesde ? `${fechaDesde}_${fechaHasta}` : `${dias}d`;
+      const cacheId = `exec_${yyyy}-${mm}-${dd}_${periodoKey}${sectorSuffix}${turnoSuffix}`;
       const cacheRef = doc(db, 'ai_summaries', cacheId);
 
       if (!force) {
@@ -203,10 +211,27 @@ export const aiService = {
       const snapIntv = await getDocs(qIntervenciones);
       let intervenciones = filtrarPorSector(snapIntv.docs.map(d => ({ id: d.id, ...d.data() })), sectores);
 
+      // Filtro por turno si se especifica
+      if (turno) {
+        const turnoHoras = { A: [6, 14], B: [14, 22], C: [22, 6] };
+        const [hi, hf] = turnoHoras[turno] || [];
+        const enTurno = (ts) => {
+          if (!ts) return false;
+          const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+          const h = d.getHours();
+          if (turno === 'C') return h >= 22 || h < 6;
+          return h >= hi && h < hf;
+        };
+        novedades = novedades.filter(n => enTurno(n.createdAt));
+        intervenciones = intervenciones.filter(i => enTurno(i.createdAt));
+      }
+
+      const diasLabel = fechaDesde ? Math.ceil((hasta - desde) / 86400000) : dias;
+
       if (novedades.length === 0 && intervenciones.length === 0) {
         return {
           fromCache: false,
-          text: `No se registraron novedades ni intervenciones en los últimos ${dias} días. ✅`
+          text: `No se registraron novedades ni intervenciones en los últimos ${diasLabel} días${turno ? ` (Turno ${turno})` : ''}. ✅`
         };
       }
 
@@ -274,7 +299,7 @@ export const aiService = {
       if (!apiKey) {
         return {
           fromCache: false,
-          text: `⚠️ Configura 'VITE_GEMINI_API_KEY' en .env para habilitar el análisis ejecutivo.\n\n${stats.totalNovedades} novedades y ${stats.totalIntervenciones} intervenciones en los últimos ${dias} días.`
+          text: `⚠️ Configura 'VITE_GEMINI_API_KEY' en .env para habilitar el análisis ejecutivo.\n\n${stats.totalNovedades} novedades y ${stats.totalIntervenciones} intervenciones en los últimos ${diasLabel} días.`
         };
       }
 
@@ -286,8 +311,9 @@ export const aiService = {
 Eres un experto Planificador de Mantenimiento Industrial en una planta textil (Santana Textiles).
 Genera un INFORME EJECUTIVO SEMANAL listo para copiar y enviar por WhatsApp a los jefes de planta.
 ${sectores ? `\nSECTOR: ${sectores.join(', ')}` : '\nSECTOR: TODOS (Hilandería + Tejeduría)'}
+${turno ? `\nTURNO: ${turno} (${turno === 'A' ? '06:00-14:00' : turno === 'B' ? '14:00-22:00' : '22:00-06:00'})` : ''}
 
-PERÍODO ANALIZADO: ${desdeStr} al ${hastaStr} (${dias} días)
+PERÍODO ANALIZADO: ${desdeStr} al ${hastaStr} (${diasLabel} días)
 
 ESTADÍSTICAS DEL PERÍODO:
 ${JSON.stringify(stats, null, 2)}
@@ -337,7 +363,7 @@ TONO: Profesional y directo. Orientado a la acción. El jefe debe saber exactame
         await setDoc(cacheRef, {
           resumen: resumenGenerado,
           generadoEn: Timestamp.now(),
-          periodo: dias,
+          periodo: diasLabel,
           stats
         });
       } catch (err) {

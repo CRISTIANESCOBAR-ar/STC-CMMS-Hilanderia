@@ -4,7 +4,7 @@ import {
   collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { Search, Plus, Trash2, CheckCircle2, Loader2, FileDown, ToggleLeft, ToggleRight } from 'lucide-vue-next';
+import { Search, Plus, Trash2, CheckCircle2, Loader2, FileDown, ToggleLeft, ToggleRight, LayoutGrid, Table2 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -37,6 +37,7 @@ const cargando    = ref(true);
 const busqueda    = ref('');
 const soloActivos = ref(false);
 const estadoGuardado = ref({});   // id → 'saving' | 'saved' | 'error'
+const vistaCards = ref(false);    // false=tabla, true=tarjetas (desktop toggle; mobile siempre cards)
 
 // Form nuevo síntoma
 const mostrarForm = ref(false);
@@ -286,108 +287,151 @@ async function exportarExcel() {
         <component :is="soloActivos ? ToggleRight : ToggleLeft" class="w-4 h-4" />
         Solo activos
       </button>
+      <!-- Toggle vista (solo visible en desktop) -->
+      <button @click="vistaCards = !vistaCards"
+        class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold rounded-lg border transition bg-white border-gray-200 text-gray-600 hover:bg-gray-50">
+        <component :is="vistaCards ? Table2 : LayoutGrid" class="w-4 h-4" />
+        {{ vistaCards ? 'Tabla' : 'Tarjetas' }}
+      </button>
     </div>
 
-    <!-- Tabla -->
+    <!-- Loading -->
     <div v-if="cargando" class="flex justify-center py-20">
       <Loader2 class="w-8 h-8 animate-spin text-orange-500" />
     </div>
 
-    <div v-else class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="bg-gray-50 border-b border-gray-100">
-            <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest w-6">#</th>
-            <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest">NOMBRE</th>
-            <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest">DESCRIPCIÓN</th>
-            <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-28">CATEGORÍA</th>
-            <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-28">DERIVA A</th>
-            <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-10">★</th>
-            <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-14">ACTIVO</th>
-            <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-12"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="!filasFiltradas.length">
-            <td colspan="8" class="text-center py-12 text-gray-400 text-sm">No hay síntomas que coincidan</td>
-          </tr>
-          <tr v-for="(row, i) in filasFiltradas" :key="row.id"
-            class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+    <template v-else>
+      <!-- ═══ TABLA (desktop, cuando vistaCards=false) ═══ -->
+      <div v-if="!vistaCards" class="hidden sm:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-100">
+              <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest w-6">#</th>
+              <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest">NOMBRE</th>
+              <th class="px-3 py-2.5 text-left text-[10px] font-extrabold text-gray-400 tracking-widest">DESCRIPCIÓN</th>
+              <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-28">CATEGORÍA</th>
+              <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-28">DERIVA A</th>
+              <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-10">★</th>
+              <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-14">ACTIVO</th>
+              <th class="px-3 py-2.5 text-center text-[10px] font-extrabold text-gray-400 tracking-widest w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!filasFiltradas.length">
+              <td colspan="8" class="text-center py-12 text-gray-400 text-sm">No hay síntomas que coincidan</td>
+            </tr>
+            <tr v-for="(row, i) in filasFiltradas" :key="row.id"
+              class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+              <td class="px-3 py-2 text-center text-[10px] text-gray-400 font-bold">{{ row.orden ?? i+1 }}</td>
+              <td class="px-3 py-2 min-w-[160px]">
+                <input v-model="row.nombre" @input="onNombreChange(row)" type="text"
+                  class="w-full bg-transparent text-sm font-bold text-gray-800 focus:outline-none focus:bg-white focus:border-b-2 focus:border-orange-400 rounded px-1 -ml-1" />
+              </td>
+              <td class="px-3 py-2">
+                <input v-model="row.descripcion" @input="onDescripcionChange(row)" type="text" placeholder="—"
+                  class="w-full bg-transparent text-xs text-gray-500 focus:outline-none focus:bg-white focus:border-b focus:border-gray-300 rounded px-1 -ml-1" />
+              </td>
+              <td class="px-3 py-2 text-center">
+                <select v-model="row.categoria" @change="onCategoriaChange(row)"
+                  class="text-[10px] font-black px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300"
+                  :class="CAT_LABEL[row.categoria] || 'bg-gray-100 text-gray-600'">
+                  <option v-for="c in CATEGORIAS" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <select v-model="row.derivaA" @change="onDerivaChange(row)"
+                  class="text-[10px] font-black px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300"
+                  :class="[DERIVA_LABEL[row.derivaA]?.bg, DERIVA_LABEL[row.derivaA]?.text]">
+                  <option v-for="d in DERIVA_A" :key="d" :value="d">{{ DERIVA_LABEL[d]?.label || d }}</option>
+                </select>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <button @click="toggleDestacado(row)" class="text-lg transition"
+                  :class="row.destacado ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'">★</button>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <button @click="toggleActivo(row)" class="transition">
+                  <ToggleRight v-if="row.activo" class="w-6 h-6 text-orange-500" />
+                  <ToggleLeft  v-else             class="w-6 h-6 text-gray-300" />
+                </button>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <span v-if="estadoGuardado[row.id] === 'saving'"><Loader2 class="w-3.5 h-3.5 text-orange-400 animate-spin" /></span>
+                  <span v-else-if="estadoGuardado[row.id] === 'saved'"><CheckCircle2 class="w-3.5 h-3.5 text-green-500" /></span>
+                  <button @click="eliminar(row)" class="p-1 text-gray-300 hover:text-red-500 transition rounded">
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 font-bold tracking-widest">
+          {{ filasFiltradas.length }} de {{ sintomas.length }} síntomas
+        </div>
+      </div>
 
-            <!-- Orden -->
-            <td class="px-3 py-2 text-center text-[10px] text-gray-400 font-bold">{{ row.orden ?? i+1 }}</td>
+      <!-- ═══ TARJETAS (siempre en mobile, en desktop si vistaCards=true) ═══ -->
+      <div :class="vistaCards ? 'block' : 'sm:hidden'">
+        <p v-if="!filasFiltradas.length" class="text-center py-12 text-gray-400 text-sm">No hay síntomas que coincidan</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div v-for="(row, i) in filasFiltradas" :key="row.id"
+            class="bg-white border rounded-xl p-4 shadow-sm transition-all relative"
+            :class="row.activo ? 'border-gray-200' : 'border-gray-100 opacity-60'">
 
-            <!-- Nombre editable -->
-            <td class="px-3 py-2 min-w-[160px]">
-              <input v-model="row.nombre" @input="onNombreChange(row)" type="text"
-                class="w-full bg-transparent text-sm font-bold text-gray-800 focus:outline-none focus:bg-white focus:border-b-2 focus:border-orange-400 rounded px-1 -ml-1" />
-            </td>
-
-            <!-- Descripción editable -->
-            <td class="px-3 py-2">
-              <input v-model="row.descripcion" @input="onDescripcionChange(row)" type="text"
-                placeholder="—"
-                class="w-full bg-transparent text-xs text-gray-500 focus:outline-none focus:bg-white focus:border-b focus:border-gray-300 rounded px-1 -ml-1" />
-            </td>
-
-            <!-- Categoría -->
-            <td class="px-3 py-2 text-center">
-              <select v-model="row.categoria" @change="onCategoriaChange(row)"
-                class="text-[10px] font-black px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300"
-                :class="CAT_LABEL[row.categoria] || 'bg-gray-100 text-gray-600'">
-                <option v-for="c in CATEGORIAS" :key="c" :value="c">{{ c }}</option>
-              </select>
-            </td>
-
-            <!-- Deriva a -->
-            <td class="px-3 py-2 text-center">
-              <select v-model="row.derivaA" @change="onDerivaChange(row)"
-                class="text-[10px] font-black px-2 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300"
-                :class="[DERIVA_LABEL[row.derivaA]?.bg, DERIVA_LABEL[row.derivaA]?.text]">
-                <option v-for="d in DERIVA_A" :key="d" :value="d">{{ DERIVA_LABEL[d]?.label || d }}</option>
-              </select>
-            </td>
-
-            <!-- Destacado -->
-            <td class="px-3 py-2 text-center">
-              <button @click="toggleDestacado(row)"
-                class="text-lg transition"
-                :class="row.destacado ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'">★</button>
-            </td>
-
-            <!-- Activo toggle -->
-            <td class="px-3 py-2 text-center">
-              <button @click="toggleActivo(row)" class="transition">
-                <ToggleRight v-if="row.activo" class="w-6 h-6 text-orange-500" />
-                <ToggleLeft  v-else             class="w-6 h-6 text-gray-300" />
-              </button>
-            </td>
-
-            <!-- Acciones -->
-            <td class="px-3 py-2 text-center">
-              <div class="flex items-center justify-center gap-1.5">
-                <!-- Indicador de guardado -->
-                <span v-if="estadoGuardado[row.id] === 'saving'">
-                  <Loader2 class="w-3.5 h-3.5 text-orange-400 animate-spin" />
-                </span>
-                <span v-else-if="estadoGuardado[row.id] === 'saved'">
-                  <CheckCircle2 class="w-3.5 h-3.5 text-green-500" />
-                </span>
-                <button @click="eliminar(row)"
-                  class="p-1 text-gray-300 hover:text-red-500 transition rounded">
+            <!-- Top row: orden + badges + acciones -->
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] font-bold text-gray-400 bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center shrink-0">{{ row.orden ?? i+1 }}</span>
+                <span class="text-[10px] font-black px-2 py-0.5 rounded-full"
+                  :class="CAT_LABEL[row.categoria] || 'bg-gray-100 text-gray-600'">{{ row.categoria }}</span>
+                <span class="text-[10px] font-black px-2 py-0.5 rounded-full"
+                  :class="[DERIVA_LABEL[row.derivaA]?.bg, DERIVA_LABEL[row.derivaA]?.text]">{{ DERIVA_LABEL[row.derivaA]?.label || row.derivaA }}</span>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <span v-if="estadoGuardado[row.id] === 'saving'"><Loader2 class="w-3.5 h-3.5 text-orange-400 animate-spin" /></span>
+                <span v-else-if="estadoGuardado[row.id] === 'saved'"><CheckCircle2 class="w-3.5 h-3.5 text-green-500" /></span>
+                <button @click="toggleDestacado(row)" class="text-base transition"
+                  :class="row.destacado ? 'text-amber-400' : 'text-gray-200'">★</button>
+                <button @click="toggleActivo(row)" class="transition">
+                  <ToggleRight v-if="row.activo" class="w-5 h-5 text-orange-500" />
+                  <ToggleLeft  v-else             class="w-5 h-5 text-gray-300" />
+                </button>
+                <button @click="eliminar(row)" class="p-0.5 text-gray-300 hover:text-red-500 transition">
                   <Trash2 class="w-3.5 h-3.5" />
                 </button>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
 
-      <!-- Footer con total -->
-      <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 font-bold tracking-widest">
-        {{ filasFiltradas.length }} de {{ sintomas.length }} síntomas
+            <!-- Nombre editable -->
+            <input v-model="row.nombre" @input="onNombreChange(row)" type="text"
+              class="w-full bg-transparent text-base font-bold text-gray-800 focus:outline-none focus:bg-gray-50 focus:border-b-2 focus:border-orange-400 rounded px-1 -ml-1 mb-1" />
+
+            <!-- Descripción editable -->
+            <input v-model="row.descripcion" @input="onDescripcionChange(row)" type="text" placeholder="Sin descripción"
+              class="w-full bg-transparent text-xs text-gray-400 focus:outline-none focus:bg-gray-50 focus:border-b focus:border-gray-300 rounded px-1 -ml-1 mb-2" />
+
+            <!-- Selectores inline en mobile -->
+            <div class="flex items-center gap-2">
+              <select v-model="row.categoria" @change="onCategoriaChange(row)"
+                class="text-[10px] font-black px-2 py-1 rounded-full border border-gray-100 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300 bg-white"
+                :class="CAT_LABEL[row.categoria] || 'bg-gray-100 text-gray-600'">
+                <option v-for="c in CATEGORIAS" :key="c" :value="c">{{ c }}</option>
+              </select>
+              <select v-model="row.derivaA" @change="onDerivaChange(row)"
+                class="text-[10px] font-black px-2 py-1 rounded-full border border-gray-100 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-300 bg-white"
+                :class="[DERIVA_LABEL[row.derivaA]?.bg, DERIVA_LABEL[row.derivaA]?.text]">
+                <option v-for="d in DERIVA_A" :key="d" :value="d">{{ DERIVA_LABEL[d]?.label || d }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div v-if="filasFiltradas.length" class="mt-3 text-center text-[10px] text-gray-400 font-bold tracking-widest">
+          {{ filasFiltradas.length }} de {{ sintomas.length }} síntomas
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- Leyenda de colores -->
     <div class="mt-4 flex flex-wrap gap-2">

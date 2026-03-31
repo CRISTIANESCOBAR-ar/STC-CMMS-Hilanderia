@@ -30,3 +30,10 @@ dist-ssr
 .secrets/
 *firebase-adminsdk*.json
 public/*firebase-adminsdk*.json
+
+# Excel temp/lock files
+~$*
+
+# Data files that shouldn't be in the repo
+*.xlsm
+*.csv

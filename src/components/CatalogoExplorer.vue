@@ -20,6 +20,7 @@ const cargandoCat    = ref(false);
 const tipoSeleccionado  = ref(null);
 const modeloSeleccionado = ref(null);
 const tabActiva         = ref('catalogo'); // 'catalogo' | 'motivos' | 'maquinas'
+const filtroProc        = ref(null);      // null | 'con' | 'sin'
 
 // Viewer de procedimiento (preview móvil)
 const showViewer   = ref(false);
@@ -80,6 +81,7 @@ const seleccionarModelo = async (modelo) => {
   modeloSeleccionado.value = modelo;
   catalogoItems.value = [];
   seccionesExpandidas.value = new Set();
+  filtroProc.value = null;
   tabActiva.value = 'catalogo';
   cargandoCat.value = true;
   try {
@@ -95,7 +97,12 @@ const seleccionarModelo = async (modelo) => {
 // ── Estructura del catálogo: seccion > grupo > items ─────────────────────────
 const catalogoEstructura = computed(() => {
   const mapa = {};
-  catalogoItems.value.forEach(item => {
+  const itemsFiltrados = filtroProc.value === null
+    ? catalogoItems.value
+    : filtroProc.value === 'con'
+      ? catalogoItems.value.filter(i => Array.isArray(i.procedimiento) && i.procedimiento.length > 0)
+      : catalogoItems.value.filter(i => !Array.isArray(i.procedimiento) || i.procedimiento.length === 0);
+  itemsFiltrados.forEach(item => {
     const sec = item.seccion || 'Sin sección';
     const grp = String(item.grupo || 'Sin grupo');
     if (!mapa[sec]) mapa[sec] = {};
@@ -306,20 +313,34 @@ const guardarEdicion = async () => {
                 <p class="text-xs text-gray-500">{{ tipoSeleccionado }}</p>
               </div>
 
-              <!-- Stats -->
-              <div v-if="statsModelo.total > 0" class="flex gap-2 text-xs">
-                <span class="flex items-center gap-1 bg-gray-100 rounded-full px-2.5 py-1 text-gray-600 font-medium">
+              <!-- Stats / Filtros -->
+              <div v-if="statsModelo.total > 0" class="flex gap-2 text-xs flex-wrap">
+                <button
+                  @click="filtroProc = filtroProc === null ? null : null; filtroProc = null"
+                  class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
+                  :class="filtroProc === null ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                >
                   <ClipboardList class="w-3.5 h-3.5" />
                   {{ statsModelo.total }} items
-                </span>
-                <span class="flex items-center gap-1 bg-emerald-50 text-emerald-700 rounded-full px-2.5 py-1 font-medium">
+                </button>
+                <button
+                  v-if="statsModelo.conProc > 0"
+                  @click="filtroProc = filtroProc === 'con' ? null : 'con'"
+                  class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
+                  :class="filtroProc === 'con' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'"
+                >
                   <CheckCircle2 class="w-3.5 h-3.5" />
                   {{ statsModelo.conProc }} con procedimiento
-                </span>
-                <span v-if="statsModelo.sinProc > 0" class="flex items-center gap-1 bg-amber-50 text-amber-700 rounded-full px-2.5 py-1 font-medium">
+                </button>
+                <button
+                  v-if="statsModelo.sinProc > 0"
+                  @click="filtroProc = filtroProc === 'sin' ? null : 'sin'"
+                  class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
+                  :class="filtroProc === 'sin' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'"
+                >
                   <XCircle class="w-3.5 h-3.5" />
                   {{ statsModelo.sinProc }} sin procedimiento
-                </span>
+                </button>
               </div>
             </div>
 

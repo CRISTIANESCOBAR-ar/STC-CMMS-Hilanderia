@@ -258,8 +258,9 @@ const grupoPrefix = computed(() => {
       prefix = candidate;
     } else break;
   }
-  // Solo aplicar si el prefijo tiene al menos 2 dígitos y queda algo significativo
-  return (prefix.length >= 2 && grupos.every(g => String(g).length > prefix.length)) ? prefix : '';
+  // Solo aplicar si el prefijo tiene al menos 2 dígitos y queda al menos 3 dígitos significativos
+  // Ej: "25" sobre "25420" → muestra "420" ✓ | "254" sobre "25420" → queda "20" (solo 2) → rechazado ✓
+  return (prefix.length >= 2 && grupos.every(g => String(g).length - prefix.length >= 3)) ? prefix : '';
 });
 
 const formatGrupo = (g) => {

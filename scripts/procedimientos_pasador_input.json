@@ -1,0 +1,182 @@
+[
+  {
+    "modelo": "TD03",
+    "seccion": "SISTEMA DE ASPIRACIÓN",
+    "grupo": "TD03-01",
+    "denominacion": "LIMPIAR TAMIZ DE LA CAJA FILTRANTE",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Cepillo de mano", "Aspiradora industrial"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal de la máquina y asegurar contra reconexión.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir la puerta de la caja filtrante situada en la parte posterior del bastidor.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Extraer el tamiz y retirar manualmente las acumulaciones de fibras y polvo.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar que el tamiz no presente roturas o deformaciones que afecten la succión.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el interior de la caja filtrante con aire comprimido o aspiradora.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Insertar el tamiz en su posición original asegurando el asiento correcto.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la puerta y comprobar que el monitor de presión de aspiración indique valores normales.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "TREN DE ESTIRAJE",
+    "grupo": "TD03-02",
+    "denominacion": "LIMPIEZA DIARIA DEL TREN DE ESTIRAJE",
+    "tiempoEstimado": "0.25h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Paño sin pelusa", "Solución limpiadora suave"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Pulsar el botón de parada de emergencia antes de manipular la zona de cilindros.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir la cubierta del tren de estiraje para acceder a los rodillos superiores.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar restos de fibras y suciedad de los rodillos superiores e inferiores.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Revisar los rascadores y laberintos en busca de enrollamientos de fibra.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las barras de descarga estática para asegurar el correcto flujo de la cinta.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la cubierta y verificar que el sensor de seguridad permita el arranque.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "EMBUDO DE MEDICIÓN",
+    "grupo": "TD03-03",
+    "denominacion": "AJUSTE DEL EMBUDO DE MEDICIÓN DE ENTRADA",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Galgas de espesores", "Llave Allen"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Apagar la máquina y esperar a que los motores de alimentación se detengan por completo.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar la protección del área de entrada de la cinta.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Comprobar el estado de limpieza de los rodillos ranurados de entrada.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Ajustar la posición del embudo de entrada respecto a los rodillos sensores según el título de cinta.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Calibrar la distancia de seguridad para evitar contacto metálico.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Confirmar que la señal de masa en pantalla sea estable y acorde a la materia prima.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "SISTEMA ELÉCTRICO",
+    "grupo": "TD03-04",
+    "denominacion": "SUSTITUCIÓN DE PILA DE MEMORIA ZPB4",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Pinza de punta fina", "Pulsera antiestática"],
+    "repuestos": ["Pila de litio ZPB4 — cantidad: 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: ¡IMPORTANTE! Mantener la máquina encendida para no perder los datos de configuración.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir el armario eléctrico y localizar el módulo de control central.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Identificar el zócalo de la batería ZPB4 en la placa base.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer con cuidado la batería agotada evitando cortocircuitos en la placa.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Insertar la nueva batería respetando la polaridad indicada (+/-).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Comprobar en la pantalla de mando que el mensaje de error de batería haya desaparecido.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "TRANSMISIÓN Y CORREAS",
+    "grupo": "TD03-05",
+    "denominacion": "CONTROL DE TENSIÓN DE CORREAS DENTADAS",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Tensiómetro de correas", "Llaves fijas"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconexión total de energía y bloqueo de seguridad LOTO.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar las protecciones laterales del bastidor para acceder a la transmisión principal.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Buscar grietas, deshilachados o desgaste excesivo en las correas dentadas.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Ajustar los tensores hasta alcanzar la frecuencia/tensión especificada en el manual técnico.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Verificar la alineación de las poleas para evitar saltos de dientes.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Realizar un giro manual para confirmar que no existan ruidos u obstrucciones.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "LUBRICACIÓN GENERAL",
+    "grupo": "TD03-06",
+    "denominacion": "LUBRICACIÓN DE RODAMIENTOS DEL TREN DE ESTIRAJE",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Bomba de engrase manual", "Paño de limpieza"],
+    "repuestos": ["Grasa recomendada Trützschler — cantidad: 50g"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Parar la máquina y asegurar que el tren de estiraje esté en posición abierta.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar meticulosamente las boquillas de engrase para evitar introducir suciedad.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar la cantidad exacta de grasa según el punto de lubricación indicado.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Observar si hay fugas de grasa vieja o restos de contaminación metálica.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar cualquier exceso de grasa para evitar manchas en la cinta de algodón.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar el tren y verificar la suavidad de giro en modo manual.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "UNIDAD NEUMÁTICA",
+    "grupo": "TD03-07",
+    "denominacion": "MANTENIMIENTO DEL FILTRO REGULADOR NEUMÁTICO",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Llave para vasos de filtro"],
+    "repuestos": ["Elemento filtrante #855-00-XX — cantidad: 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Cerrar la llave de paso de aire comprimido y purgar la presión residual del sistema.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Desenroscar el vaso del filtro de la unidad de entrada.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Vaciar el condensado y limpiar el vaso con agua jabonosa.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Sustituir el elemento filtrante si presenta saturación por aceite o partículas.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Reinstalar el vaso asegurando la junta de estanqueidad.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Abrir el aire y ajustar la presión de trabajo a 6 bar.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "TREN DE ESTIRAJE",
+    "grupo": "TD03-08",
+    "denominacion": "REEMPLAZO DE RECUBRIMIENTOS DE RODILLOS SUPERIORES",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Prensa hidráulica pequeña", "Rectificadora de rodillos"],
+    "repuestos": ["Recubrimiento de rodillo (Cots) — cantidad: 3 unidades"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Bloquear la máquina y retirar los conjuntos de rodillos superiores.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer los recubrimientos desgastados mediante la prensa.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar que los núcleos de los rodillos no tengan daños o descentramientos.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Montar los nuevos recubrimientos asegurando un ajuste concéntrico.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Rectificar el diámetro exterior según las especificaciones de dureza Shore.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Validar en el espectrograma la ausencia de ondas mecánicas tras el cambio.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "SERVOMÓDULOS",
+    "grupo": "TD03-09",
+    "denominacion": "INSPECCIÓN DE SERVOMOTORES Y VENTILACIÓN",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aire comprimido seco", "Multímetro"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Apagar y bloquear el suministro eléctrico (LOTO).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir las tapas de registro de los servomotores de estiraje y alimentación.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las aletas de refrigeración de los motores para evitar sobrecalentamiento.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar visualmente el estado de los cables y conectores rápidos.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reiniciar la máquina y comprobar que no existan alarmas de temperatura en el variador.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TD03",
+    "seccion": "TREN DE ESTIRAJE",
+    "grupo": "TD03-10",
+    "denominacion": "AJUSTE DE DISTANCIA ENTRE CILINDROS (CALIBRADO)",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Calibre digital", "Manual de ajustes técnico"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la máquina y retirar la cinta de algodón del tren.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Aflojar los tornillos de fijación de los soportes de los cilindros.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Medir la distancia actual entre centros de cilindros (p.ej. 35mm / 40mm).", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Desplazar los cilindros según la longitud de fibra (Staple) procesada.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Confirmar que el paralelismo sea exacto en ambos lados del tren.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Realizar un test de CV% para validar que el estiraje sea uniforme.", "imagenUrl": null}
+    ]
+  }
+]

@@ -5,7 +5,8 @@ import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
 import { cargarPatrullaActiva } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge } from 'lucide-vue-next';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw } from 'lucide-vue-next';
+import { reabrirRonda } from '../services/patrullaService';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
 import PruebaTramaNegra from './PruebaTramaNegra.vue';
@@ -58,6 +59,33 @@ const rondasConEstado = computed(() =>
 );
 
 const rondaActiva = computed(() => RONDAS.find(r => r.sub === subVista.value));
+
+// ── Reapertura de rondas ────────────────────────────────────────
+const rondaAReabrir = ref(null);
+const reabriendo = ref(false);
+
+function solicitarReapertura(ronda, event) {
+  event.stopPropagation();
+  rondaAReabrir.value = ronda;
+}
+
+function cancelarReapertura() {
+  rondaAReabrir.value = null;
+}
+
+async function confirmarReapertura() {
+  if (!rondaAReabrir.value || !patrullaData.value?.id) return;
+  reabriendo.value = true;
+  try {
+    await reabrirRonda(patrullaData.value.id, rondaAReabrir.value.key);
+    await cargarPatrulla();
+  } catch (e) {
+    console.error('Error al reabrir ronda:', e);
+  } finally {
+    reabriendo.value = false;
+    rondaAReabrir.value = null;
+  }
+}
 
 function irARonda(ronda) {
   if (!ronda.desbloqueada) return;
@@ -169,7 +197,15 @@ onMounted(async () => {
                       {{ ronda.desc }}
                     </p>
                   </div>
-                  <div class="shrink-0">
+                  <div class="shrink-0 flex items-center gap-1.5">
+                    <button
+                      v-if="ronda.estado === 'completada' && ['supervisor','supervisor_mecanico','admin'].includes(userRole)"
+                      @click.stop="solicitarReapertura(ronda, $event)"
+                      class="p-1 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+                      title="Reabrir ronda"
+                    >
+                      <RotateCcw class="w-3.5 h-3.5" />
+                    </button>
                     <span v-if="ronda.estado === 'completada'" class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                       ✓ Hecha
                     </span>
@@ -229,5 +265,30 @@ onMounted(async () => {
 
 
     </main>
+
+    <!-- Modal confirmación reapertura -->
+    <Teleport to="body">
+      <div v-if="rondaAReabrir" class="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div class="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+              <RotateCcw class="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p class="text-sm font-black text-gray-800">Reabrir Ronda {{ rondaAReabrir.num }}</p>
+              <p class="text-[11px] text-gray-500">{{ rondaAReabrir.label }}</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-600">Se quitará el estado <span class="font-bold text-emerald-600">Hecha</span> y la ronda volverá a estar disponible para completar. Los datos cargados se conservan.</p>
+          <div class="flex gap-2">
+            <button @click="cancelarReapertura" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all">Cancelar</button>
+            <button @click="confirmarReapertura" :disabled="reabriendo" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-black transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <Loader2 v-if="reabriendo" class="w-4 h-4 animate-spin" />
+              <span>{{ reabriendo ? 'Reabriendo...' : 'Sí, reabrir' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

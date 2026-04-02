@@ -212,3 +212,16 @@ export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos)
     [`rondas.${rondaKey}.ultimoGuardado`]: new Date().toISOString(),
   });
 }
+
+/**
+ * Reabre una ronda completada quitando el flag completada.
+ * Conserva los datos cargados para que el inspector pueda corregirlos.
+ */
+export async function reabrirRonda(patrullaId, rondaKey) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    [`rondas.${rondaKey}.completada`]: false,
+    [`rondas.${rondaKey}.hora`]: null,
+    [`rondas.${rondaKey}.reabierta`]: new Date().toISOString(),
+  });
+}

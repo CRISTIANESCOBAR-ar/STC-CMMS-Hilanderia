@@ -24,6 +24,9 @@ const showCatalogModal = ref(false);
 const catalogoSearchQuery = ref('');
 const catalogoSectionFilter = ref('');
 const catalogoGroupFilter = ref('');
+const catalogoModelo = ref('R-60');
+const catalogoModelosDisponibles = ref(['R-60']);
+const catalogoCargando = ref(false);
 const editingCatalogRowId = ref(null);
 const editingCatalogRow = ref({});
 const isLoading = ref(true);
@@ -108,13 +111,17 @@ onMounted(async () => {
 
     isLoading.value = false;
 
-    // Cargar catálogo desde Firestore en segundo plano (para obtener IDs de documentos)
-    catalogoService.obtenerPuntosPorModelo('R-60').then(fsData => {
-      if (fsData.length > 0) {
-        catalogoData.value = fsData;
+    // Detectar modelos disponibles en Firestore en segundo plano
+    catalogoService.obtenerTodo().then(allData => {
+      if (allData.length > 0) {
+        const modelos = [...new Set(allData.map(d => d.modelo).filter(Boolean))].sort();
+        catalogoModelosDisponibles.value = modelos.length ? modelos : ['R-60'];
+        // Precargar R-60 si existe
+        const r60 = allData.filter(d => d.modelo === 'R-60');
+        if (r60.length > 0) catalogoData.value = r60;
       }
     }).catch(err => {
-      console.warn('No se pudo cargar catálogo desde Firestore, usando datos locales:', err);
+      console.warn('No se pudo detectar modelos en Firestore:', err);
     });
   } catch (error) {
     clearTimeout(timeoutId);
@@ -390,24 +397,24 @@ const exportMaquinasToExcel = async () => {
 };
 
 const exportToExcel = async () => {
-  const rows = buildCatalogExportRows(catalogoData.value);
+  let allItems;
+  try {
+    allItems = await catalogoService.obtenerTodo();
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo cargar el catálogo desde Firestore.' });
+    return;
+  }
 
-  if (rows.length === 0) {
-    Swal.fire({
-      icon: 'info',
-      title: 'Sin máquinas R-60',
-      text: 'No hay máquinas OPEN END R-60 visibles para exportar el catálogo.'
-    });
+  if (!allItems || allItems.length === 0) {
+    Swal.fire({ icon: 'info', title: 'Sin datos', text: 'El catálogo no tiene registros cargados.' });
     return;
   }
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Catalogo Open End R-60');
+  const worksheet = workbook.addWorksheet('Catálogo Completo');
 
   worksheet.columns = [
-    { header: 'Marca', key: 'marca', width: 16 },
-    { header: 'Modelo', key: 'modelo', width: 14 },
-    { header: 'Asignación', key: 'asignacion', width: 20 },
+    { header: 'Modelo', key: 'modelo', width: 18 },
     { header: 'Sección', key: 'seccion', width: 28 },
     { header: 'Abreviado', key: 'abreviado', width: 14 },
     { header: 'Grupo', key: 'grupo', width: 12 },
@@ -419,17 +426,24 @@ const exportToExcel = async () => {
     { header: 'Observación', key: 'observacion', width: 30 },
   ];
 
-  rows.forEach((row) => {
-    worksheet.addRow(row);
+  allItems.forEach((item) => {
+    worksheet.addRow({
+      modelo: item.modelo || '',
+      seccion: item.seccion || '',
+      abreviado: item.abreviado || '',
+      grupo: item.grupo || '',
+      subGrupo: item.subGrupo || '',
+      denominacion: item.denominacion || '',
+      numeroCatalogo: item.numeroCatalogo || '',
+      numeroArticulo: item.numeroArticulo || '',
+      tiempo: item.tiempo || '',
+      observacion: item.observacion || '',
+    });
   });
 
   const headerRow = worksheet.getRow(1);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  headerRow.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF2563EB' } // Blue-600 logic consistent with App theme
-  };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
   headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
   worksheet.eachRow((row, rowNumber) => {
@@ -438,34 +452,46 @@ const exportToExcel = async () => {
         top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
         left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
         bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
       };
       if (rowNumber > 1) {
         cell.font = { size: 10 };
         cell.alignment = { vertical: 'middle' };
         if (rowNumber % 2 === 0) {
-          row.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF9FAFB' }
-          };
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
         }
       }
     });
   });
 
-  worksheet.autoFilter = 'A1:L1';
+  worksheet.autoFilter = 'A1:J1';
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `Catalogo_Open_End_R60_${new Date().toISOString().split('T')[0]}.xlsx`);
+  saveAs(blob, `Catalogo_Completo_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
-const openCatalogModal = () => {
+const openCatalogModal = async (modelo = catalogoModelo.value) => {
   showCatalogModal.value = true;
   catalogoSearchQuery.value = '';
   catalogoSectionFilter.value = '';
   catalogoGroupFilter.value = '';
+  await cargarCatalogoModelo(modelo);
+};
+
+const cargarCatalogoModelo = async (modelo) => {
+  catalogoModelo.value = modelo;
+  catalogoSectionFilter.value = '';
+  catalogoGroupFilter.value = '';
+  catalogoCargando.value = true;
+  try {
+    const data = await catalogoService.obtenerPuntosPorModelo(modelo);
+    catalogoData.value = data;
+  } catch (e) {
+    console.error('Error cargando catálogo:', e);
+  } finally {
+    catalogoCargando.value = false;
+  }
 };
 
 const closeCatalogModal = () => {
@@ -1060,13 +1086,25 @@ const exportCatalogToExcel = async () => {
   </div>
     </div>
 
-    <!-- Modal Catálogo R-60 -->
+    <!-- Modal Catálogo -->
           <div v-if="showCatalogModal" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
             <div class="bg-white rounded-lg w-full max-w-6xl shadow-2xl overflow-hidden my-4">
               <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50">
-                <div>
-                  <h3 class="text-2xl font-black text-gray-800 tracking-tight">Catálogo R-60</h3>
-                  <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">{{ filteredCatalogo.length }} registros encontrados</p>
+                <div class="flex items-center gap-4 flex-wrap">
+                  <div>
+                    <h3 class="text-2xl font-black text-gray-800 tracking-tight">Catálogo — {{ catalogoModelo }}</h3>
+                    <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">{{ catalogoCargando ? 'Cargando...' : filteredCatalogo.length + ' registros encontrados' }}</p>
+                  </div>
+                  <div v-if="catalogoModelosDisponibles.length > 1" class="flex items-center gap-2">
+                    <label class="text-xs font-black text-gray-500 uppercase">Modelo</label>
+                    <select
+                      :value="catalogoModelo"
+                      @change="cargarCatalogoModelo($event.target.value)"
+                      class="bg-white border border-emerald-200 rounded-md px-3 py-1.5 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm"
+                    >
+                      <option v-for="m in catalogoModelosDisponibles" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                  </div>
                 </div>
                 <button @click="closeCatalogModal" class="p-2 hover:bg-white rounded-md transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
               </div>

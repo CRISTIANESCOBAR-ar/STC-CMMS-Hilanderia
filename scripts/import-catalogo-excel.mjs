@@ -87,6 +87,8 @@ const readExcel = async () => {
         if (!ex.tiempo && item.tiempo) ex.tiempo = item.tiempo;
         if (!ex.observacion && item.observacion) ex.observacion = item.observacion;
       }
+    } else if (modelo === 'BENNINGER') {
+      if (!ja2s.has(key)) ja2s.set(key, item);
     } else {
       // JA2S u otro modelo TELAR
       if (!ja2s.has(key)) ja2s.set(key, item);
@@ -112,7 +114,9 @@ const main = async () => {
   console.log(`\n[import-catalogo-excel] Modo: ${APPLY ? 'APPLY (escribe)' : 'DRY RUN (solo muestra)'}\n`);
 
   const { r60, ja2s } = await readExcel();
-  console.log(`Leídos: R-60 únicos=${r60.length}  JA2S únicos=${ja2s.length}`);
+  // Agrupar por modelo para el resumen
+  const porModelo = ja2s.reduce((acc, i) => { acc[i.modelo] = (acc[i.modelo] || 0) + 1; return acc; }, {});
+  console.log(`Leídos: R-60 únicos=${r60.length}  Otros modelos: ${JSON.stringify(porModelo)}`);
 
   // ── Preparar operaciones R-60 ──
   const opsR60 = r60.map((item) => {
@@ -131,16 +135,16 @@ const main = async () => {
     };
   });
 
-  // ── Preparar operaciones JA2S ──
+  // ── Preparar operaciones genéricas (JA2S, BENNINGER, otros) ──
   const opsJA2S = ja2s.map((item) => {
-    const docId = makeDocId('telar_ja2s', item.seccion, item.grupo, item.subGrupo, item.denominacion);
+    const prefix = String(item.modelo || 'otro').replace(/[\s/\\:*?"<>|]+/g, '_').toLowerCase().slice(0, 12);
+    const docId = makeDocId(prefix, item.seccion, item.grupo, item.subGrupo, item.denominacion);
     return {
       docId,
       ref: null,
       data: {
         marca: item.marca,
         modelo: item.modelo,
-        tipo: 'TELAR',
         asignacion: item.asignacion,
         seccion: item.seccion,
         abreviado: item.abreviado,
@@ -161,7 +165,7 @@ const main = async () => {
   opsR60.slice(0, 5).forEach(op => console.log(' ', op.docId, '->', JSON.stringify(op.data)));
   if (opsR60.length > 5) console.log(`  ... y ${opsR60.length - 5} más`);
 
-  console.log('\n--- JA2S (TELAR): se crearán/actualizarán con merge ---');
+  console.log('\n--- Otros modelos (BENNINGER, JA2S, etc.): se crearán/actualizarán con merge ---');
   opsJA2S.slice(0, 5).forEach(op => console.log(' ', op.docId, '->', JSON.stringify(op.data)));
   if (opsJA2S.length > 5) console.log(`  ... y ${opsJA2S.length - 5} más`);
 
@@ -178,10 +182,10 @@ const main = async () => {
   console.log('\nEscribiendo R-60...');
   await writeBatches(db, opsR60.map(op => ({ ref: col.doc(op.docId), data: op.data })));
 
-  console.log('\nEscribiendo JA2S (TELAR)...');
+  console.log('\nEscribiendo otros modelos (BENNINGER, JA2S, etc.)...');
   await writeBatches(db, opsJA2S.map(op => ({ ref: col.doc(op.docId), data: op.data })));
 
-  console.log(`\n✅  Importación completa: ${opsR60.length} R-60 enriquecidos, ${opsJA2S.length} JA2S creados/actualizados.\n`);
+  console.log(`\n✅  Importación completa: ${opsR60.length} R-60 enriquecidos, ${opsJA2S.length} otros modelos creados/actualizados.\n`);
 };
 
 main().catch((err) => { console.error('Error:', err); process.exit(1); });

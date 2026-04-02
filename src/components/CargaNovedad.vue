@@ -189,6 +189,7 @@ const getCatalogKey = (maquina) => {
   if (!maquina) return null;
   if (maquina.tipo === 'OPEN END' || maquina.modelo === 'R-60') return { field: 'modelo', value: 'R-60' };
   if (maquina.tipo === 'TELAR') return { field: 'tipo', value: 'TELAR' };
+  if (maquina.tipo === 'INDIGO' || maquina.modelo === 'BENNINGER') return { field: 'modelo', value: 'BENNINGER' };
   return null;
 };
 

@@ -105,6 +105,22 @@ export const catalogoService = {
   },
 
   /**
+   * Obtiene todos los registros del catálogo sin filtrar por modelo.
+   * Ordenados por modelo > sección > grupo > denominación.
+   */
+  async obtenerTodo() {
+    const snap = await getDocs(collection(db, COLLECTION_NAME));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        if ((a.modelo || '') !== (b.modelo || '')) return (a.modelo || '').localeCompare(b.modelo || '');
+        if (a.seccion !== b.seccion) return (a.seccion || '').localeCompare(b.seccion || '');
+        if (String(a.grupo) !== String(b.grupo)) return String(a.grupo || '').localeCompare(String(b.grupo || ''));
+        return (a.denominacion || '').localeCompare(b.denominacion || '');
+      });
+  },
+
+  /**
    * Verifica si el catálogo está vacío y lo inicializa si es necesario.
    */
   async inicializarSiVacio(items) {

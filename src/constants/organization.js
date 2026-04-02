@@ -91,7 +91,7 @@ export const ROLE_PROFILES = {
   inspector: {
     nivel: 'operativo',
     descripcion: 'Recorre planta, detecta anomalías y registra novedades de calidad.',
-    vistas: ['llamar', 'intervenciones', 'carga_novedad', 'patrulla'],
+    vistas: ['llamar', 'intervenciones', 'carga_novedad', 'patrulla', 'shiftreport'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: false, configSistema: false },
   },
   mecanico: {

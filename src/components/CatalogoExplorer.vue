@@ -8,7 +8,8 @@ import Swal from 'sweetalert2';
 import {
   ChevronRight, ChevronDown, BookOpen, Wrench, Zap,
   CheckCircle2, XCircle, ClipboardList, Loader2, Info,
-  ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X
+  ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X,
+  ArrowLeft
 } from 'lucide-vue-next';
 
 // ── Estado ────────────────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ const tipoSeleccionado  = ref(null);
 const modeloSeleccionado = ref(null);
 const tabActiva         = ref('catalogo'); // 'catalogo' | 'motivos' | 'maquinas'
 const filtroProc        = ref(null);      // null | 'con' | 'sin'
+const pasoMobile        = ref('tipos');   // 'tipos' | 'modelos' | 'detalle'
 
 // Viewer de procedimiento (preview móvil)
 const showViewer   = ref(false);
@@ -73,6 +75,8 @@ const seleccionarTipo = (tipo) => {
   const found = tiposDisponibles.value.find(t => t.tipo === tipo);
   if (found && found.modelos.length === 1) {
     seleccionarModelo(found.modelos[0]);
+  } else {
+    pasoMobile.value = 'modelos';
   }
 };
 
@@ -83,6 +87,7 @@ const seleccionarModelo = async (modelo) => {
   seccionesExpandidas.value = new Set();
   filtroProc.value = null;
   tabActiva.value = 'catalogo';
+  pasoMobile.value = 'detalle';
   cargandoCat.value = true;
   try {
     catalogoItems.value = await catalogoService.obtenerPorModelo(modelo);
@@ -211,15 +216,34 @@ const guardarEdicion = async () => {
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
     <div class="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shrink-0">
-      <BookMarked class="w-5 h-5 text-indigo-600" />
-      <h1 class="font-bold text-gray-800 text-base">Explorador de Catálogo</h1>
+      <!-- Botón atrás — solo mobile -->
+      <button
+        v-if="pasoMobile !== 'tipos'"
+        @click="pasoMobile === 'detalle' ? (pasoMobile = 'modelos') : (pasoMobile = 'tipos', tipoSeleccionado = null, modeloSeleccionado = null, catalogoItems = [])"
+        class="sm:hidden p-1 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+      >
+        <ArrowLeft class="w-5 h-5" />
+      </button>
+      <BookMarked class="w-5 h-5 text-indigo-600 hidden sm:block" />
+      <!-- Breadcrumb mobile -->
+      <div class="flex-1 sm:hidden">
+        <h1 class="font-bold text-gray-800 text-base leading-tight">
+          <span v-if="pasoMobile === 'tipos'">Explorador de Catálogo</span>
+          <span v-else-if="pasoMobile === 'modelos'">{{ tipoSeleccionado }}</span>
+          <span v-else>{{ modeloSeleccionado }}</span>
+        </h1>
+        <p v-if="pasoMobile === 'modelos'" class="text-xs text-gray-400">{{ modelosDelTipo.length }} modelos</p>
+        <p v-else-if="pasoMobile === 'detalle'" class="text-xs text-gray-400">{{ tipoSeleccionado }}</p>
+      </div>
+      <!-- Título normal desktop -->
+      <h1 class="font-bold text-gray-800 text-base hidden sm:block">Explorador de Catálogo</h1>
       <span v-if="!cargandoMaq" class="ml-auto text-xs text-gray-400">
         {{ maquinas.length }} máquinas · {{ tiposDisponibles.length }} tipos
       </span>
     </div>
 
-    <!-- ── Layout 3 columnas ────────────────────────────────────────────────── -->
-    <div class="flex flex-1 overflow-hidden">
+    <!-- ── Layout DESKTOP: 3 columnas ──────────────────────────────────────── -->
+    <div class="hidden sm:flex flex-1 overflow-hidden">
 
       <!-- COLUMNA 1: Tipos ──────────────────────────────────────────────────── -->
       <div class="w-40 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
@@ -594,6 +618,194 @@ const guardarEdicion = async () => {
             </div>
           </div>
 
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Layout MOBILE: drill-down paso a paso ───────────────────────────── -->
+    <div class="sm:hidden flex-1 overflow-hidden flex flex-col">
+
+      <!-- PASO 1: Lista de Tipos -->
+      <div v-if="pasoMobile === 'tipos'" class="flex-1 overflow-y-auto">
+        <div v-if="cargandoMaq" class="flex justify-center py-16">
+          <Loader2 class="w-6 h-6 text-indigo-400 animate-spin" />
+        </div>
+        <ul v-else class="divide-y divide-gray-100">
+          <li
+            v-for="t in tiposDisponibles"
+            :key="t.tipo"
+            @click="seleccionarTipo(t.tipo)"
+            class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          >
+            <span class="font-semibold text-gray-800">{{ t.tipo }}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-gray-100 text-gray-500 rounded-full px-2.5 py-1 font-mono font-bold">{{ t.total }}</span>
+              <ChevronRight class="w-4 h-4 text-gray-300" />
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- PASO 2: Lista de Modelos -->
+      <div v-else-if="pasoMobile === 'modelos'" class="flex-1 overflow-y-auto">
+        <ul class="divide-y divide-gray-100">
+          <li
+            v-for="mod in modelosDelTipo"
+            :key="mod"
+            @click="seleccionarModelo(mod)"
+            class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors"
+          >
+            <span class="font-semibold text-gray-800">{{ mod }}</span>
+            <ChevronRight class="w-4 h-4 text-gray-300" />
+          </li>
+        </ul>
+        <div v-if="modelosDelTipo.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-300 gap-2">
+          <Info class="w-8 h-8" />
+          <p class="text-sm">Sin modelos registrados</p>
+        </div>
+      </div>
+
+      <!-- PASO 3: Detalle del modelo (reutiliza el mismo contenido) -->
+      <div v-else-if="pasoMobile === 'detalle'" class="flex-1 overflow-y-auto">
+        <div v-if="cargandoCat" class="flex flex-col items-center justify-center h-full gap-3 text-indigo-400">
+          <Loader2 class="w-8 h-8 animate-spin" />
+          <p class="text-sm">Cargando catálogo...</p>
+        </div>
+
+        <template v-else>
+          <!-- Stats / Filtros -->
+          <div class="px-4 py-3 bg-white border-b border-gray-200 flex gap-2 flex-wrap">
+            <button
+              @click="filtroProc = null"
+              class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium text-xs transition-colors"
+              :class="filtroProc === null ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'"
+            ><ClipboardList class="w-3.5 h-3.5" /> {{ statsModelo.total }} items</button>
+            <button
+              v-if="statsModelo.conProc > 0"
+              @click="filtroProc = filtroProc === 'con' ? null : 'con'"
+              class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium text-xs transition-colors"
+              :class="filtroProc === 'con' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'"
+            ><CheckCircle2 class="w-3.5 h-3.5" /> {{ statsModelo.conProc }} con proc.</button>
+            <button
+              v-if="statsModelo.sinProc > 0"
+              @click="filtroProc = filtroProc === 'sin' ? null : 'sin'"
+              class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium text-xs transition-colors"
+              :class="filtroProc === 'sin' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700'"
+            ><XCircle class="w-3.5 h-3.5" /> {{ statsModelo.sinProc }} sin proc.</button>
+          </div>
+
+          <!-- Tabs mobile -->
+          <div class="flex gap-1 px-4 py-2 bg-white border-b border-gray-100">
+            <button @click="tabActiva = 'catalogo'" class="px-3 py-1.5 rounded-md text-xs font-bold transition-colors"
+              :class="tabActiva === 'catalogo' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'">
+              <BookOpen class="w-3.5 h-3.5 inline mr-1" />Catálogo
+            </button>
+            <button @click="tabActiva = 'motivos'" class="px-3 py-1.5 rounded-md text-xs font-bold transition-colors"
+              :class="tabActiva === 'motivos' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'">
+              <Wrench class="w-3.5 h-3.5 inline mr-1" />Motivos
+            </button>
+            <button @click="tabActiva = 'maquinas'" class="px-3 py-1.5 rounded-md text-xs font-bold transition-colors"
+              :class="tabActiva === 'maquinas' ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-100'">
+              <Settings2 class="w-3.5 h-3.5 inline mr-1" />Máquinas
+            </button>
+          </div>
+
+          <!-- Catálogo mobile: lista plana con secciones como separadores -->
+          <div v-if="tabActiva === 'catalogo'" class="pb-4">
+            <div v-if="catalogoItems.length === 0" class="flex flex-col items-center py-16 text-gray-300 gap-2">
+              <XCircle class="w-8 h-8" />
+              <p class="text-sm text-gray-400">Sin catálogo para {{ modeloSeleccionado }}</p>
+            </div>
+            <template v-else>
+              <div v-for="{ seccion, grupos } in catalogoEstructura" :key="seccion">
+                <!-- Separador de sección -->
+                <div class="px-4 py-2 bg-gray-100 border-y border-gray-200 sticky top-0 z-10">
+                  <p class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ seccion }}</p>
+                </div>
+                <div v-for="{ grupo, items } in grupos" :key="grupo">
+                  <!-- Grupo label -->
+                  <div class="flex items-center gap-2 px-4 py-1.5 bg-white border-b border-gray-50">
+                    <span class="text-xs font-bold text-indigo-600 bg-indigo-50 rounded px-2 py-0.5 font-mono">{{ grupo }}</span>
+                  </div>
+                  <!-- Items -->
+                  <ul class="divide-y divide-gray-50 bg-white">
+                    <li v-for="item in items" :key="item.id"
+                      class="flex items-center gap-3 px-4 py-3 active:bg-gray-50 transition-colors">
+                      <CheckCircle2 v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4 text-emerald-500 shrink-0" />
+                      <XCircle v-else class="w-4 h-4 text-gray-300 shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-800 leading-snug">{{ item.denominacion }}</p>
+                        <div class="flex flex-wrap gap-x-2 mt-0.5">
+                          <span v-if="item.tipoTarea" class="text-xs font-bold"
+                            :class="{ 'text-blue-500': item.tipoTarea==='Preventivo', 'text-orange-500': item.tipoTarea==='Mecánico', 'text-violet-500': item.tipoTarea==='Eléctrico' }">
+                            {{ item.tipoTarea }}
+                          </span>
+                          <span v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="text-xs text-emerald-600 font-medium">{{ item.procedimiento.length }} pasos</span>
+                        </div>
+                      </div>
+                      <div class="flex gap-1 shrink-0">
+                        <button v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
+                          @click="abrirViewer(item)" class="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-50">
+                          <Eye class="w-4 h-4" />
+                        </button>
+                        <button v-if="userRole === 'admin'" @click="abrirEditor(item)"
+                          class="p-1.5 rounded-lg transition-colors"
+                          :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'text-gray-400 hover:bg-gray-100' : 'text-amber-500 hover:bg-amber-50'">
+                          <Pencil v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
+                          <Plus v-else class="w-4 h-4" />
+                        </button>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Motivos mobile -->
+          <div v-else-if="tabActiva === 'motivos'" class="p-4 space-y-4">
+            <div v-if="!motivosDelTipo" class="flex flex-col items-center py-12 text-gray-300 gap-2">
+              <Info class="w-8 h-8" /><p class="text-sm">Sin motivos para {{ tipoSeleccionado }}</p>
+            </div>
+            <template v-else>
+              <div v-if="motivosDelTipo['Mecánico']" class="border border-gray-200 rounded-xl overflow-hidden">
+                <div class="flex items-center gap-2 px-4 py-3 bg-orange-50 border-b border-orange-100">
+                  <Wrench class="w-4 h-4 text-orange-500" /><span class="font-bold text-orange-700 text-sm">Mecánico</span>
+                </div>
+                <ul class="divide-y divide-gray-50">
+                  <li v-for="m in motivosDelTipo['Mecánico']" :key="m" class="px-4 py-3 text-sm text-gray-700">{{ m }}</li>
+                </ul>
+              </div>
+              <div v-if="motivosDelTipo['Eléctrico']" class="border border-gray-200 rounded-xl overflow-hidden">
+                <div class="flex items-center gap-2 px-4 py-3 bg-violet-50 border-b border-violet-100">
+                  <Zap class="w-4 h-4 text-violet-500" /><span class="font-bold text-violet-700 text-sm">Eléctrico</span>
+                </div>
+                <ul class="divide-y divide-gray-50">
+                  <li v-for="m in motivosDelTipo['Eléctrico']" :key="m" class="px-4 py-3 text-sm text-gray-700">{{ m }}</li>
+                </ul>
+              </div>
+            </template>
+          </div>
+
+          <!-- Máquinas mobile -->
+          <div v-else-if="tabActiva === 'maquinas'" class="p-4">
+            <div v-if="maquinasDelModelo.length === 0" class="flex flex-col items-center py-12 text-gray-300 gap-2">
+              <Settings2 class="w-8 h-8" /><p class="text-sm">Sin máquinas con modelo {{ modeloSeleccionado }}</p>
+            </div>
+            <ul v-else class="space-y-2">
+              <li v-for="m in maquinasDelModelo" :key="m.id"
+                class="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-bold text-gray-800 text-sm">{{ m.maquina || m.nombre_maquina || m.id }}</p>
+                  <p class="text-xs text-gray-400">{{ m.local_fisico || '—' }} · {{ m.sector || '—' }}</p>
+                </div>
+                <span class="text-xs font-bold px-2 py-0.5 rounded-full"
+                  :class="(m.activo ?? true) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'">
+                  {{ (m.activo ?? true) ? 'Activa' : 'Inactiva' }}
+                </span>
+              </li>
+            </ul>
+          </div>
         </template>
       </div>
     </div>

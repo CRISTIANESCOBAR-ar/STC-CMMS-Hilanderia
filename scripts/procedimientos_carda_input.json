@@ -1,0 +1,464 @@
+[
+  {
+    "modelo": "C60",
+    "seccion": "SALIDA Y ENTREGA",
+    "grupo": "C60-01",
+    "denominacion": "LIMPIAR ZONA DE SALIDA Y CUCHILLAS LIMPIADORAS",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Trapo industrial", "Palanca de levante de cuchillas (lado izquierdo)"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la producción con el pulsador de paro. Esperar que el tambor esté completamente detenido antes de intervenir.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Acceder a la zona de salida y retirar acumulación de fibras y polvo con trapo seco.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Usar la palanca (2) en el lado izquierdo de la máquina para levantar ligeramente las cuchillas limpiadoras (1).", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las cuchillas limpiadoras cuidadosamente a todo el ancho con un trapo limpio.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Bajar las cuchillas limpiadoras a su posición original.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reiniciar la máquina en marcha lenta y verificar que no haya acumulación residual en la salida.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "SISTEMA DE ASPIRACIÓN",
+    "grupo": "C60-02",
+    "denominacion": "CONTROLAR TODOS LOS PUNTOS DE ASPIRACIÓN",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Linterna de inspección"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (procedimiento LOTO).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Recorrer cada punto de aspiración de la máquina verificando que las conexiones estén libres de obstrucciones.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Retirar con aspiradora industrial el material acumulado en bocas y conductos de aspiración.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado de los conductos flexibles, identificando grietas, aplastamientos o conexiones sueltas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el filtro del sistema de aspiración y limpiar si hay acumulación excesiva.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar y arrancar el sistema de aspiración; verificar flujo correcto en cada punto.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "ESTRUCTURA GENERAL",
+    "grupo": "C60-03",
+    "denominacion": "LIMPIEZA GENERAL MÁQUINA LADO IZQUIERDO Y DERECHO",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Trapo industrial", "Solvente adecuado o agua"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (LOTO). Esperar parada total del tambor.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar con aspiradora industrial el bastidor principal lado izquierdo: zona accionamiento del tomador y del tambor.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar bastidor lado derecho: accionamiento del peinador, salida y cinta transversal.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el espacio debajo del peinador retirando fibras y polvo acumulado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar residuos de avivaje u otras sustancias adheridas usando solvente adecuado o trapo húmedo con agua.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el espacio interior de la deposición de cinta (apiladora CBA-4) con aspiradora.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Inspeccionar visualmente que no queden acumulaciones de fibra cerca de partes móviles antes de reiniciar.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "DEPOSICIÓN DE CINTA CBA-4",
+    "grupo": "C60-04",
+    "denominacion": "LIMPIAR INTERIOR DEPOSICIÓN DE CINTA Y TUBO DEL PLATO GIRATORIO",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Cepillo limpiador suministrado con la máquina"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (LOTO).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar la chapa cubridora (1) de la parte inferior de la deposición de cinta.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar con aspiradora industrial el espacio interior de la deposición de cinta.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar si existe obstrucción en el tubo del plato giratorio.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Si hay obstrucciones, limpiar el tubo del plato giratorio con el cepillo limpiador suministrado.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Volver a colocar la chapa cubridora (1) asegurando correcta fijación.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar y verificar el funcionamiento de la deposición de cinta en marcha lenta.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "PEINADOR",
+    "grupo": "C60-05",
+    "denominacion": "LIMPIAR CILINDRO DE SALIDA Y CONTROLAR GUARNICIÓN DEL PEINADOR",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Trapo industrial", "Rollerpicker con punta de plástico", "Agua jabonada (si aplica)"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la máquina. El dispositivo desprendedor debe estar parado. El rollerpicker debe tener punta de plástico, nunca metálica.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el cilindro de salida retirando fibras adheridas con rollerpicker o trapo.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: En caso de algodón con honeydew o fibras químicas con alto avivaje, limpiar con agua jabonada.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar visualmente el estado de la guarnición del peinador: verificar suciedad, embotamiento y desgaste de puntas.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Según grado de ensuciamiento, proceder a limpiar la guarnición del peinador (ver Parte 9B del manual).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el campo de desviaciones de los chapones y limpiar acumulaciones.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reiniciar en marcha lenta y controlar calidad del velo producido.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "CHAPONES",
+    "grupo": "C60-06",
+    "denominacion": "CONTROLAR Y LIMPIAR CABEZAS DE CHAPONES",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Rollerpicker con punta de plástico", "Aspiradora industrial", "Linterna de inspección"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado. Los trabajos en el campo de los chapones deben ser ejecutados por personal específicamente instruido.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar las cabezas de los chapones en su recorrido, verificando acumulación de suciedad y fibras.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar con aspiradora industrial y rollerpicker las cabezas de chapones sucias.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el estado de las guarniciones de los chapones. Puntas redondeadas o dobladas implican reemplazo.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado del cepillo limpiador (2) y del peine limpiador (3) del sistema de limpieza de chapones.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar enrollamientos de fibra en el cepillo limpiador.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Tras limpiar, controlar el ajuste de la distancia chapón-peine (0.60 mm) antes de reiniciar (ver Parte 3C).", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "TRANSMISIÓN GENERAL",
+    "grupo": "C60-07",
+    "denominacion": "CONTROLAR TENSIÓN Y ESTADO DE CORREAS Y CADENA",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Tensiómetro de correas", "Llave fija", "Llave dinamométrica", "Calibre"],
+    "repuestos": ["Correas de repuesto según referencia", "Cadena de transmisión"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (LOTO). Verificar parada total del tambor.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Medir la tensión de cada correa con tensiómetro según valores de la tabla de ajuste (Parte 3A del manual).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar visualmente el estado de correas: fisuras, desgaste lateral, deformaciones.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Tensar las correas fuera de rango siguiendo el procedimiento de la Parte 3A. Nota: controlar la cadena a 125h desde la puesta en marcha.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar la tensión de las correas de accionamiento de los chapones (Parte 3C).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Reemplazar correas deterioradas que no puedan tensarse correctamente.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar y realizar marcha en vacío. Verificar ausencia de ruidos anormales y temperatura en poleas.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "PERFILES DE CARDADO",
+    "grupo": "C60-08",
+    "denominacion": "LIMPIAR Y CONTROLAR PERFILES DE CARDADO Y CUCHILLAS DE CÁSCARAS",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Llave de fijación", "Calibre de láminas"],
+    "repuestos": ["Tiras de guarnición de perfiles cardadores", "Cuchillas de cáscaras"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar interruptor principal y asegurar con candado. Verificar parada total del tambor.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar los perfiles de cardado (2) marcando previamente su posición. IMPORTANTE: cada perfil debe volver al mismo lugar de donde fue desmontado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar los perfiles de cardado y las tiras de guarnición (1) con aspiradora industrial.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar las tiras de guarnición (1): si las puntas de dientes están redondeadas, deben reemplazarse (ver Parte 3E).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el estado de las cuchillas de cáscaras (3). Reemplazar las gastadas o dañadas (Parte 3E).", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Reinstalar cada perfil de cardado en su posición original marcada. No es necesario reajuste nuevo.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Ajustar los perfiles de cardado (2) según Parte 3C del manual.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y verificar funcionamiento correcto del campo de cardado.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "TAMBOR PRINCIPAL",
+    "grupo": "C60-09",
+    "denominacion": "LIMPIAR ESPACIO INTERIOR DEL TAMBOR Y CONTROLAR EMPAQUETADURAS",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Linterna de inspección", "Trapo industrial"],
+    "repuestos": ["Empaquetaduras de tambor (según referencia)"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado. Esperar parada COMPLETA del tambor antes de cualquier intervención.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar las cubiertas de acceso al espacio interior del tambor.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el espacio interior del tambor con aspiradora industrial eliminando fibras, polvo y borrilla volante.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el estado de las empaquetaduras del tambor en ambos lados. Verificar ausencia de fisuras o deformaciones.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar visualmente la guarnición del tambor: verificar desgaste uniforme y ausencia de zonas peladas.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Reemplazar empaquetaduras deterioradas. Reinstalar cubiertas con torque correcto.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y verificar temperatura y vibración del tambor durante los primeros 10 minutos.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "TAMBOR PRINCIPAL",
+    "grupo": "C60-09",
+    "denominacion": "CONTROLAR CUCHILLAS LIMPIADORAS Y CEPILLO LIMPIADOR DEL TAMBOR",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Linterna de inspección", "Llave fija", "Trapo industrial"],
+    "repuestos": ["Cuchillas limpiadoras de tambor", "Cepillo limpiador (si aplica)"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (LOTO).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el estado de las cuchillas limpiadoras (1): verificar desgaste del filo, deformaciones o daños.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar el estado del cepillo limpiador (2): verificar desgaste de cerdas y estado del eje.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar enrollamientos de fibra acumulados en el cepillo limpiador (2).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Reemplazar cuchillas limpiadoras o cepillo limpiador si presentan desgaste excesivo.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar, arrancar en marcha lenta y verificar que no haya rozamiento ni ruido anormal en la zona del cepillo.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "AJUSTES GENERALES",
+    "grupo": "C60-10",
+    "denominacion": "CONTROLAR AJUSTES DE MÁQUINA SEGÚN HOJAS DE AJUSTE",
+    "tiempoEstimado": "6h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Calibre de láminas", "Calibre de lupa de ajuste de chapones", "Hojas de ajuste Parte 7A"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar interruptor principal y asegurar con candado antes de tomar medidas en partes internas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Recopilar las hojas de ajuste de la Parte 7A y los valores de referencia vigentes para la máquina.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Medir la distancia entre chapones y tambor a todo el ancho con calibre de láminas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Medir la distancia entre tomador y tambor, y entre peinador y tambor.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar ajuste del peine limpiador / cepillo limpiador de chapones.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Corregir todas las desviaciones encontradas respecto a los valores de las hojas de ajuste (Parte 3C y 7A).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar los valores medidos y corregidos en el historial de la máquina.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en producción y controlar la calidad de la cinta producida en los primeros rollos.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "LUBRICACIÓN",
+    "grupo": "C60-11",
+    "denominacion": "LUBRICAR COJINETES DEL TAMBOR Y CEPILLO LIMPIADOR DE CHAPONES",
+    "tiempoEstimado": "6h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pistola de engrase", "Bomba de grasa manual", "Trapo industrial"],
+    "repuestos": ["Grasa EP 2 (ej: Klüber MICROLUBE GBUY 131 / Mobil Mobilux EP 2 / Shell Calithia EP Grease T2)", "Grasa S18 (ej: Klüber ISOFLEX TOPAS NB 52 / Mobil MOBILTEMP SHC 100)"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con candado (LOTO). Verificar parada total de la máquina.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Identificar todos los niples de lubricación de los cojinetes del tambor según plano de lubricación (Parte 4B).", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Limpiar la boquilla de cada niple antes de engrase para evitar contaminación.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar grasa EP 2 en los cojinetes del tambor con 2-3 golpes de bomba por niple.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Identificar los niples de los cojinetes del cepillo limpiador de chapones y del peine limpiador.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar grasa EP 2 en los cojinetes del cepillo limpiador y peine limpiador con 2-3 golpes de bomba.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Limpiar excesos de grasa. Registrar la lubricación en el historial. Arrancar y verificar temperatura normal en cojinetes.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "CHAPONES - ACCIONAMIENTO",
+    "grupo": "C60-12",
+    "denominacion": "REEMPLAZAR GRASA EN ACCIONAMIENTO DE CHAPONES (ENGRANAJES)",
+    "tiempoEstimado": "8h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave fija", "Llave dinamométrica", "Recipiente para grasa usada", "Pistola de engrase"],
+    "repuestos": ["Grasa S18 Isoflex Topas NCA 52 (Klüber) — cantidad: 50 g por accionamiento. NO mezclar con otras grasas."],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado. Esta tarea aplica cada 18.000 h o 3 años de operación.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Desmontar los engranajes del accionamiento de los chapones siguiendo el procedimiento de la Parte 3E del manual.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar cada pieza individual de los engranajes: verificar desgaste, dentado, rodamientos.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Retirar completamente la grasa antigua de los engranajes. No mezclar grasas de distintos tipos.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar 50 g de grasa nueva S18 (Isoflex Topas NCA 52 o equivalente S18 según Parte 4A). Si se cambia de marca, purgar todo rastro de grasa anterior.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Montar los engranajes siguiendo el procedimiento de la Parte 3E, aplicando torque especificado.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y controlar temperatura de los engranajes. Verificar ausencia de ruido anormal.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar la intervención en el historial de la máquina con fecha y tipo de grasa utilizada.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "C60",
+    "seccion": "GUARNICIONES",
+    "grupo": "C60-13",
+    "denominacion": "CONTROLAR Y ESMERILAR GUARNICIONES DE TAMBOR, PEINADOR Y CHAPONES",
+    "tiempoEstimado": "8h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Cilindro esmerilador (Parte 9B)", "Calibre de láminas", "Lupa de inspección de agujas", "Llave fija"],
+    "repuestos": ["Guarnición del tomador (no esmerilable, requiere reemplazo)", "Tiras de guarnición de perfiles de pre/postcardado", "Cuchillas de cáscaras (Parte 3E)"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar interruptor principal y asegurar con candado. El esmerilado de guarniciones debe ser ejecutado por personal específicamente instruido (Parte 9B).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar las guarniciones del tambor, peinador, cilindro desprendedor y chapones con lupa. Verificar desgaste y puntas dobladas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar la guarnición del tomador. ATENCIÓN: la guarnición del tomador NO puede esmerilarse; debe reemplazarse.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Esmerilar la guarnición del tambor (3), peinador (4) y chapones (6) según las indicaciones de orientación de la Parte 9B.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Reemplazar la guarnición del tomador (2) según Parte 9B. Reemplazar también los elementos cardadores bajo el tomador.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Reemplazar tiras de guarnición de perfiles de pre/postcardado junto con la guarnición del tambor (Parte 3E).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Controlar y reemplazar cuchillas de cáscaras desgastadas o dañadas (Parte 3E).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Realizar marcha de ensayo. Controlar temperatura y calidad de la cinta. Con chapones nuevos, reajustar a las 500 horas de marcha.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "LUBRICACIÓN GENERAL",
+    "grupo": "TC7-01",
+    "denominacion": "RENOVAR GRASA DE ALTA TEMPERATURA SM 100/2 EN PUNTOS CRÍTICOS",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pistola de engrase", "Trapo industrial"],
+    "repuestos": ["Grasa para altas temperaturas SM 100/2 #035083302016 — cantidad: 2,4 g"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Verificar parada total de la máquina.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Identificar los puntos de aplicación de grasa SM 100/2 según plano de lubricación del manual.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar la boquilla de cada punto de engrase con trapo antes de aplicar grasa nueva.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar 2,4 g de grasa SM 100/2 (#035083302016) en cada punto indicado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Retirar excedentes de grasa con trapo limpio.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar la intervención. Próximo cambio: 6 meses.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "SISTEMA DE FILTRACIÓN TC-CI",
+    "grupo": "TC7-02",
+    "denominacion": "REEMPLAZAR CARTUCHO FILTRANTE TC-CI",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Llave fija", "Trapo industrial"],
+    "repuestos": ["Cartucho filtrante TC-CI #037181761577 — cantidad: 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Acceder al alojamiento del filtro TC-CI y retirar el cartucho filtrante usado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el alojamiento del filtro retirando polvo y residuos acumulados.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar el cartucho filtrante nuevo #037181761577. Verificar correcto asentamiento y cierre hermético.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar y arrancar. Verificar que no haya pérdida de aire ni bypass del filtro.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar cambio en historial. Próxima sustitución: 1 año.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "TRANSMISIÓN TC-CI",
+    "grupo": "TC7-03",
+    "denominacion": "REEMPLAZAR CORREDERA TC-CI",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave fija", "Llave dinamométrica", "Destornillador"],
+    "repuestos": ["Corredera TC-CI #037181761583 — cantidad: 5 unidades"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Verificar parada total.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Acceder al sistema TC-CI y retirar las 5 correderas desgastadas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar las guías y superficies de deslizamiento. Verificar ausencia de daños en el alojamiento.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las superficies de montaje antes de instalar las correderas nuevas.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar las 5 correderas nuevas #037181761583. Verificar alineación y libertad de movimiento.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar, arrancar en marcha lenta y verificar funcionamiento del sistema TC-CI.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar el cambio. Próxima sustitución: 1 año.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "TRANSMISIÓN PRINCIPAL",
+    "grupo": "TC7-04",
+    "denominacion": "REEMPLAZAR CORREAS DENTADAS HTD (TRANSMISIONES PRINCIPALES)",
+    "tiempoEstimado": "3h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Tensiómetro de correas", "Llave fija", "Llave dinamométrica", "Regla de alineación"],
+    "repuestos": [
+      "Correa dentada HTD 720-D8M-20 #035081755833 — 1 unidad (1 año)",
+      "Correa dentada HTD 800-D8M-20 #035081755834 — 1 unidad (2 años)",
+      "Correa dentada HTD 1120-D8M-20 #035081755847 — 1 unidad (2 años)",
+      "Correa dentada HTD 1328-8M-20 #035081755836 — 1 unidad (2 años)",
+      "Correa dentada HTD 1360-8M-20 #035081755837 — 1 unidad (2 años)",
+      "Correa dentada HTD 1520-8M-20 #035081755832 — 1 unidad (2 años)"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Verificar parada total de todos los accionamientos.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Aflojar el tensor o motor correspondiente a la correa a reemplazar. Retirar la correa desgastada.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar el estado de las poleas: verificar desgaste de dientes, alineación y fijación.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Montar la correa dentada nueva verificando que los dientes encajen correctamente en ambas poleas.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Tensar la correa con tensiómetro hasta alcanzar el valor especificado. Verificar alineación de poleas.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y verificar funcionamiento sin ruido ni vibración anormal.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Controlar la tensión nuevamente tras 30 minutos de marcha. Registrar el reemplazo en historial.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "TRANSMISIÓN SECUNDARIA",
+    "grupo": "TC7-05",
+    "denominacion": "REEMPLAZAR CORREAS PLANAS DE TRANSMISIÓN",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Tensiómetro de correas", "Llave fija", "Regla de alineación"],
+    "repuestos": [
+      "Correa plana B=20mm L=1088mm #035081755353 — 1 unidad",
+      "Correa plana B=25mm L=1690mm #035081755250 — 1 unidad",
+      "Correa plana B=50mm L=3530mm #035081755363 — 1 unidad"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO).", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Aflojar los tensores correspondientes a cada correa plana a reemplazar. Retirar la correa usada.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado de los rodillos guías y tensores: desgaste, juego axial y alineación.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar la correa plana nueva verificando la orientación correcta (si tiene flecha de sentido de marcha).", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Tensar la correa hasta el valor especificado y verificar alineación con regla.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta. Verificar que la correa no se desplace lateralmente ni presente vibración.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar cambio en historial. Próxima sustitución: 2 años.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "TOMADOR",
+    "grupo": "TC7-06",
+    "denominacion": "REEMPLAZAR CUCHILLAS DE TOMADOR Y CUCHILLA DESBORRADORA",
+    "tiempoEstimado": "3h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave fija", "Llave dinamométrica", "Calibre de láminas", "Regla de ajuste"],
+    "repuestos": [
+      "Cuchilla 1.er tomador #991322130031 — 1 unidad",
+      "Cuchilla desborradora #991322160084 — 1 unidad",
+      "Cuchilla desborradora #991322160149 — 1 unidad"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Verificar parada total del tambor y tomador.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar las cubiertas de acceso al grupo tomador. Aflojar los tornillos de fijación de las cuchillas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar el estado de la guarnición del tomador antes de reemplazar las cuchillas.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer las cuchillas usadas (#991322130031 y #991322160084/160149) en orden.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las superficies de alojamiento de las cuchillas antes de montar las nuevas.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar las cuchillas nuevas y ajustar la posición con calibre de láminas según el manual.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reinstalar cubiertas, arrancar en marcha lenta y verificar que no hay rozamiento ni vibración anormal en el tomador.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "CHAPONES",
+    "grupo": "TC7-07",
+    "denominacion": "REEMPLAZAR CUCHILLA DISPOSITIVO LIMPIADOR DE CHAPONES",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave fija", "Calibre de láminas", "Destornillador"],
+    "repuestos": [
+      "Cuchilla dispositivo limpiador de chapones #980022630062 — 1 unidad"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Los trabajos en el campo de los chapones requieren personal instruido.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Acceder al dispositivo limpiador de chapones y retirar la cuchilla desgastada (#980022630062).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar el estado del portacuchillas y el mecanismo de fijación. Verificar ausencia de deformaciones.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el alojamiento de la cuchilla antes de instalar la nueva.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar la cuchilla nueva y ajustar la posición con calibre de láminas según el valor especificado en el manual.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y verificar que la cuchilla limpia correctamente los chapones sin rozamiento excesivo.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "SISTEMA ELÉCTRICO T-CON",
+    "grupo": "TC7-08",
+    "denominacion": "REEMPLAZAR ESCOBILLAS DE CARBÓN TAMBOR Y TOMADOR (T-CON)",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Destornillador", "Llave fija", "Multímetro"],
+    "repuestos": [
+      "Escobilla de carbón llevador/tomador T-CON completa #991300130168 — 2 unidades",
+      "Escobilla de carbón tambor T-CON completa #991400145029 — 1 unidad"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Esperar descarga de condensadores antes de intervenir en el sistema T-CON.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Acceder al portaescobillas del llevador/tomador y retirar las 2 escobillas de carbón usadas (#991300130168).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado del anillo colector: ausencia de surcos, quemaduras o contaminación con grasa.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar las 2 escobillas nuevas #991300130168 verificando presión de muelle correcta.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Acceder al portaescobillas del tambor y reemplazar la escobilla #991400145029.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar escobilla nueva del tambor #991400145029. Verificar contacto correcto con el anillo.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reconectar y medir resistencia de contacto con multímetro. Arrancar y verificar ausencia de chisporroteo en el sistema T-CON.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Registrar cambio en historial. Próxima sustitución: 2 años.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "TC7",
+    "seccion": "SELLADOS Y EMPAQUETADURAS",
+    "grupo": "TC7-09",
+    "denominacion": "REEMPLAZAR ANILLOS DE ESTANQUIDAD Y EMPAQUETADURAS DE RODAMIENTOS",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Extractor de retenes", "Llave dinamométrica", "Martillo de plástico", "Calibre"],
+    "repuestos": [
+      "Anillo de estanquidad 105/75 Ø 6+8 WN2233T.16 #035081223254 — 2 unidades",
+      "Anillo de estanquidad 190/160 Ø 6+8 WN2233T.16 #035081223269 — 2 unidades",
+      "Anillo de estanquidad 65/50 Ø 6+8 WN2233T.16 #035081223258 — 2 unidades",
+      "Anillo de empaquetadura 150/120 #980300200140 — 6 unidades"
+    ],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Verificar parada total.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar las cubiertas y protecciones de acceso a los rodamientos y puntos de sellado.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer los anillos de estanquidad y empaquetaduras usados con extractor de retenes. No dañar las superficies de asiento.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Inspeccionar las superficies de asiento de los retenes. Verificar ausencia de rayaduras o corrosión.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las superficies de montaje con trapo limpio y solvente.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar los anillos de estanquidad nuevos con martillo de plástico. Verificar asentamiento uniforme y profundidad correcta.", "imagenUrl": null},
+      {"texto": "⚙️ MONTAJE/AJUSTE: Instalar las empaquetaduras nuevas #980300200140. Reinstalar cubiertas con torque especificado.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar en marcha lenta y verificar ausencia de pérdidas de lubricante. Registrar en historial. Próxima sustitución: 2 años.", "imagenUrl": null}
+    ]
+  }
+]

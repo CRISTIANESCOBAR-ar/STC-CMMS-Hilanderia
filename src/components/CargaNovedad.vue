@@ -249,18 +249,19 @@ const gruposDisponibles = computed(() => {
 const grupoPrefix = computed(() => {
   const grupos = gruposDisponibles.value;
   if (grupos.length < 2) return '';
-  // Extraer la parte inicial numérica común a todos
   const first = String(grupos[0]);
   let prefix = '';
   for (let i = 1; i <= first.length; i++) {
     const candidate = first.slice(0, i);
-    if (grupos.every(g => String(g).startsWith(candidate))) {
+    // Si ya no es prefijo común, cortar
+    if (!grupos.every(g => String(g).startsWith(candidate))) break;
+    // Solo guardar el candidato si queda sufijo de al menos 3 dígitos en todos los grupos
+    // Ej: grupos 25400,25410 → "25" deja "400","410" (3 díg) ✓ | "254" deja "00","10" (2 díg) → no guardar
+    if (grupos.every(g => String(g).length - i >= 3)) {
       prefix = candidate;
-    } else break;
+    }
   }
-  // Solo aplicar si el prefijo tiene al menos 2 dígitos y queda al menos 3 dígitos significativos
-  // Ej: "25" sobre "25420" → muestra "420" ✓ | "254" sobre "25420" → queda "20" (solo 2) → rechazado ✓
-  return (prefix.length >= 2 && grupos.every(g => String(g).length - prefix.length >= 3)) ? prefix : '';
+  return prefix.length >= 2 ? prefix : '';
 });
 
 const formatGrupo = (g) => {

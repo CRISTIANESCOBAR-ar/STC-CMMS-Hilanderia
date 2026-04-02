@@ -17,6 +17,7 @@ const routes = [
   { path: '/llamar', component: () => import('./components/LlamarIntervencion.vue'), meta: { requiresAuth: true, role: ['admin', 'gerente_produccion', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'supervisor', 'supervisor_mecanico', 'supervisor_electrico', 'inspector'] } },
   { path: '/intervenciones', component: () => import('./components/IntervencionesView.vue'), meta: { requiresAuth: true } },
   { path: '/codigos', component: () => import('./components/CodigosAdmin.vue'), meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/catalogo', component: () => import('./components/CatalogoExplorer.vue'), meta: { requiresAuth: true, role: 'admin' } },
   { path: '/sintomas', component: () => import('./components/SintomasAdmin.vue'), meta: { requiresAuth: true, role: 'admin' } },
   { path: '/intervenciones/:id', component: () => import('./components/IntervencionDetalle.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },

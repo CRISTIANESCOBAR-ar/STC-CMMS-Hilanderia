@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole, previewSector } from './services/authService';
-import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge } from 'lucide-vue-next';
+import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge, BookMarked } from 'lucide-vue-next';
 import { ROLE_LABEL, ROLE_OPTIONS, SECTOR_OPTIONS, isJefeRole, getQuickActions } from './constants/organization';
 import { canAccessView, getDefaultRoute } from './services/profileService';
 import Swal from 'sweetalert2';
@@ -166,6 +166,7 @@ const pageTitle = computed(() => {
   if (path === '/llamar') return 'Solicitar Intervención';
   if (path === '/intervenciones') return 'Intervenciones';
   if (path === '/codigos')   return 'Códigos de Defectos y Paradas';
+  if (path === '/catalogo')  return 'Explorador de Catálogo';
   if (path === '/sintomas')  return 'Síntomas de Tejeduría';
   if (path === '/login') return 'Ingreso al Sistema';
   if (path === '/patrulla') return 'Patrulla de Calidad';
@@ -427,6 +428,17 @@ const navigateTab = (action) => {
             >
               <ListFilter class="w-6 h-6 mr-4" />
               Códigos y Tipos de Falla
+            </router-link>
+
+            <router-link
+              v-if="canAccessView(userRole, 'catalogo')"
+              to="/catalogo"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/20"
+            >
+              <BookMarked class="w-6 h-6 mr-4" />
+              Catálogo de Máquinas
             </router-link>
 
             <router-link

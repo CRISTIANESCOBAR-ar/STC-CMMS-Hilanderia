@@ -32,6 +32,7 @@ export const VISTA_OPTIONS = [
   { slug: 'usuarios',       label: 'Usuarios',               route: '/usuarios' },
   { slug: 'traducciones',   label: 'Traducciones',           route: '/traducciones' },
   { slug: 'codigos',        label: 'Códigos de Falla',       route: '/codigos' },
+  { slug: 'catalogo',       label: 'Catálogo de Máquinas',   route: '/catalogo' },
   { slug: 'sintomas',       label: 'Síntomas',               route: '/sintomas' },
   { slug: 'patrulla',       label: 'Patrulla Calidad',       route: '/patrulla' },
   { slug: 'shiftreport',    label: 'Shift Report',            route: '/shiftreport' },

@@ -242,6 +242,31 @@ const gruposDisponibles = computed(() => {
     return [...sets].sort();
 });
 
+// Devuelve el número corto que usa el personal en la práctica.
+// Para BENNINGER todos los grupos son "25XXX" → mostramos solo "XXX".
+// Para otros modelos, detecta si todos los grupos del catálogo comparten
+// un prefijo numérico común y lo quita en la visualización.
+const grupoPrefix = computed(() => {
+  const grupos = gruposDisponibles.value;
+  if (grupos.length < 2) return '';
+  // Extraer la parte inicial numérica común a todos
+  const first = String(grupos[0]);
+  let prefix = '';
+  for (let i = 1; i <= first.length; i++) {
+    const candidate = first.slice(0, i);
+    if (grupos.every(g => String(g).startsWith(candidate))) {
+      prefix = candidate;
+    } else break;
+  }
+  // Solo aplicar si el prefijo tiene al menos 2 dígitos y queda algo significativo
+  return (prefix.length >= 2 && grupos.every(g => String(g).length > prefix.length)) ? prefix : '';
+});
+
+const formatGrupo = (g) => {
+  const p = grupoPrefix.value;
+  return p && String(g).startsWith(p) ? String(g).slice(p.length) : String(g);
+};
+
 
 const denominacionesDisponibles = computed(() => {
     if (!grupoSeleccionado.value) return [];
@@ -570,7 +595,7 @@ const seleccionarAccionRapida = (accion) => {
               <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1" :class="{'opacity-50': !seccionSeleccionada}">2. Grupo</label>
               <select v-model="grupoSeleccionado" :disabled="!seccionSeleccionada" class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-30">
                 <option value="">...</option>
-                <option v-for="g in gruposDisponibles" :key="g" :value="g">{{ g }}</option>
+                <option v-for="g in gruposDisponibles" :key="g" :value="g">{{ formatGrupo(g) }}</option>
               </select>
             </div>
           </div>

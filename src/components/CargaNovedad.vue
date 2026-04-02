@@ -13,6 +13,7 @@ import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
 import CameraCapture from './CameraCapture.vue';
+import { getMotivos } from '../constants/motivos';
 
 const maquinas = ref([]);
 const router = useRouter();
@@ -161,6 +162,11 @@ watch(tipoSeleccionado, () => {
   gpSeleccionado.value = '';
   maquinaSeleccionadaId.value = '';
   resetCatalogo();
+  motivoLlamado.value = motivosDisponibles.value[0];
+});
+
+watch(tipoProblema, () => {
+  motivoLlamado.value = motivosDisponibles.value[0];
 });
 
 watch(gpSeleccionado, () => {
@@ -177,6 +183,10 @@ watch(tiposDisponibles, (newTipos) => {
 const detallesMaquina = computed(() => {
   if (!maquinaSeleccionadaId.value) return null;
   return maquinasPorSector.value.find(m => m.id === maquinaSeleccionadaId.value);
+});
+
+const motivosDisponibles = computed(() => {
+  return getMotivos(tipoSeleccionado.value, tipoProblema.value);
 });
 
 const gmSeleccionado = computed(() => {
@@ -613,7 +623,7 @@ const seleccionarAccionRapida = (accion) => {
            <select 
              v-model="motivoLlamado" 
              class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-             <option v-for="opt in ['VERIFICACIÓN', 'LIMPIEZA', 'AJUSTE', 'LUBRICACIÓN', 'CAMBIO']" :key="opt" :value="opt">
+             <option v-for="opt in motivosDisponibles" :key="opt" :value="opt">
                {{ opt }}
              </option>
            </select>

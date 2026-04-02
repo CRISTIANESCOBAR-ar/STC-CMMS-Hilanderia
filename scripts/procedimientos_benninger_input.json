@@ -1,0 +1,357 @@
+[
+  {
+    "seccion": "CAJAS LAVADO INFERIOR",
+    "grupo": "25220",
+    "denominacion": "BOMBA CENTRÍFUGA DE CIRCULACIÓN (D220/D240)",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Juego llaves fijas", "Extractor de acoplamientos", "Destornillador plano", "Grasera"],
+    "repuestos": ["Rodamientos", "Junta de cuerpo", "O-rings"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Realizar bloqueo LOTO en el interruptor principal del motor de la bomba y cerrar válvulas de succión/descarga.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desacoplar el motor eléctrico de la bomba retirando los pernos de unión del acoplamiento flexible.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Retirar los tornillos del cuerpo de la bomba para acceder al impulsor y al eje.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el estado del impulsor buscando signos de cavitación, erosión o depósitos de sólidos.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Controlar el juego radial de los rodamientos; si superan la tolerancia de diseño, proceder al cambio.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Instalar rodamientos nuevos y reensamblar el eje dentro de la carcasa utilizando juntas nuevas.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Alinear el eje de la bomba con el motor utilizando un comparador de carátula para evitar vibraciones.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Abrir válvulas y purgar el aire del sistema antes de la prueba de marcha.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS TEÑIDO",
+    "grupo": "25400",
+    "denominacion": "SELLO MECÁNICO DE BOMBA DOSIFICADORA",
+    "tiempoEstimado": "3h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave Allen", "Trapo limpio", "Alcohol isopropílico", "Prensa pequeña"],
+    "repuestos": ["Kit de sello mecánico original", "Membrana (si aplica)", "Lubricante de silicona"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Desenergizar el equipo y despresurizar las líneas de productos químicos (Índigo/Soda).", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Retirar el cabezal de la bomba para exponer la zona del sello y la membrana de protección.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar el taladro de fuga (página 30 K900); si hay humedad, el sello o la membrana están fallando.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Extraer las caras del sello mecánico con cuidado de no rayar el eje de la bomba.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar el asiento del sello y el eje con alcohol isopropílico; no debe quedar rastro de corrosión.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Instalar el sello nuevo. IMPORTANTE: No tocar las caras de carbón/cerámica con los dedos desnudos.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Lubricar los o-rings ligeramente con silicona para facilitar el asentamiento sin pellizcos.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar prueba hidrostática manual para confirmar que no hay goteo por el taladro de fuga.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJA GOMA Y CABEZAL",
+    "grupo": "25800",
+    "denominacion": "PRESIÓN DE PLEGADO S800",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Llave dinamométrica", "Calibre", "Plegador vacío BB"],
+    "repuestos": ["Anillos obturadores cilindro de presión"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Colocar la máquina en modo parada de emergencia y bloquear el sistema neumático.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Soltar los dos elementos de sujeción de la palanca de fundición (Ref. Plegadora S800, pág 54).", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Colocar un plegador vacío tipo BB (Ø 1000 mm) para realizar el ajuste de referencia.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Aplicar las palancas de presión manualmente contra el núcleo del plegador.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Extraer totalmente el cilindro de presión y retrasarlo según la 'Medida B' especificada en el manual.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Apretar los elementos de sujeción aplicando un torque exacto de 38 Nm.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Introducir el cilindro totalmente y verificar que las palancas no se bloqueen mecánicamente.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "ELECTRICIDAD Y CONTROL",
+    "grupo": "25900",
+    "denominacion": "VARIADORES DE FRECUENCIA (ERRORES POWER)",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Multímetro", "Terminal de diálogo INDIGO", "Manual S7"],
+    "repuestos": ["Ventilador de variador (si aplica)"],
+    "procedimiento": [
+      { "texto": "⚡ ELÉCTRICO: Acceder a la máscara 'Parámetro convertidor de frecuencia (POWER)' en el Diálogo INDIGO.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el valor T1 (Temperatura unidad de alimentación). Si T1 > 70°C, revisar ventilación externa.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Monitorear la corriente intermedia (DC) para detectar picos que indiquen fallas en el bobinado del motor.", "imagenUrl": null },
+      { "texto": "⚡ ELÉCTRICO: Realizar un 'Reset manual de valores máximos' para limpiar alarmas de sobrecorriente esporádicas.", "imagenUrl": null },
+      { "texto": "🔒 SEGURIDAD: Si el error persiste, bloquear el seccionador principal antes de abrir el armario eléctrico.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar conexiones de potencia (U, V, W) buscando signos de recalentamiento o terminales flojos.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Reiniciar el diálogo y verificar que el símbolo de error del motor haya desaparecido en la pantalla principal.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "SECADO Y ENCOLADO",
+    "grupo": "25700",
+    "denominacion": "CADENA DE RODILLOS (TKV / S800)",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Petróleo para limpieza", "Cepillo metálico", "Optimol Viscogen KL 300", "Regla"],
+    "repuestos": ["Eslabones de unión", "Cadena de repuesto"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Bloqueo mecánico del accionamiento para evitar el movimiento accidental de los rodillos.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar la cadena con petróleo o agente desengrasante comercial para eliminar lodos de aceite.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Medir el estiramiento de la cadena. Si supera el 2% de la longitud nominal, debe ser sustituida.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar el desgaste de los dientes de las ruedas de cadena (perfil de diente de sierra).", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Aplicar spray Optimol Viscogen KL 300 en los flancos de los eslabones (cada 250h).", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Si se instala una cadena nueva, sumergirla previamente 24h en baño de aceite a temperatura ambiente.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Comprobar la tensión de la cadena y ajustar el tensor neumohidráulico si es necesario.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJA ENTRADA",
+    "grupo": "25100",
+    "denominacion": "RODILLOS EXPRIMIDORES (D100)",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Reloj comparador", "Gatos hidráulicos", "Llave de impacto"],
+    "repuestos": ["Rodamientos oscilantes", "Guarnición del rodillo"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Bloquear energía eléctrica y neumática. Asegurar que los rodillos no tengan presión residual.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desmontar los protectores laterales y las tuberías de alimentación de aire de los cilindros.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Extraer el rodillo utilizando los puntos de izaje especificados para evitar dañar el revestimiento.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Comprobar la superficie de goma buscando grietas, marcas de hilos o endurecimiento del material.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar la suavidad de marcha de los cojinetes; no debe haber ruidos metálicos ni vibración axial.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Colocar el rodillo en sus apoyos y asegurar los soportes de los rodamientos con el torque indicado.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar prueba de 'huella' con papel carbónico para asegurar presión uniforme en todo el ancho.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "ELECTRICIDAD Y CONTROL",
+    "grupo": "25975",
+    "denominacion": "TERMOSTATO DE SEGURIDAD COCINA S900",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Termómetro digital", "Destornillador de precisión"],
+    "repuestos": ["Termostato de seguridad 95°C"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: No intervenir con la tina de cocción caliente. Esperar a que baje de 60°C.", "imagenUrl": null },
+      { "texto": "⚡ ELÉCTRICO: Verificar en el Diálogo INDIGO si la alarma de temperatura está activa o bloqueada.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Forzar manualmente la válvula piloto para subir la temperatura del depósito.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Confirmar que al alcanzar los 95°C el proceso se interrumpe y se enciende la lámpara de falla.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Si no dispara a 95°C, el termostato está defectuoso. Retirar la sonda del pozo térmico.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Instalar el termostato nuevo asegurando el contacto térmico de la sonda.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Resetear la falla en el PLC y realizar un ciclo de prueba con agua limpia.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS LAVADO SUPERIOR",
+    "grupo": "25600",
+    "denominacion": "INYECTORES DE VAPOR (D600)",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Escariador manual", "Llave de tubo", "Cepillo de bronce"],
+    "repuestos": ["Juntas de grafito para vapor"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Cerrar válvula maestra de vapor y purgar la línea. Usar guantes para protección térmica.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Retirar las bridas de conexión de los tubos inyectores dentro de la tina de lavado.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar los orificios del inyector para eliminar incrustaciones de sarro o restos de químicos.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar si hay erosión en los agujeros de salida que pueda causar una distribución de calor desigual.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Reinstalar los tubos inyectores utilizando juntas nuevas resistentes a alta temperatura.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Abrir vapor lentamente y verificar que la agitación del baño sea uniforme en toda la tina.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "AUXILIARES GENERALES",
+    "grupo": "25010",
+    "denominacion": "SISTEMA FRENO S100",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Papel de esmeril", "Grasa para alta temperatura", "Calibre de espesores"],
+    "repuestos": ["Bandas de freno", "Zapatas de freno"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Bloquear el giro del soporte de plegadores mediante trabas mecánicas.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar visualmente y con el oído buscando silbidos o chirridos durante la operación.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desmontar las bandas de freno si presentan endurecimiento o vitrificación.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Tratar la superficie de las guarniciones con papel de esmeril para recuperar el coeficiente de fricción.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Comprobar la estanqueidad de los cilindros neumáticos de freno; no debe haber fugas de aire.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Montar las bandas y ajustar la holgura inicial para asegurar una respuesta de frenado inmediata.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar prueba de frenado de emergencia a baja velocidad de proceso.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS TEÑIDO",
+    "grupo": "25420",
+    "denominacion": "SENSORES DE NIVEL DE TINA (D420/D440)",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Multímetro", "Limpia contactos", "Paño suave"],
+    "repuestos": ["Sensor inductivo/capacitivo de repuesto"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Bloqueo eléctrico del sistema de bombas de llenado/vaciado de la tina.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el estado de limpieza del sensor. La acumulación de tinte causa falsas lecturas.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar la cara activa del sensor con un paño húmedo y detergente neutro; evitar abrasivos.", "imagenUrl": null },
+      { "texto": "⚡ ELÉCTRICO: Medir la señal de salida del sensor en la bornera del armario (4-20mA o digital).", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Comprobar la integridad del cable y el conector M12; aplicar limpia contactos si hay sulfatación.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Simular nivel alto/bajo manualmente y confirmar el cambio de estado en el Diálogo INDIGO.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "AUXILIARES GENERALES",
+    "grupo": "25016",
+    "denominacion": "ACCIONAMIENTO HIDRÁULICO (GRUPO S150)",
+    "tiempoEstimado": "2.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Llave para filtros", "Recipiente colector", "Bomba de llenado con filtro"],
+    "repuestos": ["Cartucho de filtro hidráulico", "Aceite hidráulico (ver Tabla)"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Descargar la presión acumulada en el circuito antes de abrir cualquier conexión hidráulica.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Observar el manómetro de suciedad del filtro (S150); si está en zona roja, cambiar cartucho.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desenroscar la carcasa del filtro y retirar el cartucho usado.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar el nivel de aceite en el visor del tanque y la temperatura del grupo (no debe exceder 60°C).", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Instalar cartucho nuevo y lubricar la junta tórica con aceite limpio antes de cerrar.", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Rellenar aceite si es necesario utilizando siempre el filtro de llenado para evitar contaminación.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Purgar el aire de los cilindros accionando el acumulador en modo manual varias veces.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS TEÑIDO",
+    "grupo": "25400",
+    "denominacion": "RODILLO DE TEÑIDO D4X0 (RODAMIENTOS)",
+    "tiempoEstimado": "5h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Extractor hidráulico", "Calentador de inducción", "Torquímetro"],
+    "repuestos": ["Rodamientos de acero inoxidable", "Retenes de Viton"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Vaciar la tina de teñido y realizar bloqueo LOTO en el motor correspondiente.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Retirar las tapas laterales de la tina y los soportes de rodamiento externos.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Extraer los rodamientos viejos utilizando un extractor hidráulico para no dañar el eje.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar el desgaste de los retenes; en ambiente de índigo/soda deben ser de Viton.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Calentar los rodamientos nuevos por inducción a 110°C para un montaje suave sobre el eje.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Instalar retenes nuevos asegurando que el labio de estanqueidad esté correctamente orientado.", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Engrasar con grasa resistente a productos químicos hasta que rebose ligeramente por el laberinto.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Girar el rodillo manualmente; debe moverse sin resistencia ni puntos duros.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "SECADO Y ENCOLADO",
+    "grupo": "25720",
+    "denominacion": "RODILLOS INMERSORES TKV",
+    "tiempoEstimado": "3h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Cables de soporte", "Apoyo de elevación", "Zapatos de seguridad"],
+    "repuestos": ["Rodamientos de rodillo inmersor", "Cabezas de fundición"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: No debe haber hilos de urdimbre en el centro de encolado. Parar la máquina.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Llevar el rodillo inmersor a la posición más alta y quitar los tornillos de seguridad.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Asegurar el rodillo con cables de soporte y elevarlo con cuidado fuera de las guías.", "imagenUrl": null },
+      { "texto": "🔒 SEGURIDAD: Depositar el rodillo en base limpia y ASEGURAR contra rodadura accidental.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Retirar las cabezas de fundición y las palancas del rodillo inmersor.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Sustituir rodamientos si presentan juego o corrosión por contacto con la cola.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Reensamblar palancas y cabezas de fundición sobre el eje del rodillo.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Bajar el rodillo lentamente a las guías sin ladearlo para evitar daños mecánicos.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "ELECTRICIDAD Y CONTROL",
+    "grupo": "25920",
+    "denominacion": "FALLA DE SINCRONISMO (ENCODER)",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Osciloscopio portátil", "Juego de llaves Allen", "Limpia contactos"],
+    "repuestos": ["Encoder incremental 1024 ppr", "Acoplamiento elástico"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Parar la máquina y bloquear el control de velocidad del compartimento afectado.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el acoplamiento mecánico entre el eje del motor y el encoder; buscar roturas o patinamiento.", "imagenUrl": null },
+      { "texto": "⚡ ELÉCTRICO: Medir tensión de alimentación del encoder (generalmente 24VDC) en el conector.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Comprobar si el cable del encoder corre cerca de cables de potencia sin blindaje (interferencias).", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Si se reemplaza, asegurar la alineación perfecta del acoplamiento elástico para evitar fatiga.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Observar en el Diálogo INDIGO que la velocidad real coincida con la consigna sin oscilaciones.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS LAVADO INFERIOR",
+    "grupo": "25240",
+    "denominacion": "VÁLVULA DE CONTROL DE NIVEL (NEUMÁTICA)",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave inglesa", "Manómetro de prueba"],
+    "repuestos": ["Kit de sellos de válvula", "Posicionador"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Cerrar suministro de agua y aire. Bloquear la señal eléctrica del posicionador.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar si la válvula cierra totalmente; una fuga constante indica desgaste en el asiento.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desmontar el actuador neumático para revisar el estado del diafragma.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar el obturador de restos de hilos o sedimentos del proceso de lavado.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Reensamblar y calibrar el posicionador para que 4mA sea 0% apertura y 20mA sea 100%.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar ciclo de apertura/cierre manual desde la pantalla de diálogo y verificar respuesta física.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJA GOMA Y CABEZAL",
+    "grupo": "25860",
+    "denominacion": "MOTORREDUCTOR DE CABEZAL (LUBRICACIÓN)",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Llave de vaso", "Embudo", "Aceite sintético VG220"],
+    "repuestos": ["Arandela de cobre para tapón"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Realizar LOTO en el variador del cabezal. No intervenir con la máquina en marcha.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el nivel de aceite en el visor del reductor; el aceite no debe estar negro ni espumoso.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Quitar el tornillo de escape de aire superior para facilitar el drenaje.", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Drenar el aceite viejo (4.5L aprox) mientras el equipo esté aún tibio.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar el imán del tapón de drenaje buscando partículas metálicas (indicio de falla de engranajes).", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Llenar con aceite nuevo según la especificación de la Tabla de Lubricantes hasta el nivel medio del visor.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Colocar tapones con arandelas nuevas y verificar que no existan fugas tras 30 min de marcha.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "SECADO Y ENCOLADO",
+    "grupo": "25740",
+    "denominacion": "CILINDROS DE SECADO (COJINETES S600)",
+    "tiempoEstimado": "3h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Estetoscopio industrial", "Grasera neumática", "Grasa Klüber"],
+    "repuestos": ["Cojinetes de rodillos a rótula"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Bloquear vapor y esperar a que los cilindros bajen de 40°C. Bloquear accionamiento de cadena.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Escuchar con estetoscopio los cojinetes en marcha lenta; ruidos de golpeteo indican picadura de pistas.", "imagenUrl": null },
+      { "texto": "🛢️ LUBRICACIÓN: Engrasar los cojinetes a través de las boquillas (cada 1000h) hasta ver salir grasa limpia.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar visualmente los cilindros buscando fugas de condensado por las juntas rotativas.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Si hay falla, desmontar el soporte del cojinete asegurando el peso del cilindro con puntales.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Controlar la suavidad de giro manual antes de reconectar la cadena de accionamiento.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJA ENTRADA",
+    "grupo": "25100",
+    "denominacion": "DISPOSITIVO DE CINTA ADHESIVA (S800)",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pinza de punta", "Trapo"],
+    "repuestos": ["Resortes de tensión", "Cinta"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Máquina en parada de producción (JOG mode desactivado).", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Limpiar los rodillos de guía de la cinta de restos de pegamento acumulado.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar el funcionamiento de las cuchillas de corte; deben estar afiladas y sin mellas.", "imagenUrl": null },
+      { "texto": "⚙️ MONTAJE: Colocar rollo de cinta nuevo asegurando el enhebrado correcto según el diagrama del manual.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar un ciclo de pegado manual y verificar que el corte sea limpio y la adhesión firme.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "CAJAS TEÑIDO",
+    "grupo": "25440",
+    "denominacion": "INTERCAMBIADOR DE CALOR (TINA DE TEÑIDO)",
+    "tiempoEstimado": "4h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Bomba desincrustante", "Ácido cítrico", "Manómetros"],
+    "repuestos": ["Juntas de intercambiador de placas"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Cerrar válvulas de vapor y producto químico. Bloquear bombas de circulación.", "imagenUrl": null },
+      { "texto": "🔧 DESMONTAJE: Desconectar las mangueras de entrada/salida del intercambiador.", "imagenUrl": null },
+      { "texto": "💧 LIMPIEZA: Realizar limpieza CIP (Cleaning In Place) circulando solución desincrustante durante 2 horas.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Verificar la diferencia de presión (Delta P) entre entrada y salida; un Delta P alto indica obstrucción.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Enjuagar con agua abundante hasta neutralizar el pH.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Restablecer flujo y verificar que la curva de calentamiento en el Diálogo INDIGO sea lineal.", "imagenUrl": null }
+    ]
+  },
+  {
+    "seccion": "ELECTRICIDAD Y CONTROL",
+    "grupo": "25950",
+    "denominacion": "CÉLULAS DE CARGA (LOAD CELLS S800)",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Eléctrico",
+    "herramientas": ["Pesas de calibración", "Voltímetro de precisión"],
+    "repuestos": ["Célula de carga 500N"],
+    "procedimiento": [
+      { "texto": "🔒 SEGURIDAD: Asegurar que no haya tensión mecánica de los hilos sobre el rodillo sensor.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Revisar si el rodillo sensor gira libremente; rodamientos pesados falsean la medición de tensión.", "imagenUrl": null },
+      { "texto": "⚡ ELÉCTRICO: Medir la tensión de excitación de la célula (típicamente 10VDC) en el amplificador.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Realizar el 'Zero Calibration' desde el menú de servicio del Diálogo INDIGO.", "imagenUrl": null },
+      { "texto": "✅ VERIFICACIÓN: Colocar una pesa patrón en el centro del rodillo y verificar que la lectura en pantalla sea correcta.", "imagenUrl": null },
+      { "texto": "🔍 INSPECCIÓN: Comprobar el blindaje del cable de señal para evitar ruidos en la lectura de tensión del hilo.", "imagenUrl": null }
+    ]
+  }
+]

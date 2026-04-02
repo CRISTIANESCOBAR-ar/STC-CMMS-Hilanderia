@@ -1,22 +1,23 @@
-const CACHE_NAME = 'cmms-cache-v6';
+const CACHE_NAME = 'cmms-cache-v7';
 
 self.addEventListener('install', event => {
-  // No precachear nada - solo activar rápido.
-  // Los assets con hash se cachean en fetch. El HTML nunca se cachea
-  // para evitar servir versiones viejas.
+  // Activa el nuevo SW inmediatamente sin esperar que se cierren las pestañas.
+  self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME));
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
+    // Eliminar todos los caches de versiones anteriores
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames
       .filter(name => name !== CACHE_NAME)
       .map(name => caches.delete(name)));
-    // Tomar control inmediato de las pestañas existentes para servir la nueva versión
-    if (self.clients && self.clients.claim) {
-      await self.clients.claim();
-    }
+    // Tomar control inmediato de todas las pestañas abiertas
+    await self.clients.claim();
+    // Recargar todos los clientes para que carguen la versión nueva
+    const clients = await self.clients.matchAll({ type: 'window' });
+    clients.forEach(client => client.navigate(client.url));
   })());
 });
 

@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { Search, Users, Filter, Camera, Loader2, XCircle, Calendar, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X } from 'lucide-vue-next';
+import { Search, Users, Filter, Camera, Loader2, XCircle, Calendar, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X, LayoutGrid, Table2 } from 'lucide-vue-next';
 import CameraCapture from './CameraCapture.vue';
 import Swal from 'sweetalert2';
 
@@ -15,6 +15,7 @@ const isLoading = ref(false);
 const showGestion = ref(false);
 
 const turnos = ['A', 'B', 'C', 'D'];
+const vistaCards = ref(typeof window !== 'undefined' && window.innerWidth < 640);
 
 // ── Tabla maestra de operarios (Firestore: config/operarios_tejeduria) ──
 const maestroOperarios = ref([]);
@@ -535,10 +536,7 @@ const estadoBadge = (op) => {
       <div class="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
         <Users class="w-6 h-6" />
       </div>
-      <div class="flex-1">
-        <h1 class="text-xl font-black text-gray-800 tracking-tight">Operarios Tejeduría</h1>
-        <p class="text-xs text-gray-400 font-medium">Escaneá la planilla papel — el sistema digitaliza y valida automáticamente</p>
-      </div>
+      <p class="text-xs text-gray-400 font-medium">Escaneá la planilla papel — el sistema digitaliza y valida automáticamente</p>
     </div>
 
     <!-- Selector de Fecha -->
@@ -659,11 +657,19 @@ const estadoBadge = (op) => {
       </div>
     </div>
 
-    <!-- Búsqueda -->
-    <div class="relative">
-      <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-      <input v-model="searchQuery" type="text" placeholder="Buscar por legajo, nombre o puesto..."
-        class="w-full pl-9 pr-4 py-2.5 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 placeholder-gray-400 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none shadow-sm transition-colors duration-150" />
+    <!-- Búsqueda + Toggle vista -->
+    <div class="flex gap-2">
+      <div class="relative flex-1">
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input v-model="searchQuery" type="text" placeholder="Buscar por legajo, nombre o puesto..."
+          class="w-full pl-9 pr-4 py-2.5 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 placeholder-gray-400 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none shadow-sm transition-colors duration-150" />
+      </div>
+      <button @click="vistaCards = !vistaCards"
+        class="shrink-0 p-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-sm transition-colors"
+        :title="vistaCards ? 'Ver como tabla' : 'Ver como tarjetas'">
+        <Table2 v-if="vistaCards" class="w-4 h-4" />
+        <LayoutGrid v-else class="w-4 h-4" />
+      </button>
     </div>
 
     <!-- Leyenda de colores (si hay extras) -->
@@ -678,66 +684,133 @@ const estadoBadge = (op) => {
       <Loader2 class="w-6 h-6 animate-spin text-indigo-400" />
     </div>
 
-    <!-- Tabla de horarios -->
-    <div v-else class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
-      <div v-if="operariosFiltrados.length === 0" class="px-6 py-12 text-center">
+    <template v-else>
+      <!-- Estado vacío -->
+      <div v-if="operariosFiltrados.length === 0" class="bg-white border border-slate-200 rounded-lg shadow-sm px-6 py-12 text-center">
         <Users class="w-10 h-10 text-gray-300 mx-auto mb-2" />
         <p class="text-sm text-gray-400 font-medium">
           {{ totalAsignados === 0 && !searchQuery ? 'Escaneá una planilla para cargar operarios del Turno ' + turnoActivo : 'Sin resultados' }}
         </p>
       </div>
 
-      <table v-else class="w-full text-sm min-w-[640px]">
-        <thead>
-          <tr class="bg-slate-50 border-b border-slate-200">
-            <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-20">Legajo</th>
-            <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider">Nombre</th>
-            <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-24">Puesto</th>
-            <th class="text-center px-2 py-2.5 text-xs font-black text-emerald-600 uppercase tracking-wider w-[70px]">Ingreso</th>
-            <th class="text-center px-2 py-2.5 text-xs font-black text-red-500 uppercase tracking-wider w-[70px]">Salida</th>
-            <th class="text-center px-2 py-2.5 text-xs font-black text-blue-600 uppercase tracking-wider w-[70px]">Inicio</th>
-            <th class="text-center px-2 py-2.5 text-xs font-black text-orange-600 uppercase tracking-wider w-[70px]">Final</th>
-            <th class="w-10"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="op in operariosFiltrados" :key="op.legajo"
-            class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors duration-100"
-            :class="rowClass(op.estado)">
-            <td class="px-3 py-2 font-mono font-bold text-indigo-600">{{ op.legajo }}</td>
-            <td class="px-3 py-2 font-semibold text-slate-700">
-              {{ op.nombre }}
-              <span v-if="estadoBadge(op)" :class="estadoBadge(op).class" class="ml-1.5 text-[10px] font-black px-1.5 py-0.5 rounded-full">{{ estadoBadge(op).text }}</span>
-            </td>
-            <td class="px-3 py-2 text-slate-500 text-xs">{{ op.puesto || '—' }}</td>
-            <td class="px-2 py-2 text-center">
-              <span v-if="op.ingreso" class="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs">{{ op.ingreso }}</span>
+      <!-- ── VISTA TARJETAS ── -->
+      <div v-else-if="vistaCards" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div
+          v-for="op in operariosFiltrados" :key="op.legajo"
+          class="bg-white border rounded-xl shadow-sm overflow-hidden"
+          :class="{
+            'border-amber-300 bg-amber-50/40': op.estado === 'otro_turno',
+            'border-red-300 bg-red-50/40': op.estado === 'desconocido',
+            'border-slate-200': op.estado === 'asignado',
+          }"
+        >
+          <!-- Cabecera tarjeta -->
+          <div class="flex items-start justify-between px-4 pt-3 pb-2 border-b"
+            :class="{
+              'border-amber-100': op.estado === 'otro_turno',
+              'border-red-100': op.estado === 'desconocido',
+              'border-slate-100': op.estado === 'asignado',
+            }"
+          >
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-black text-indigo-600 text-base">{{ op.legajo }}</span>
+                <span v-if="estadoBadge(op)" :class="estadoBadge(op).class" class="text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0">
+                  {{ estadoBadge(op).text }}
+                </span>
+              </div>
+              <p class="font-bold text-gray-800 text-sm leading-tight truncate">{{ op.nombre }}</p>
+              <p v-if="op.puesto" class="text-xs text-gray-400 mt-0.5">{{ op.puesto }}</p>
+            </div>
+            <button
+              v-if="op.estado === 'desconocido' && op.legajo > 0"
+              @click="ofrecerAgregarDesconocidos([{ legajo: op.legajo, nombre: op.nombre }])"
+              title="Agregar a tabla maestra"
+              class="text-emerald-500 hover:text-emerald-700 transition-colors ml-2 shrink-0">
+              <UserPlus class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- Horarios tarjeta: grid 2×2 -->
+          <div class="grid grid-cols-2 gap-px bg-slate-100 text-center text-xs">
+            <div class="bg-white py-2">
+              <p class="font-black text-emerald-600 uppercase tracking-wider text-[9px] mb-0.5">Ingreso</p>
+              <span v-if="op.ingreso" class="font-mono font-bold text-emerald-700">{{ op.ingreso }}</span>
               <span v-else class="text-gray-300">—</span>
-            </td>
-            <td class="px-2 py-2 text-center">
-              <span v-if="op.salida" class="inline-block px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-mono font-bold text-xs">{{ op.salida }}</span>
+            </div>
+            <div class="bg-white py-2">
+              <p class="font-black text-red-500 uppercase tracking-wider text-[9px] mb-0.5">Salida</p>
+              <span v-if="op.salida" class="font-mono font-bold text-red-600">{{ op.salida }}</span>
               <span v-else class="text-gray-300">—</span>
-            </td>
-            <td class="px-2 py-2 text-center">
-              <span v-if="op.inicio" class="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-bold text-xs">{{ op.inicio }}</span>
+            </div>
+            <div class="bg-white py-2">
+              <p class="font-black text-blue-500 uppercase tracking-wider text-[9px] mb-0.5">Inicio</p>
+              <span v-if="op.inicio" class="font-mono font-bold text-blue-700">{{ op.inicio }}</span>
               <span v-else class="text-gray-300">—</span>
-            </td>
-            <td class="px-2 py-2 text-center">
-              <span v-if="op.final" class="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-mono font-bold text-xs">{{ op.final }}</span>
+            </div>
+            <div class="bg-white py-2">
+              <p class="font-black text-orange-500 uppercase tracking-wider text-[9px] mb-0.5">Final</p>
+              <span v-if="op.final" class="font-mono font-bold text-orange-600">{{ op.final }}</span>
               <span v-else class="text-gray-300">—</span>
-            </td>
-            <td class="px-2 py-2">
-              <button
-                v-if="op.estado === 'desconocido' && op.legajo > 0"
-                @click="ofrecerAgregarDesconocidos([{ legajo: op.legajo, nombre: op.nombre }])"
-                title="Agregar a tabla maestra"
-                class="text-emerald-500 hover:text-emerald-700 transition-colors">
-                <UserPlus class="w-4 h-4" />
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── VISTA TABLA ── -->
+      <div v-else class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
+        <table class="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200">
+              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-20">Legajo</th>
+              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider">Nombre</th>
+              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-24">Puesto</th>
+              <th class="text-center px-2 py-2.5 text-xs font-black text-emerald-600 uppercase tracking-wider w-[70px]">Ingreso</th>
+              <th class="text-center px-2 py-2.5 text-xs font-black text-red-500 uppercase tracking-wider w-[70px]">Salida</th>
+              <th class="text-center px-2 py-2.5 text-xs font-black text-blue-600 uppercase tracking-wider w-[70px]">Inicio</th>
+              <th class="text-center px-2 py-2.5 text-xs font-black text-orange-600 uppercase tracking-wider w-[70px]">Final</th>
+              <th class="w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="op in operariosFiltrados" :key="op.legajo"
+              class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors duration-100"
+              :class="rowClass(op.estado)">
+              <td class="px-3 py-2 font-mono font-bold text-indigo-600">{{ op.legajo }}</td>
+              <td class="px-3 py-2 font-semibold text-slate-700">
+                {{ op.nombre }}
+                <span v-if="estadoBadge(op)" :class="estadoBadge(op).class" class="ml-1.5 text-[10px] font-black px-1.5 py-0.5 rounded-full">{{ estadoBadge(op).text }}</span>
+              </td>
+              <td class="px-3 py-2 text-slate-500 text-xs">{{ op.puesto || '—' }}</td>
+              <td class="px-2 py-2 text-center">
+                <span v-if="op.ingreso" class="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs">{{ op.ingreso }}</span>
+                <span v-else class="text-gray-300">—</span>
+              </td>
+              <td class="px-2 py-2 text-center">
+                <span v-if="op.salida" class="inline-block px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-mono font-bold text-xs">{{ op.salida }}</span>
+                <span v-else class="text-gray-300">—</span>
+              </td>
+              <td class="px-2 py-2 text-center">
+                <span v-if="op.inicio" class="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-bold text-xs">{{ op.inicio }}</span>
+                <span v-else class="text-gray-300">—</span>
+              </td>
+              <td class="px-2 py-2 text-center">
+                <span v-if="op.final" class="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-mono font-bold text-xs">{{ op.final }}</span>
+                <span v-else class="text-gray-300">—</span>
+              </td>
+              <td class="px-2 py-2">
+                <button
+                  v-if="op.estado === 'desconocido' && op.legajo > 0"
+                  @click="ofrecerAgregarDesconocidos([{ legajo: op.legajo, nombre: op.nombre }])"
+                  title="Agregar a tabla maestra"
+                  class="text-emerald-500 hover:text-emerald-700 transition-colors">
+                  <UserPlus class="w-4 h-4" />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
   </div>
 </template>

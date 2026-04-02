@@ -1,0 +1,104 @@
+[
+  {
+    "modelo": "R-60",
+    "seccion": "UNIDAD TESTERA",
+    "grupo": "100",
+    "denominacion": "LUBRICACIÓN PUNTOS 1-6",
+    "tiempoEstimado": "1.0h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pistola de engrasar con boquilla para niple de cono", "Paño de limpieza"],
+    "repuestos": ["Grasa K3 — 30g"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurarlo con un candado (LOTO).", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar los niples lubricadores de la regleta de la testera a conciencia antes de lubricar.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Realizar comprobación visual para verificar que los conductos y distribuidores son estancos.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Introducir 2,5 ccm de grasa K3 en el punto 1 (Cojinete brida) y 5 ccm en los puntos 2 a 4.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar 10 ccm en punto 5 (Polea D140) y 2,5 ccm en punto 6 (Cojinete guiahilos).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Limpiar obligatoriamente el exceso de lubricante que salga por los orificios de ventilación.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-60",
+    "seccion": "UNIDAD TESTERA",
+    "grupo": "100",
+    "denominacion": "LUBRICACIÓN PUNTOS 7-12",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pistola de engrasar manual", "Paño de limpieza"],
+    "repuestos": ["Grasa K3 — 30g"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la máquina y asegurar el interruptor principal contra reconexión.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar restos de grasa vieja de la regleta de lubricación del lado izquierdo.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar 5 ccm de grasa K3 en los puntos 7 (Cojinete árbol salida) y 8 (Palanca sujeción).", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Engrasar puntos 9 a 12 (Palancas y cojinetes de brida) con 5 ccm de grasa K3 cada uno.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Comprobar que no existan fugas en las conexiones de los conductos de lubricación.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-60",
+    "seccion": "UNIDAD TESTERA",
+    "grupo": "120",
+    "denominacion": "INSPECCIÓN DE ACCIONAMIENTO POR CORREA PLANA",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Lámpara de inspección"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Bloquear la máquina y abrir las puertas de la testera.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Comprobar visualmente el estado de las poleas D165 y D140 buscando desgaste o depósitos.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar que la correa plana 25x133400 no presente deshilachados o grietas.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Controlar que el alineamiento de la correa sobre las poleas sea el correcto.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-60",
+    "seccion": "UNIDAD TESTERA",
+    "grupo": "140",
+    "denominacion": "CAMBIO DE ACEITE ENGRANAJE DESPLAZAMIENTO HILO",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Conducto de purga (91010.052)", "Embudo", "Llave allen"],
+    "repuestos": ["Aceite EP CC 68 — 2800 ccm"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar interruptor principal y asegurar con candado.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Atornillar el conducto de purga en el orificio de salida y vaciar el aceite usado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el engranaje cuidadosamente y verificar visualmente la estanqueidad.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Introducir el aceite nuevo CC 68 mediante un embudo por la parte superior.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Confirmar que el nivel llegue exactamente al centro de la mirilla del engranaje.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-60",
+    "seccion": "BASTIDOR FINAL",
+    "grupo": "215",
+    "denominacion": "LIMPIEZA DE FILTROS Y VENTILADOR",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Cepillo suave"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la aspiración y asegurar que el ventilador esté parado.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar los tamices de los filtros de los ventiladores de enfriamiento.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar sedimentos de las palas del ventilador y el injerto del filtro.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado del cilindro neumático 50/320 y sus conexiones.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Montar los filtros y comprobar que el flujo de aire sea el nominal.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-60",
+    "seccion": "PUESTOS DE HILATURA",
+    "grupo": "321",
+    "denominacion": "LIMPIEZA DE ROTORES Y COJINETES",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Útil de limpieza de rotor", "Paño sin pelusas"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Abrir la caja de hilatura solo cuando el rotor se haya detenido totalmente.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer el rotor de la unidad de cojinete con cuidado.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar la ranura del rotor y la superficie de los discos de apoyo D78.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Comprobar el desgaste de los discos de apoyo M y N.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reinsertar el rotor y verificar que gire libremente sin vibraciones.", "imagenUrl": null}
+    ]
+  }
+]

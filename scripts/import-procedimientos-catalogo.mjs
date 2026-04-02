@@ -117,6 +117,8 @@ const MARCA_POR_MODELO = {
   'FD-S':      'TRUTZSCHLER',
   'FD-T':      'TRUTZSCHLER',
   'BENNINGER': 'BENNINGER',
+  'R-37':      'RIETER',
+  'R-60':      'RIETER',
   // Agregar más modelos aquí según se incorporen
 };
 const marcaDe = (modelo) => MARCA_POR_MODELO[String(modelo).toUpperCase()] || String(modelo).toUpperCase();

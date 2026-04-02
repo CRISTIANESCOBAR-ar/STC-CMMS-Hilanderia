@@ -1,0 +1,217 @@
+[
+  {
+    "modelo": "R-37",
+    "seccion": "ROTOR Y CAJA DE HILADO",
+    "grupo": "R-37-01",
+    "denominacion": "LIMPIAR CAJA DE ROTOR",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Pistola de aire comprimido", "Cepillo de cerdas suaves", "Paño sin pelusa"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la unidad de hilado. Esperar a que el rotor se detenga por completo antes de abrir la caja.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir la unidad de hilado S37 y retirar la cubierta del rotor para acceder a la caja.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el interior de la caja del rotor utilizando aire comprimido y un cepillo para eliminar restos de fibra y polvo.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el canal de fibras y el área del orificio de ventilación para asegurar un flujo de aire óptimo.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar visualmente que no queden depósitos adheridos en las superficies internas de la caja.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la unidad de hilado y reiniciar. Comprobar que la aspiración sea la correcta según los parámetros del display.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "ROTOR Y CAJA DE HILADO",
+    "grupo": "R-37-02",
+    "denominacion": "REEMPLAZAR O INSPECCIONAR EL ROTOR",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Herramienta de extracción de rotor", "Calibre de precisión", "Lupa de inspección"],
+    "repuestos": ["Rotor Rieter R-37 — cantidad: según necesidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Apagar la unidad de hilado mediante el botón SUB y esperar la parada total del motor del rotor.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Extraer el rotor de su alojamiento utilizando la herramienta de extracción específica suministrada.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Examinar el surco colector del rotor buscando desgaste, muescas o acumulación de suciedad endurecida.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado del eje del rotor y la superficie de contacto con los rodillos de apoyo.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Si se instala un rotor de distinto tipo, configurar los nuevos parámetros en la pantalla 2.1.8 'Technology Parts'.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Una vez montado, verificar que el rotor gire libremente y que la velocidad en el display alcance el valor nominal configurado.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "RODILLO ABRIDOR",
+    "grupo": "R-37-03",
+    "denominacion": "LIMPIEZA DEL RODILLO ABRIDOR",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Cepillo metálico fino", "Ganchillo de limpieza", "Pistola de aire"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Abrir la unidad de hilado en posición de mantenimiento para desconectar el accionamiento del rodillo.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar la tapa de protección del rodillo abridor para exponer la guarnición dentada.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Eliminar las fibras enrolladas y el polvo acumulado entre los dientes utilizando el ganchillo y aire comprimido.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Comprobar que no existan dientes doblados o dañados que puedan afectar la apertura de la cinta.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Limpiar el canal de salida de impurezas adyacente al rodillo.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la tapa y verificar que el rodillo gire sin ruidos extraños al reiniciar la unidad.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "RODILLO ABRIDOR",
+    "grupo": "R-37-04",
+    "denominacion": "REEMPLAZAR REVESTIMIENTO DEL RODILLO ABRIDOR",
+    "tiempoEstimado": "2h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave Allen", "Extractor de rodillos", "Calibre"],
+    "repuestos": ["Guarnición de rodillo abridor (Opening Roller clothing) — 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desconectar la alimentación eléctrica de la sección y asegurar que el motor del rodillo esté detenido.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Desmontar el conjunto del rodillo abridor de su soporte axial.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Retirar el revestimiento (clothing) viejo del cuerpo del rodillo.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar profundamente el cuerpo del rodillo antes de montar la nueva guarnición.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Instalar la nueva guarnición asegurando el sentido de giro correcto de los dientes según el manual.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reinstalar el conjunto y verificar en el display que la velocidad del rodillo (Opening Roller speed) esté dentro del rango permitido.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "LIMPIEZA DE IMPUREZAS",
+    "grupo": "R-37-05",
+    "denominacion": "LIMPIEZA DEL SISTEMA DE ELIMINACIÓN DE IMPUREZAS",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Aspiradora industrial", "Cepillo de mano", "Paño"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener el sistema de transporte de desperdicios antes de intervenir en la zona de descarga.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir las compuertas de inspección del canal de desperdicios (trash channel).", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Aspirar y retirar manualmente las acumulaciones de cáscaras y polvo en el área de eyección del rodillo abridor.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar que el deflector de impurezas no esté obstruido por fibras largas.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Limpiar los sensores de nivel si la máquina cuenta con sistema de monitoreo de desperdicios.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar las compuertas y comprobar que el vacío de desperdicios (Trash vacuum) esté en el valor nominal.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "ROTOR Y CAJA DE HILADO",
+    "grupo": "R-37-06",
+    "denominacion": "INSPECCIÓN Y REEMPLAZO DEL CANAL DE FIBRAS",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave de tubo pequeña", "Espejo de inspección", "Limpiapipas"],
+    "repuestos": ["Inserto de canal de fibras (Fiber channel insert) — 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Bloquear la unidad de hilado y retirar la placa frontal de la caja de rotor.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Desmontar el inserto del canal de fibras (fiber channel) tirando suavemente hacia afuera.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Buscar marcas de desgaste o rugosidades en el interior del canal que puedan causar roturas de hilo.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar el conducto con un limpiapipas para asegurar que no existan depósitos de cera o polvillo.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Montar el canal nuevo asegurando que asiente perfectamente en las guías para evitar fugas de aire.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Realizar un empalme de prueba y verificar la calidad del hilo mediante el sensor Q10.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "LUBRICACIÓN GENERAL",
+    "grupo": "R-37-07",
+    "denominacion": "LUBRICACIÓN DE RODAMIENTOS DEL ROTOR",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Bomba de engrase manual", "Grasa especificada por Rieter", "Paño de limpieza"],
+    "repuestos": ["Grasa para alta velocidad (según especificación R-37)"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Desactivar la máquina y colocar el interruptor principal en posición OFF con candado (LOTO).", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Localizar los puntos de lubricación de los motores y poleas del rotor (puntos 1 y 2 en tabla de lubricación).", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar las boquillas de engrase para evitar la entrada de contaminantes al rodamiento.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Aplicar la cantidad exacta de grasa especificada (ver sección 10.4.3 del manual) en cada rodamiento.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar que no haya exceso de grasa que pueda contaminar las correas de transmisión.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reiniciar la máquina y monitorear la temperatura de los rodamientos durante los primeros 10 minutos.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "TRANSMISIÓN Y CORREAS",
+    "grupo": "R-37-08",
+    "denominacion": "CONTROL DE TENSIÓN DE CORREAS TANGENCIALES",
+    "tiempoEstimado": "1h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Tensiómetro de correas", "Llave fija", "Regla metálica"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener la máquina completamente y asegurar los protectores laterales.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Revisar visualmente el estado de la correa tangencial del rotor y del rodillo abridor buscando grietas o deshilachados.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Medir la tensión en el tramo central de la sección utilizando el tensiómetro y ajustar mediante el rodillo tensor si es necesario.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar la alineación de las poleas guía para asegurar que la correa no se desplace lateralmente.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Engrasar ligeramente los ejes de las poleas de desviación si el manual lo indica (puntos 3 y 4).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Arrancar la máquina y comprobar que la correa corra centrada y sin vibraciones excesivas.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "SISTEMA DE ASPIRACIÓN",
+    "grupo": "R-37-09",
+    "denominacion": "LIMPIEZA Y MANTENIMIENTO DEL SISTEMA DE FILTRACIÓN",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Cepillo", "Aspiradora", "Manómetro portátil"],
+    "repuestos": ["Filtro de aire (si presenta daños) — 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Presionar el botón de la puerta del filtro (Filter door button) para detener el ventilador antes de abrir.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Abrir la puerta del filtro en el End Stock R37.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Retirar la manta de fibras acumulada en el tamiz del filtro principal.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Revisar que no haya roturas en la malla del filtro que permitan el paso de fibras al ventilador.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar los radiadores de los variadores de frecuencia si se detecta acumulación de polvo (punto 14710).", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la puerta y verificar en el display 2.1.6 que el vacío de hilado (Spinning vacuum) retorne a niveles normales.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "SISTEMA ELÉCTRICO",
+    "grupo": "R-37-10",
+    "denominacion": "INSPECCIÓN DEL SENSOR DE HILO (SUB10 / YARN SENSOR)",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Preventivo",
+    "herramientas": ["Alcohol isopropílico", "Bastoncillos de algodón", "Aire comprimido"],
+    "repuestos": [],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Poner la unidad de hilado en modo STOP mediante el botón SUB.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Observar el LED del sensor para identificar alarmas de calidad o rotura (código 10139).", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar la ranura del sensor SUB10 pasando suavemente un bastoncillo con alcohol para eliminar restos de parafina.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Soplar con aire comprimido a baja presión para eliminar pelusas volátiles en el área del sensor.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Enhebrar el hilo y verificar que el sensor detecte la presencia de hilo correctamente (LED verde encendido).", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "ROTOR Y CAJA DE HILADO",
+    "grupo": "R-37-11",
+    "denominacion": "REEMPLAZO DE LA GUÍA DE HILO (NAVEL)",
+    "tiempoEstimado": "0.5h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Llave de navel", "Paño"],
+    "repuestos": ["Guía de hilo (Navel) — 1 unidad"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Abrir la caja del rotor y asegurar que la máquina no pueda arrancar accidentalmente.", "imagenUrl": null},
+      {"texto": "🔧 DESMONTAJE: Desenroscar la guía de hilo (navel) vieja utilizando la llave especial.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado de la superficie cerámica del navel; si presenta surcos profundos, debe reemplazarse.", "imagenUrl": null},
+      {"texto": "💧 LIMPIEZA: Limpiar la rosca del soporte antes de colocar la nueva guía.", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Enroscar el nuevo navel firmemente pero sin exceso de torque para evitar roturas.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Cerrar la caja y realizar una prueba de hilado, observando que la vellosidad del hilo sea la adecuada.", "imagenUrl": null}
+    ]
+  },
+  {
+    "modelo": "R-37",
+    "seccion": "BOBINADO Y HUSO",
+    "grupo": "R-37-12",
+    "denominacion": "MANTENIMIENTO DEL SISTEMA DE BOBINADO",
+    "tiempoEstimado": "1.5h",
+    "tipoTarea": "Mecánico",
+    "herramientas": ["Grasa para cadenas", "Llave Allen", "Galgas de espesores"],
+    "repuestos": ["Aceite para cadenas — cantidad mínima"],
+    "procedimiento": [
+      {"texto": "🔒 SEGURIDAD: Detener el movimiento de vaivén de la guía de hilo (yarn traversing) desde el panel de control.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Revisar el estado de los brazos de la bobina y la presión de contacto contra el rodillo de bobinado.", "imagenUrl": null},
+      {"texto": "🔩 LUBRICACIÓN: Engrasar las cadenas de accionamiento y los ejes de los brazos (puntos 17 y 19).", "imagenUrl": null},
+      {"texto": "⚙️ AJUSTE: Ajustar la posición central del vaivén (Yarn traversing drive) utilizando el menú 18.40 si hay desalineación.", "imagenUrl": null},
+      {"texto": "🔍 INSPECCIÓN: Verificar el estado de los rodillos de bobinado buscando depósitos de cera o suciedad.", "imagenUrl": null},
+      {"texto": "✅ VERIFICACIÓN: Reiniciar el bobinado y comprobar que la formación de la bobina sea uniforme y sin lazos en los bordes.", "imagenUrl": null}
+    ]
+  }
+]

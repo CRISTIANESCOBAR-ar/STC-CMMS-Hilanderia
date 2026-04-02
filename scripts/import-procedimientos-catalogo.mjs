@@ -97,12 +97,13 @@ const findBestMatch = (inputItem, fsDocs) => {
 
 // ── Genera un ID de documento deterministico ─────────────────────────────────
 const makeDocId = (modelo, grupo, denominacion) => {
-  const slug = String(denominacion)
+  const sanitize = (s) => String(s)
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '_')
-    .slice(0, 40);
-  return `${String(modelo).toLowerCase()}_${String(grupo).replace(/[\s/]/g, '_')}_${slug}`;
+    .replace(/^_+|_+$/g, '');
+  const slug = sanitize(denominacion).slice(0, 40);
+  return `${sanitize(modelo)}_${sanitize(grupo)}_${slug}`;
 };
 
 // ── Mapa modelo → marca (extendible) ─────────────────────────────────────────
@@ -110,6 +111,11 @@ const MARCA_POR_MODELO = {
   'C60':       'RIETER',
   'TC7':       'TRUTZSCHLER',
   'TD03':      'TRUTZSCHLER',
+  'BO-A':      'TRUTZSCHLER',
+  'CL-C3':     'TRUTZSCHLER',
+  'BR-F/FD':   'TRUTZSCHLER',
+  'FD-S':      'TRUTZSCHLER',
+  'FD-T':      'TRUTZSCHLER',
   'BENNINGER': 'BENNINGER',
   // Agregar más modelos aquí según se incorporen
 };

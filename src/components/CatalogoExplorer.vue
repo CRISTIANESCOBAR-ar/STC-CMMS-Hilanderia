@@ -3,10 +3,12 @@ import { ref, computed, onMounted } from 'vue';
 import { maquinaService } from '../services/maquinaService';
 import { catalogoService } from '../services/catalogoService';
 import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
+import { userRole } from '../services/authService';
+import Swal from 'sweetalert2';
 import {
   ChevronRight, ChevronDown, BookOpen, Wrench, Zap,
   CheckCircle2, XCircle, ClipboardList, Loader2, Info,
-  ChevronUp, BookMarked, Settings2
+  ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X
 } from 'lucide-vue-next';
 
 // ── Estado ────────────────────────────────────────────────────────────────────
@@ -18,6 +20,16 @@ const cargandoCat    = ref(false);
 const tipoSeleccionado  = ref(null);
 const modeloSeleccionado = ref(null);
 const tabActiva         = ref('catalogo'); // 'catalogo' | 'motivos' | 'maquinas'
+
+// Viewer de procedimiento (preview móvil)
+const showViewer   = ref(false);
+const itemViewer   = ref(null);
+
+// Editor CRUD de procedimiento
+const showEditor    = ref(false);
+const editandoItem  = ref(null);
+const editandoPasos = ref([]);
+const guardando     = ref(false);
 
 // Secciones expandidas en el catálogo
 const seccionesExpandidas = ref(new Set());
@@ -148,6 +160,43 @@ const maquinasSinModelo = computed(() => {
     m.tipo === tipoSeleccionado.value && !m.modelo && !m.nombre_maquina
   );
 });
+
+// ── Viewer de procedimiento ───────────────────────────────────────────────────
+const abrirViewer = (item) => {
+  itemViewer.value = item;
+  showViewer.value = true;
+};
+
+// ── Editor CRUD de procedimiento ──────────────────────────────────────────────
+const abrirEditor = (item) => {
+  editandoItem.value = item;
+  editandoPasos.value = (item.procedimiento || []).map(p => ({ ...p }));
+  showEditor.value = true;
+};
+
+const agregarPaso = () => {
+  editandoPasos.value.push({ texto: '', imagenUrl: null });
+};
+
+const eliminarPaso = (i) => {
+  editandoPasos.value.splice(i, 1);
+};
+
+const guardarEdicion = async () => {
+  const pasosFiltrados = editandoPasos.value.filter(p => p.texto?.trim());
+  guardando.value = true;
+  try {
+    await catalogoService.actualizarProcedimiento(editandoItem.value.id, pasosFiltrados);
+    const idx = catalogoItems.value.findIndex(x => x.id === editandoItem.value.id);
+    if (idx !== -1) catalogoItems.value[idx].procedimiento = pasosFiltrados;
+    showEditor.value = false;
+    Swal.fire({ icon: 'success', title: 'Guardado', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error al guardar', text: e.message });
+  } finally {
+    guardando.value = false;
+  }
+};
 </script>
 
 <template>
@@ -403,6 +452,32 @@ const maquinasSinModelo = computed(() => {
                               <span v-if="item.repuestos?.length > 0"> · {{ item.repuestos.length }} repuesto(s)</span>
                             </div>
                           </div>
+
+                          <!-- Acciones -->
+                          <div class="shrink-0 flex items-center gap-1 mt-0.5">
+                            <!-- Ver procedimiento -->
+                            <button
+                              v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
+                              @click="abrirViewer(item)"
+                              class="p-1 rounded-md text-indigo-500 hover:bg-indigo-50 transition-colors"
+                              title="Ver procedimiento"
+                            >
+                              <Eye class="w-4 h-4" />
+                            </button>
+                            <!-- Admin: editar o crear procedimiento -->
+                            <button
+                              v-if="userRole === 'admin'"
+                              @click="abrirEditor(item)"
+                              class="p-1 rounded-md transition-colors"
+                              :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
+                                ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                                : 'text-amber-500 hover:bg-amber-50'"
+                              :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Editar procedimiento' : 'Crear procedimiento'"
+                            >
+                              <Pencil v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
+                              <Plus v-else class="w-4 h-4" />
+                            </button>
+                          </div>
                         </li>
                       </ul>
                     </div>
@@ -502,4 +577,177 @@ const maquinasSinModelo = computed(() => {
       </div>
     </div>
   </div>
+
+  <!-- ── MODAL: Viewer de procedimiento (preview móvil) ──────────────────────── -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="showViewer && itemViewer"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        @click.self="showViewer = false"
+      >
+        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+          <!-- Header -->
+          <div class="p-4 border-b border-gray-100 flex items-start justify-between shrink-0">
+            <div class="flex-1 min-w-0 pr-3">
+              <p class="text-[10px] font-extrabold text-indigo-500 tracking-widest mb-0.5">PROCEDIMIENTO</p>
+              <h3 class="text-sm font-black text-gray-800 leading-tight">{{ itemViewer.denominacion }}</h3>
+              <p class="text-xs text-gray-400 font-medium mt-0.5">{{ itemViewer.seccion }} · Grupo {{ itemViewer.grupo }}</p>
+              <div class="flex gap-2 mt-1.5 flex-wrap">
+                <span v-if="itemViewer.tipoTarea" class="text-xs font-bold px-2 py-0.5 rounded-full"
+                  :class="{
+                    'bg-blue-50 text-blue-600': itemViewer.tipoTarea === 'Preventivo',
+                    'bg-orange-50 text-orange-600': itemViewer.tipoTarea === 'Mecánico',
+                    'bg-violet-50 text-violet-600': itemViewer.tipoTarea === 'Eléctrico',
+                  }">
+                  {{ itemViewer.tipoTarea }}
+                </span>
+                <span v-if="itemViewer.tiempoEstimado" class="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+                  ⏱ {{ itemViewer.tiempoEstimado }}
+                </span>
+              </div>
+            </div>
+            <button @click="showViewer = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- Herramientas / Repuestos chips -->
+          <div v-if="itemViewer.herramientas?.length || itemViewer.repuestos?.length" class="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex gap-3 flex-wrap shrink-0">
+            <div v-if="itemViewer.herramientas?.length" class="flex-1 min-w-0">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Herramientas</p>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="h in itemViewer.herramientas" :key="h"
+                  class="text-xs bg-blue-50 text-blue-700 rounded-full px-2 py-0.5 font-medium">{{ h }}</span>
+              </div>
+            </div>
+            <div v-if="itemViewer.repuestos?.length" class="flex-1 min-w-0">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Repuestos</p>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="r in itemViewer.repuestos" :key="r"
+                  class="text-xs bg-amber-50 text-amber-700 rounded-full px-2 py-0.5 font-medium">{{ r }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pasos -->
+          <div class="overflow-y-auto flex-1 p-4 space-y-4">
+            <div v-for="(paso, i) in itemViewer.procedimiento" :key="i" class="space-y-2">
+              <div class="flex gap-3">
+                <div class="flex-none w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                  {{ i + 1 }}
+                </div>
+                <p class="text-sm text-gray-800 font-medium leading-relaxed pt-0.5">{{ paso.texto }}</p>
+              </div>
+              <div v-if="paso.imagenUrl" class="ml-9 rounded-lg overflow-hidden border border-gray-200">
+                <img :src="paso.imagenUrl" class="w-full max-h-64 object-contain bg-gray-900" alt="Imagen del paso" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="p-4 border-t border-gray-100 flex gap-2 shrink-0">
+            <button
+              v-if="userRole === 'admin'"
+              @click="abrirEditor(itemViewer); showViewer = false"
+              class="flex-none px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm flex items-center gap-1.5 hover:bg-gray-50 transition-colors"
+            >
+              <Pencil class="w-4 h-4" /> Editar
+            </button>
+            <button @click="showViewer = false" class="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ── MODAL: Editor CRUD de procedimiento ─────────────────────────────────── -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="showEditor && editandoItem"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        @click.self="showEditor = false"
+      >
+        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <!-- Header editor -->
+          <div class="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+            <div>
+              <p class="text-[10px] font-extrabold text-indigo-500 tracking-widest">
+                {{ editandoPasos.length > 0 ? 'EDITAR PROCEDIMIENTO' : 'CREAR PROCEDIMIENTO' }}
+              </p>
+              <h3 class="text-sm font-black text-gray-800 leading-tight mt-0.5">{{ editandoItem.denominacion }}</h3>
+              <p class="text-xs text-gray-400 mt-0.5">{{ editandoItem.seccion }} · Grupo {{ editandoItem.grupo }}</p>
+            </div>
+            <button @click="showEditor = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+
+          <!-- Lista de pasos editables -->
+          <div class="overflow-y-auto flex-1 p-4 space-y-3">
+            <div v-if="editandoPasos.length === 0" class="text-center py-8 text-gray-400">
+              <p class="text-sm">Sin pasos todavía. Agregá el primero.</p>
+            </div>
+            <div
+              v-for="(paso, i) in editandoPasos"
+              :key="i"
+              class="flex gap-3 items-start bg-gray-50 rounded-xl p-3"
+            >
+              <div class="flex-none w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                {{ i + 1 }}
+              </div>
+              <textarea
+                v-model="paso.texto"
+                :placeholder="`Paso ${i + 1}...`"
+                rows="2"
+                class="flex-1 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 leading-relaxed"
+              />
+              <button
+                @click="eliminarPaso(i)"
+                class="p-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors shrink-0"
+                title="Eliminar paso"
+              >
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </div>
+
+            <!-- Botón agregar paso -->
+            <button
+              @click="agregarPaso"
+              class="w-full py-2.5 border-2 border-dashed border-indigo-200 text-indigo-500 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 transition-colors"
+            >
+              <Plus class="w-4 h-4" /> Agregar paso
+            </button>
+          </div>
+
+          <!-- Footer editor -->
+          <div class="p-4 border-t border-gray-100 flex gap-2 shrink-0">
+            <button
+              @click="showEditor = false"
+              class="flex-none px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="guardarEdicion"
+              :disabled="guardando"
+              class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-60"
+            >
+              <Loader2 v-if="guardando" class="w-4 h-4 animate-spin" />
+              <Save v-else class="w-4 h-4" />
+              {{ guardando ? 'Guardando...' : 'Guardar procedimiento' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

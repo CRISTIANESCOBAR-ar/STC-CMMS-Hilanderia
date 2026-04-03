@@ -5,6 +5,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
 import { userProfile, userRole } from '../services/authService';
+import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert, CirclePlay, AlertTriangle, OctagonX, Share2 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';

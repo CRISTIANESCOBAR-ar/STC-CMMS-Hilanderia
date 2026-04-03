@@ -604,91 +604,124 @@ const enviarNotaTurno = async () => {
 
       <form @submit.prevent="onSubmit" class="bg-white border-y border-gray-100">
 
-        <!-- Selección de Máquina (Grupo Plano) -->
-        <div class="px-4 py-3 border-b border-gray-50 flex gap-4">
+        <!-- Selección de Máquina -->
+        <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
+            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">SELECCIÓN DE MÁQUINA</label>
+          </div>
+          <div class="flex gap-2">
           <!-- Selector de Tipo -->
           <div :class="esTipoTelar ? 'flex-[0.8]' : 'flex-[1]'">
-            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Tipo</label>
-            <select 
-              v-model="tipoSeleccionado" 
-              :disabled="tiposDisponibles.length === 0"
-              class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-              <option v-if="tiposDisponibles.length === 0" value="" disabled>Sin tipos</option>
-              <option v-for="tipo in tiposDisponibles" :key="tipo" :value="tipo">
-                {{ tipo }}
-              </option>
-            </select>
+            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">TIPO</label>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+              <select 
+                v-model="tipoSeleccionado" 
+                :disabled="tiposDisponibles.length === 0"
+                class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none">
+                <option v-if="tiposDisponibles.length === 0" value="" disabled>Sin tipos</option>
+                <option v-for="tipo in tiposDisponibles" :key="tipo" :value="tipo">
+                  {{ tipo }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <!-- Selector de Gp (solo TELAR) -->
           <div v-if="esTipoTelar" class="flex-[0.5]">
-            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Gp</label>
-            <select
-              v-model="gpSeleccionado"
-              :disabled="gruposTelarDisponibles.length === 0"
-              class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-40"
-            >
-              <option value="" disabled>Gp...</option>
-              <option v-for="g in gruposTelarDisponibles" :key="g.raw" :value="g.raw">
-                {{ g.label }}
-              </option>
-            </select>
+            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GRUPO</label>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!gruposTelarDisponibles.length ? 'opacity-40' : ''">
+              <select
+                v-model="gpSeleccionado"
+                :disabled="gruposTelarDisponibles.length === 0"
+                class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none disabled:opacity-40"
+              >
+                <option value="" disabled>Gp...</option>
+                <option v-for="g in gruposTelarDisponibles" :key="g.raw" :value="g.raw">
+                  {{ g.label }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <!-- Selector de ID Máquina -->
           <div :class="esTipoTelar ? 'flex-[1.1]' : 'flex-[1.2]'">
-            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">ID Máquina</label>
-            <select 
-              v-model="maquinaSeleccionadaId" 
-              class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none"
-              style="min-width: 0;">
-              <option value="" disabled>Seleccionar...</option>
-              <option v-for="m in maquinasFiltradas" :key="m.id" :value="m.id">
-                {{ m.nombreDescriptivo }} {{ m.lado !== 'U' ? '(' + m.lado + ')' : '' }}
-              </option>
-            </select>
+            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">MÁQUINA</label>
+            <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
+              :class="maquinaSeleccionadaId ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
+              <select 
+                v-model="maquinaSeleccionadaId" 
+                class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
+                :class="maquinaSeleccionadaId ? 'text-blue-700' : 'text-gray-400'"
+                style="min-width: 0;">
+                <option value="" disabled>Seleccionar…</option>
+                <option v-for="m in maquinasFiltradas" :key="m.id" :value="m.id">
+                  {{ m.nombreDescriptivo }} {{ m.lado !== 'U' ? '(' + m.lado + ')' : '' }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <!-- GM (solo TELAR, solo lectura) -->
           <div v-if="esTipoTelar" class="flex-[0.45]">
-            <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
-            <div class="text-gray-900 text-base font-bold py-1.5 leading-none">
-              {{ gmSeleccionado || '—' }}
+            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+              <span class="text-sm font-bold text-gray-700">{{ gmSeleccionado || '—' }}</span>
             </div>
+          </div>
           </div>
         </div>
 
-        <!-- SECCIÓN DE CATÁLOGO (Grupo Plano) -->
+        <!-- SECCIÓN DE CATÁLOGO -->
         <div v-if="catalogoCompleto.length > 0" class="bg-gray-50/30 animate-in fade-in duration-300">
-          <div class="px-4 py-3 border-b border-gray-50 flex gap-4">
+          <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
+              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">PUNTO DE CONTROL</label>
+            </div>
+            <div class="flex gap-2">
             <!-- Selección de Sección -->
             <div class="flex-[1.4]">
-              <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">1. Sección</label>
-              <select v-model="seccionSeleccionada" class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-                <option value="">Seleccionar...</option>
-                <option v-for="s in seccionesDisponibles" :key="s" :value="s">{{ s }}</option>
-              </select>
+              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">SECCIÓN</label>
+              <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
+                :class="seccionSeleccionada ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
+                <select v-model="seccionSeleccionada"
+                  class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
+                  :class="seccionSeleccionada ? 'text-blue-700' : 'text-gray-400'">
+                  <option value="">Seleccionar…</option>
+                  <option v-for="s in seccionesDisponibles" :key="s" :value="s">{{ s }}</option>
+                </select>
+              </div>
             </div>
 
             <!-- Selección de Grupo -->
             <div class="flex-[0.6]">
-              <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1" :class="{'opacity-50': !seccionSeleccionada}">2. Grupo</label>
-              <select v-model="grupoSeleccionado" :disabled="!seccionSeleccionada" class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-30">
-                <option value="">...</option>
-                <option v-for="g in gruposDisponibles" :key="g" :value="g">{{ formatGrupo(g) }}</option>
-              </select>
+              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1" :class="{'opacity-50': !seccionSeleccionada}">GRUPO</label>
+              <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!seccionSeleccionada ? 'opacity-40' : ''">
+                <select v-model="grupoSeleccionado" :disabled="!seccionSeleccionada"
+                  class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none disabled:opacity-30">
+                  <option value="">...</option>
+                  <option v-for="g in gruposDisponibles" :key="g" :value="g">{{ formatGrupo(g) }}</option>
+                </select>
+              </div>
+            </div>
             </div>
           </div>
 
-          <!-- Selección de SubGrupo / Denominación -->
-          <div v-if="grupoSeleccionado" class="px-4 py-3 border-b border-gray-50 animate-in slide-in-from-top-2">
-             <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">3. Punto / Parte específica</label>
-             <select v-model="denominacionSeleccionada" class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-               <option :value="null">Seleccionar Denominación...</option>
-               <option v-for="d in denominacionesDisponibles" :key="d.id" :value="d">
-                 {{ d.denominacion }} {{ d.subGrupo !== '-' ? '['+d.subGrupo+']' : '' }}
-               </option>
-             </select>
+          <!-- Selección de Denominación -->
+          <div v-if="grupoSeleccionado" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in slide-in-from-top-2">
+            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">PARTE ESPECÍFICA</label>
+            <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
+              :class="denominacionSeleccionada ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
+              <select v-model="denominacionSeleccionada"
+                class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
+                :class="denominacionSeleccionada ? 'text-blue-700' : 'text-gray-400'">
+                <option :value="null">Seleccionar denominación…</option>
+                <option v-for="d in denominacionesDisponibles" :key="d.id" :value="d">
+                  {{ d.denominacion }} {{ d.subGrupo !== '-' ? '['+d.subGrupo+']' : '' }}
+                </option>
+              </select>
+            </div>
 
              <!-- Info + botón tras seleccionar denominación -->
              <div v-if="denominacionSeleccionada" class="mt-2.5 flex items-center gap-2">
@@ -706,8 +739,7 @@ const enviarNotaTurno = async () => {
                  type="button"
                  @click="denominacionSeleccionada?.procedimiento?.length > 0 && (showProcedimientoViewer = true)"
                  :disabled="!denominacionSeleccionada?.procedimiento?.length"
-                 :title="denominacionSeleccionada?.procedimiento?.length ? 'Ver procedimiento (' + denominacionSeleccionada.procedimiento.length + ' pasos)' : 'Sin procedimiento cargado'"
-                 class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition active:scale-[0.97]"
+                 class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition active:scale-[0.97]"
                  :class="denominacionSeleccionada?.procedimiento?.length
                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
                    : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'"
@@ -723,24 +755,32 @@ const enviarNotaTurno = async () => {
         </div>
 
         <!-- Motivo del Llamado -->
-        <div class="px-4 py-3 border-b border-gray-50">
-           <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Motivo</label>
-           <select 
-             v-model="motivoLlamado" 
-             class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none">
-             <option v-for="opt in motivosDisponibles" :key="opt" :value="opt">
-               {{ opt }}
-             </option>
-           </select>
+        <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
+            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">MOTIVO</label>
+          </div>
+          <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
+            :class="motivoLlamado ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
+            <select
+              v-model="motivoLlamado"
+              class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
+              :class="motivoLlamado ? 'text-blue-700' : 'text-gray-400'">
+              <option v-for="opt in motivosDisponibles" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
         </div>
 
-        <div class="px-4 py-3 border-b border-gray-50">
-          <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">Observaciones</label>
-          <textarea 
-            v-model="observaciones" 
-            rows="2" 
+        <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
+            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">OBSERVACIONES</label>
+          </div>
+          <textarea
+            v-model="observaciones"
+            rows="2"
             placeholder="Describa el problema..."
-            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15"></textarea>
+            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15 resize-none outline-none"></textarea>
         </div>
 
         <div v-if="imagenPreview" class="px-4 py-4 mb-16 animate-in fade-in duration-300">

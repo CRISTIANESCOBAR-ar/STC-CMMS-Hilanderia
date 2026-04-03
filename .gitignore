@@ -28,6 +28,16 @@ dist-ssr
 
 # Firebase/GCP service account keys
 .secrets/
+
+# Archivos binarios grandes (no versionar)
+*.pdf
+*.xlsm
+*.xlsx
+*.rar
+public/SharePoint/
+public/CATALOGOS HILANDERIA/
+public/BENNINGER/
+SharePoint/
 *firebase-adminsdk*.json
 public/*firebase-adminsdk*.json
 

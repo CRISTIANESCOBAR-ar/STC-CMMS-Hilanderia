@@ -8,13 +8,22 @@ import Swal from 'sweetalert2';
 
 // ── Estado general ──
 const searchQuery = ref('');
-const turnoActivo = ref('B');
 const showCamera = ref(false);
 const isProcessing = ref(false);
 const isLoading = ref(false);
 const showGestion = ref(false);
 
-const turnos = ['A', 'B', 'C', 'D'];
+const turnos = ['A', 'B', 'C'];
+
+// Determina el turno activo según la hora local:
+// A: 06:00–13:59 | B: 14:00–21:59 | C: 22:00–05:59
+const turnoDeHora = () => {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 14) return 'A';
+  if (h >= 14 && h < 22) return 'B';
+  return 'C';
+};
+const turnoActivo = ref(turnoDeHora());
 const vistaCards = ref(typeof window !== 'undefined' && window.innerWidth < 640);
 
 // ── Tabla maestra de operarios (Firestore: config/operarios_tejeduria) ──

@@ -1,172 +1,188 @@
 [
   {
     "modelo": "BO-A",
-    "seccion": "SISTEMA DE ASPIRACIÓN",
-    "grupo": "BO-A-01",
-    "denominacion": "LIMPIAR DISPOSITIVO DE ESTANQUEIDAD DEL CONDUCTO",
-    "tiempoEstimado": "1h",
+    "seccion": "ELEVACION",
+    "grupo": "019",
+    "denominacion": "CABLES METALICOS",
+    "tiempoEstimado": "4h",
     "tipoTarea": "Preventivo",
-    "herramientas": ["Paño suave", "Aspiradora industrial"],
-    "repuestos": [],
+    "herramientas": [
+      "Caballetes (700kg)",
+      "Carretilla elevadora",
+      "Llaves fijas"
+    ],
+    "repuestos": [
+      "2 Cables metalicos"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Desconectar el interruptor principal y asegurar con candado (LOTO). Esperar a que los cilindros se detengan.", "imagenUrl": null},
-      {"texto": "🔧 DESMONTAJE: Acceder a la zona del conducto de aspiración interior y retirar cubiertas de protección si es necesario.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Retirar manualmente y con aspiradora todas las fibras acumuladas en el dispositivo de estanquidad.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Verificar que la banda de recubrimiento se deslice sin obstrucciones por el dispositivo.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Comprobar visualmente que no queden restos de fibras que puedan afectar el sellado del vacío.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: [Frecuencia: CADA 2 AÑOS] Poner fuera de tension la maquina y asegurar contra reconexion no autorizada (LOTO).",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Colocar caballetes de apoyo adecuados (min. 700kg cada uno) debajo del desprendedor.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 3: Bajar el desprendedor sobre los caballetes en Modo manual.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 4: Desconectar interruptor principal y asegurar con candado.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 5: Elevar el contrapeso con carretilla para descargar los cables.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 6: Extraer pernos de seguridad y sustituir ambos cables metalicos.",
+        "imagenUrl": null
+      }
     ]
   },
   {
     "modelo": "BO-A",
-    "seccion": "TRANSMISIÓN Y CORREAS",
-    "grupo": "BO-A-02",
-    "denominacion": "CONTROLAR TENSIÓN DE CADENA DE RODILLOS",
-    "tiempoEstimado": "0.5h",
+    "seccion": "ELECTRONICA",
+    "grupo": "019",
+    "denominacion": "PILA ZPB4 / KSZ5",
+    "tiempoEstimado": "15min",
     "tipoTarea": "Preventivo",
-    "herramientas": ["Llaves fijas", "Regla de medición"],
-    "repuestos": [],
+    "herramientas": [
+      "Pano suave",
+      "Destornillador"
+    ],
+    "repuestos": [
+      "-"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Bloqueo de energía (LOTO). No intervenir con la máquina en movimiento.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Revisar la cadena de rodillos del accionador de los cilindros de apoyo en el bastidor móvil.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Limpiar la cadena y los piñones de restos de fibras y suciedad.", "imagenUrl": null},
-      {"texto": "⚙️ AJUSTE: Si la flecha de la cadena supera los valores nominales, ajustar la posición del motor o tensor.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Comprobar que el movimiento del bastidor sea fluido y sin tirones tras el ajuste.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: [Frecuencia: SEGUN AVISO DEL SISTEMA] Detener la maquina de forma segura y aplicar bloqueo LOTO.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Limpiar las lentes del sistema de barreras de luz y espejos de desviacion en los postes con un pano suave.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 3: Limpiar lentes de las tres barreras del desprendedor.",
+        "imagenUrl": null
+      }
     ]
   },
   {
     "modelo": "CL-C3",
-    "seccion": "RODILLOS DE APERTURA",
-    "grupo": "CL-C3-01",
-    "denominacion": "AJUSTAR DISTANCIA DE ALETA DEFLECTORA CILINDRO 2",
-    "tiempoEstimado": "1.5h",
+    "seccion": "LUBRICACION",
+    "grupo": "097",
+    "denominacion": "CORREA DE TRANSMISION",
+    "tiempoEstimado": "30min",
     "tipoTarea": "Preventivo",
-    "herramientas": ["Juego de galgas", "Llave de contratuerca"],
-    "repuestos": [],
+    "herramientas": [
+      "Grasera",
+      "Lubricantes especificados"
+    ],
+    "repuestos": [
+      "Grasa/Aceite segun tabla"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Parada total de la máquina. Asegurar contra reconexión involuntaria.", "imagenUrl": null},
-      {"texto": "🔧 DESMONTAJE: Desmontar los conductos de aspiración superiores para acceder a la zona de cilindros.", "imagenUrl": null},
-      {"texto": "⚙️ AJUSTE: Soltar tornillo de apriete y girar el tornillo de tope para ajustar la distancia de la aleta.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Medir con galgas la distancia entre la aleta y el guarnecido de dientes de sierra.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Apretar contratuercas y verificar que no exista contacto mecánico al girar manualmente.", "imagenUrl": null}
-    ]
-  },
-  {
-    "modelo": "CL-C3",
-    "seccion": "ALIMENTACIÓN",
-    "grupo": "CL-C3-02",
-    "denominacion": "TENSADO DE CORREA CILINDROS ALIMENTADORES",
-    "tiempoEstimado": "1h",
-    "tipoTarea": "Preventivo",
-    "herramientas": ["Medidor de tensión de correas", "Llave fija"],
-    "repuestos": [],
-    "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Desconectar alimentación eléctrica y neumática. Bloquear interruptor principal.", "imagenUrl": null},
-      {"texto": "🔧 DESMONTAJE: Abrir la puerta de mantenimiento del lado izquierdo de la limpiadora.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Verificar visualmente el estado de la correa (grietas o desgaste excesivo).", "imagenUrl": null},
-      {"texto": "⚙️ AJUSTE: Actuar sobre las tuercas de ajuste para lograr la tensión especificada en el manual.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Apretar tuercas a mano y confirmar alineación de las poleas.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: [Frecuencia: SEGUN PLAN] Detener la maquina, desconectar alimentacion de energia y asegurar con candado (LOTO).",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Consultar la tabla de lubricantes para identificar puntos y tipos de aceite/grasa.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 3: Aplicar lubricante en los puntos indicados (rodamientos, cadenas).",
+        "imagenUrl": null
+      }
     ]
   },
   {
     "modelo": "BR-F/FD",
-    "seccion": "LUBRICACIÓN GENERAL",
-    "grupo": "BR-F/FD-01",
-    "denominacion": "ENGRASAR RODAMIENTOS DEL VENTILADOR",
-    "tiempoEstimado": "0.5h",
-    "tipoTarea": "Preventivo",
-    "herramientas": ["Bomba de engrase", "Trapo"],
-    "repuestos": ["Grasa para rodamientos de alta velocidad"],
-    "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Apagar el ventilador y esperar a que el rodete se detenga por completo.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Limpiar cuidadosamente los niples de engrase en el soporte del cojinete.", "imagenUrl": null},
-      {"texto": "🔩 LUBRICACIÓN: Inyectar la cantidad de grasa indicada según el tamaño del ventilador (ver plan de lubricación).", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Observar si sale grasa vieja por los retenes, indicando llenado completo.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Poner en marcha y verificar la ausencia de ruidos metálicos o vibraciones.", "imagenUrl": null}
-    ]
-  },
-  {
-    "modelo": "BR-F/FD",
-    "seccion": "SISTEMA DE ASPIRACIÓN",
-    "grupo": "BR-F/FD-02",
-    "denominacion": "LIMPIEZA DEL RODETE DEL VENTILADOR",
+    "seccion": "ACCIONAMIENTO",
+    "grupo": "109",
+    "denominacion": "COJINETE DEL VENTILADOR",
     "tiempoEstimado": "2h",
-    "tipoTarea": "Preventivo",
-    "herramientas": ["Espátula", "Cepillo de raíces", "Lámpara"],
-    "repuestos": [],
+    "tipoTarea": "Correctivo",
+    "herramientas": [
+      "Extractor de rodamientos",
+      "Juego de llaves"
+    ],
+    "repuestos": [
+      "Cojinete nuevo"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Bloqueo eléctrico obligatorio. Abrir la tapa de inspección del ventilador.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Revisar la acumulación de fibras o polvo pegajoso en los álabes del rodete.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Eliminar depósitos adheridos con espátula, evitando dañar el equilibrado del rodete.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Verificar el estado de las soldaduras y la ausencia de fisuras en los álabes.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Cerrar herméticamente la tapa y comprobar el sentido de giro al arrancar.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: Detener el ventilador y asegurar contra reconexion involuntaria mediante bloqueo LOTO en el armario de mando.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Desmontar la carcasa de proteccion del ventilador.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 3: Extraer el cojinete defectuoso utilizando la herramienta adecuada.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 4: Montar el nuevo cojinete y verificar alineacion.",
+        "imagenUrl": null
+      }
     ]
   },
   {
     "modelo": "FD-S",
-    "seccion": "UNIDAD NEUMÁTICA",
-    "grupo": "FD-S-01",
-    "denominacion": "REVISAR CIERRE CENTRALIZADO DE PUERTAS",
-    "tiempoEstimado": "0.5h",
+    "seccion": "TRANSMISION",
+    "grupo": "250",
+    "denominacion": "CADENA DE RODILLOS",
+    "tiempoEstimado": "45min",
     "tipoTarea": "Preventivo",
-    "herramientas": ["Multímetro", "Manómetro"],
-    "repuestos": [],
+    "herramientas": [
+      "Llaves de ajuste",
+      "Regla de medicion"
+    ],
+    "repuestos": [
+      "-"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Colocar la máquina en modo de servicio desde el panel de mando.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Comprobar que los pernos de bloqueo neumático actúan correctamente en todas las puertas.", "imagenUrl": null},
-      {"texto": "⚙️ AJUSTE: Regular la presión de aire si el movimiento de los cilindros de bloqueo es lento.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Intentar abrir las puertas con la máquina activada; no deben ceder.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Confirmar que el LED de 'Puertas Cerradas' se ilumina en el armario de maniobra.", "imagenUrl": null}
-    ]
-  },
-  {
-    "modelo": "FD-S",
-    "seccion": "ALIMENTACIÓN",
-    "grupo": "FD-S-02",
-    "denominacion": "INSPECCIÓN DE CILINDROS ALIMENTADORES",
-    "tiempoEstimado": "1h",
-    "tipoTarea": "Preventivo",
-    "herramientas": ["Lámpara portátil", "Calibre"],
-    "repuestos": [],
-    "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Asegurar parada de emergencia y bloqueo de alimentación.", "imagenUrl": null},
-      {"texto": "🔧 DESMONTAJE: Abrir las compuertas de acceso al silo de alimentación FD-U.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Revisar el desgaste de los dientes de los cilindros alimentadores.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Retirar fibras enrolladas en los extremos de los ejes de los cilindros.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Realizar una prueba de inversión de marcha para asegurar que no hay atascos.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: [Frecuencia: SEGUN PLAN] Parada segura de la maquina y aplicacion de candado de seguridad (LOTO).",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Comprobar la tension de la cadena de rodillos.",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 3: Reajustar si la flecha de la cadena supera los limites permitidos.",
+        "imagenUrl": null
+      }
     ]
   },
   {
     "modelo": "FD-T",
-    "seccion": "SISTEMA ELÉCTRICO",
-    "grupo": "FD-T-01",
-    "denominacion": "LIMPIAR LENTES DE BARRERAS DE LUZ",
-    "tiempoEstimado": "0.5h",
+    "seccion": "ESTRUCTURA",
+    "grupo": "988",
+    "denominacion": "TOLVA DE LLENADO",
+    "tiempoEstimado": "30min",
     "tipoTarea": "Preventivo",
-    "herramientas": ["Paño de microfibra", "Limpiador de lentes"],
-    "repuestos": [],
+    "herramientas": [
+      "Elementos de limpieza"
+    ],
+    "repuestos": [
+      "-"
+    ],
     "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Trabajar con la máquina detenida para evitar falsos arranques por sensores.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Localizar los emisores y receptores de las barreras de luz en la tolva de llenado.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Limpiar las superficies ópticas con el paño suave y líquido antiestático.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Verificar que los soportes no se hayan movido por vibraciones.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Comprobar en el panel que la señal del sensor cambia de estado al interrumpir el haz.", "imagenUrl": null}
-    ]
-  },
-  {
-    "modelo": "FD-T",
-    "seccion": "SISTEMA DE ASPIRACIÓN",
-    "grupo": "FD-T-02",
-    "denominacion": "LIMPIEZA DE TOLVA DE LLENADO",
-    "tiempoEstimado": "1h",
-    "tipoTarea": "Preventivo",
-    "herramientas": ["Aspiradora", "Cepillo suave"],
-    "repuestos": [],
-    "procedimiento": [
-      {"texto": "🔒 SEGURIDAD: Bloqueo de energía (LOTO). Vaciar la tolva antes de intervenir.", "imagenUrl": null},
-      {"texto": "🔧 DESMONTAJE: Abrir las ventanas de inspección de la tolva FD-T.", "imagenUrl": null},
-      {"texto": "💧 LIMPIEZA: Aspirar todo el polvo y restos de fibra acumulados en las paredes interiores.", "imagenUrl": null},
-      {"texto": "🔍 INSPECCIÓN: Verificar que no existan rebabas o superficies rugosas que retengan material.", "imagenUrl": null},
-      {"texto": "✅ VERIFICACIÓN: Cerrar ventanas y asegurar que los cierres queden bien ajustados.", "imagenUrl": null}
+      {
+        "texto": "Paso 1: [Frecuencia: DIARIA] Detener la alimentacion de material y asegurar la maquina (LOTO).",
+        "imagenUrl": null
+      },
+      {
+        "texto": "Paso 2: Limpiar los restos de fibra de la tolva de llenado para evitar obstrucciones.",
+        "imagenUrl": null
+      }
     ]
   }
 ]

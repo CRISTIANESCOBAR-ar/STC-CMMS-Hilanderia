@@ -10,13 +10,21 @@
 export const MOTIVOS_POR_TIPO = {
 
   // ── APERTURA ────────────────────────────────────────────────────────────────
+  // Basado en manuales Trutzschler BO-A / CL-C3 / BR-F/FD / FD-S / FD-T
   APERTURA: {
     'Mecánico': [
-      'ATASCO DE FIBRA',
-      'ROTURA DE CORREA',
-      'DESGASTE DE GUARNICIÓN',
-      'OBSTRUCCIÓN DE DUCTO',
-      'FALLA DE VENTILADOR',
+      // ★ Más frecuentes
+      'ATASCO / OBSTRUCCIÓN DUCTO ASPIRACIÓN',
+      'ROTURA CORREA TRAPEZOIDAL',
+      'DESGASTE PALETA VENTILADOR',
+      'FALLA BARRERA DE LUZ',
+      'ROTURA CABLE ELEVACIÓN (BO-A)',
+      // Otros mecánicos
+      'ROTURA CADENA RODILLOS',
+      'AJUSTE TENSIÓN CORREA',
+      'DESGASTE TIRA ESTANQUIDAD',
+      'ROTURA CADENA TRANSPORTE BALAS',
+      'FALLA RODILLO EXTRACTOR',
       'AJUSTE',
       'LIMPIEZA',
       'LUBRICACIÓN',
@@ -24,9 +32,15 @@ export const MOTIVOS_POR_TIPO = {
       'VERIFICACIÓN',
     ],
     'Eléctrico': [
+      // ★ Más frecuentes
       'DISPARO TÉRMICO MOTOR',
-      'ERROR DE VARIADOR',
-      'SENSOR NIVEL FIBRA',
+      'ERROR VARIADOR',
+      'FALLA BARRERA DE LUZ',
+      // Otros eléctricos
+      'FALLA MÓDULO MEMORIA / EEPROM',
+      'CAMBIO FUSIBLE ARMARIO',
+      'CAMBIO PILA ZPB4',
+      'FALLA SENSOR PRESENCIA BALA',
       'VERIFICACIÓN ELÉCTRICA',
       'AJUSTE PARÁMETROS',
     ],

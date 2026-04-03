@@ -6,12 +6,33 @@ import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
 import { getMotivosFirestore, updateCategoriaMotivos } from '../services/motivosService';
 import { userRole } from '../services/authService';
 import Swal from 'sweetalert2';
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 import {
   ChevronRight, ChevronDown, BookOpen, Wrench, Zap,
   CheckCircle2, XCircle, ClipboardList, Loader2, Info,
   ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X,
   ArrowLeft, ToggleLeft, ToggleRight, GripVertical, EyeOff
 } from 'lucide-vue-next';
+
+// ── Directiva v-tippy ─────────────────────────────────────────────────────────
+const vTippy = {
+  mounted(el, binding) {
+    tippy(el, {
+      content: binding.value,
+      theme: 'light-border',
+      duration: [120, 100],
+      placement: binding.arg || 'top',
+    });
+  },
+  updated(el, binding) {
+    if (el._tippy) el._tippy.setContent(binding.value);
+  },
+  unmounted(el) {
+    if (el._tippy) el._tippy.destroy();
+  },
+};
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 const maquinas       = ref([]);
@@ -673,12 +694,12 @@ const catEliminar = async (item) => {
                               <CheckCircle2
                                 v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
                                 class="w-4 h-4 text-emerald-500"
-                                title="Tiene procedimiento"
+                                v-tippy="'Tiene procedimiento'"
                               />
                               <XCircle
                                 v-else
                                 class="w-4 h-4 text-gray-300"
-                                title="Sin procedimiento"
+                                v-tippy="'Sin procedimiento'"
                               />
                             </div>
 
@@ -689,7 +710,7 @@ const catEliminar = async (item) => {
                                 <button
                                   v-if="userRole === 'admin'"
                                   @click="catToggleVisible(item)"
-                                  :title="item.visible !== false ? 'Visible — click para ocultar' : 'Oculto — click para mostrar'"
+                                  v-tippy="item.visible !== false ? 'Visible — click para ocultar' : 'Oculto — click para mostrar'"
                                   class="shrink-0 mt-0.5 p-0.5 rounded transition-colors hover:bg-gray-100"
                                 >
                                   <Eye v-if="item.visible !== false" class="w-3.5 h-3.5 text-green-500" />
@@ -726,14 +747,14 @@ const catEliminar = async (item) => {
                                 v-if="userRole === 'admin'"
                                 @click="catIniciarEdicion(item)"
                                 class="p-1 rounded-md text-indigo-400 hover:bg-indigo-50 transition-colors"
-                                title="Editar campos"
+                                v-tippy="'Editar campos del ítem'"
                               >
                                 <Pencil class="w-4 h-4" />
                               </button>
                               <!-- Ver procedimiento — siempre visible, apagado si no hay contenido -->
                               <button
                                 @click="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? abrirViewer(item) : null"
-                                :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Ver procedimiento' : 'Sin procedimiento cargado'"
+                                v-tippy="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Ver procedimiento' : 'Sin procedimiento cargado'"
                                 class="p-1 rounded-md transition-colors"
                                 :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
                                   ? 'text-indigo-500 hover:bg-indigo-50 cursor-pointer'
@@ -749,7 +770,7 @@ const catEliminar = async (item) => {
                                 :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
                                   ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
                                   : 'text-amber-500 hover:bg-amber-50'"
-                                :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Editar procedimiento' : 'Crear procedimiento'"
+                                v-tippy="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Editar procedimiento' : 'Crear procedimiento'"
                               >
                                 <ClipboardList v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
                                 <Plus v-else class="w-4 h-4" />
@@ -759,7 +780,7 @@ const catEliminar = async (item) => {
                                 v-if="userRole === 'admin'"
                                 @click="catEliminar(item)"
                                 class="p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Eliminar ítem"
+                                v-tippy="'Eliminar ítem del catálogo'"
                               >
                                 <Trash2 class="w-4 h-4" />
                               </button>
@@ -839,7 +860,7 @@ const catEliminar = async (item) => {
               <!-- ── MODO EDICIÓN ── -->
               <div v-if="motivoEditCat" class="space-y-3">
                 <div class="flex items-center gap-2 mb-1">
-                  <button @click="cancelarEditMotivos" class="p-1 hover:bg-gray-100 rounded-lg transition">
+                  <button @click="cancelarEditMotivos" class="p-1 hover:bg-gray-100 rounded-lg transition" v-tippy="'Volver sin guardar'">
                     <ArrowLeft class="w-4 h-4 text-gray-500" />
                   </button>
                   <span class="font-bold text-sm text-gray-800">
@@ -859,7 +880,8 @@ const catEliminar = async (item) => {
                     placeholder="Nombre del motivo (Enter para agregar)..."
                     class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none uppercase" />
                   <button @click="agregarMotivo" :disabled="!motivoNuevo.trim()"
-                    class="px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition">
+                    class="px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition"
+                    v-tippy="'Agregar motivo a la lista'">
                     <Plus class="w-4 h-4" />
                   </button>
                 </div>
@@ -870,7 +892,7 @@ const catEliminar = async (item) => {
                     class="flex items-center gap-2 px-3 py-2"
                     :class="m.visible ? 'bg-white' : 'bg-gray-50'">
                     <!-- Ícono visible/oculto -->
-                    <button @click="toggleVisible(idx)" :title="m.visible ? 'Visible en app — click para ocultar' : 'Oculto en app — click para mostrar'"
+                    <button @click="toggleVisible(idx)" v-tippy="m.visible ? 'Visible en app — click para ocultar' : 'Oculto en app — click para mostrar'"
                       class="shrink-0 transition-colors">
                       <Eye v-if="m.visible" class="w-4 h-4 text-green-500" />
                       <EyeOff v-else class="w-4 h-4 text-gray-300" />
@@ -883,7 +905,8 @@ const catEliminar = async (item) => {
                       :class="m.visible ? 'text-gray-800' : 'text-gray-400 line-through'"
                     />
                     <button @click="eliminarMotivo(idx)"
-                      class="shrink-0 p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition">
+                      class="shrink-0 p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition"
+                      v-tippy="'Eliminar este motivo'">
                       <Trash2 class="w-3.5 h-3.5" />
                     </button>
                   </li>
@@ -1213,7 +1236,7 @@ const catEliminar = async (item) => {
                 </span>
               </div>
             </div>
-            <button @click="showViewer = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0">
+            <button @click="showViewer = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar'">
               <X class="w-4 h-4" />
             </button>
           </div>
@@ -1257,6 +1280,7 @@ const catEliminar = async (item) => {
               v-if="userRole === 'admin'"
               @click="abrirEditor(itemViewer); showViewer = false"
               class="flex-none px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm flex items-center gap-1.5 hover:bg-gray-50 transition-colors"
+              v-tippy="'Editar pasos del procedimiento'"
             >
               <Pencil class="w-4 h-4" /> Editar
             </button>
@@ -1287,7 +1311,7 @@ const catEliminar = async (item) => {
               <h3 class="text-sm font-black text-gray-800 leading-tight mt-0.5">{{ editandoItem.denominacion }}</h3>
               <p class="text-xs text-gray-400 mt-0.5">{{ editandoItem.seccion }} · Grupo {{ editandoItem.grupo }}</p>
             </div>
-            <button @click="showEditor = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0">
+            <button @click="showEditor = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar sin guardar'">
               <X class="w-4 h-4" />
             </button>
           </div>
@@ -1314,7 +1338,7 @@ const catEliminar = async (item) => {
               <button
                 @click="eliminarPaso(i)"
                 class="p-1.5 rounded-lg text-red-400 hover:bg-red-50 transition-colors shrink-0"
-                title="Eliminar paso"
+                v-tippy="'Eliminar paso'"
               >
                 <Trash2 class="w-4 h-4" />
               </button>

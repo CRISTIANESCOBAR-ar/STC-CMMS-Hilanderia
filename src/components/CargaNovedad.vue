@@ -608,12 +608,12 @@ const enviarNotaTurno = async () => {
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">SELECCIÓN DE MÁQUINA</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">SELECCIÓN DE MÁQUINA</label>
           </div>
           <div class="flex gap-2">
           <!-- Selector de Tipo -->
           <div :class="esTipoTelar ? 'flex-[0.8]' : 'flex-[1]'">
-            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">TIPO</label>
+            <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">TIPO</label>
             <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
               <select 
                 v-model="tipoSeleccionado" 
@@ -629,7 +629,7 @@ const enviarNotaTurno = async () => {
 
           <!-- Selector de Gp (solo TELAR) -->
           <div v-if="esTipoTelar" class="flex-[0.5]">
-            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GRUPO</label>
+            <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GRUPO</label>
             <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!gruposTelarDisponibles.length ? 'opacity-40' : ''">
               <select
                 v-model="gpSeleccionado"
@@ -646,7 +646,7 @@ const enviarNotaTurno = async () => {
 
           <!-- Selector de ID Máquina -->
           <div :class="esTipoTelar ? 'flex-[1.1]' : 'flex-[1.2]'">
-            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">MÁQUINA</label>
+            <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">MÁQUINA</label>
             <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
               :class="maquinaSeleccionadaId ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
               <select 
@@ -664,7 +664,7 @@ const enviarNotaTurno = async () => {
 
           <!-- GM (solo TELAR, solo lectura) -->
           <div v-if="esTipoTelar" class="flex-[0.45]">
-            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
+            <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GM</label>
             <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
               <span class="text-sm font-bold text-gray-700">{{ gmSeleccionado || '—' }}</span>
             </div>
@@ -677,12 +677,12 @@ const enviarNotaTurno = async () => {
           <div class="px-4 pt-4 pb-3 border-b border-gray-100">
             <div class="flex items-center gap-2 mb-3">
               <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">PUNTO DE CONTROL</label>
+              <label class="text-xs font-extrabold text-gray-500 tracking-widest">PUNTO DE CONTROL</label>
             </div>
             <div class="flex gap-2">
             <!-- Selección de Sección -->
             <div class="flex-[1.4]">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">SECCIÓN</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">SECCIÓN</label>
               <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
                 :class="seccionSeleccionada ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
                 <select v-model="seccionSeleccionada"
@@ -696,7 +696,7 @@ const enviarNotaTurno = async () => {
 
             <!-- Selección de Grupo -->
             <div class="flex-[0.6]">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1" :class="{'opacity-50': !seccionSeleccionada}">GRUPO</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1" :class="{'opacity-50': !seccionSeleccionada}">GRUPO</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!seccionSeleccionada ? 'opacity-40' : ''">
                 <select v-model="grupoSeleccionado" :disabled="!seccionSeleccionada"
                   class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none disabled:opacity-30">
@@ -710,7 +710,7 @@ const enviarNotaTurno = async () => {
 
           <!-- Selección de Denominación -->
           <div v-if="grupoSeleccionado" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in slide-in-from-top-2">
-            <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">PARTE ESPECÍFICA</label>
+            <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">PARTE ESPECÍFICA</label>
             <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
               :class="denominacionSeleccionada ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
               <select v-model="denominacionSeleccionada"
@@ -758,7 +758,7 @@ const enviarNotaTurno = async () => {
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">MOTIVO</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">MOTIVO</label>
           </div>
           <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
             :class="motivoLlamado ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
@@ -774,13 +774,13 @@ const enviarNotaTurno = async () => {
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">OBSERVACIONES</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
           </div>
           <textarea
             v-model="observaciones"
             rows="2"
             placeholder="Describa el problema..."
-            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15 resize-none outline-none"></textarea>
+            class="w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15 resize-none outline-none"></textarea>
         </div>
 
         <div v-if="imagenPreview" class="px-4 py-4 mb-16 animate-in fade-in duration-300">

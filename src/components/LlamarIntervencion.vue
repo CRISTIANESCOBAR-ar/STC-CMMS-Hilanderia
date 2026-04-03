@@ -523,7 +523,7 @@ const onSubmit = async () => {
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">TIPO DE INTERVENCIÓN</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">TIPO DE INTERVENCIÓN</label>
           </div>
           <div class="grid grid-cols-3 gap-2">
             <button
@@ -548,12 +548,12 @@ const onSubmit = async () => {
         <div class="px-4 py-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">SELECCIÓN DE MÁQUINA</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">SELECCIÓN DE MÁQUINA</label>
           </div>
           <div class="flex gap-2">
             <!-- Tipo -->
             <div :class="esTipoTelar ? 'flex-[0.8]' : 'flex-[1]'">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">TIPO</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">TIPO</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                 <select v-model="tipoSeleccionado" :disabled="tiposDisponibles.length === 0"
                   class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none">
@@ -565,7 +565,7 @@ const onSubmit = async () => {
 
             <!-- Gp (solo TELAR) -->
             <div v-if="esTipoTelar" class="flex-[0.5]">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GRUPO</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GRUPO</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!gruposTelarDisponibles.length ? 'opacity-40' : ''">
                 <select v-model="gpSeleccionado" :disabled="!gruposTelarDisponibles.length"
                   class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none">
@@ -577,7 +577,7 @@ const onSubmit = async () => {
 
             <!-- ID Máquina -->
             <div :class="esTipoTelar ? 'flex-[1.1]' : 'flex-[1.2]'">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">MÁQUINA</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">MÁQUINA</label>
               <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
                 :class="maquinaSeleccionadaId
                   ? 'bg-orange-50 border-orange-300'
@@ -597,7 +597,7 @@ const onSubmit = async () => {
 
             <!-- GM (solo TELAR) -->
             <div v-if="esTipoTelar" class="flex-[0.45]">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
+              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GM</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
                 <span class="text-sm font-bold text-gray-700">{{ gmSeleccionado || '—' }}</span>
               </div>
@@ -612,7 +612,7 @@ const onSubmit = async () => {
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
               <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
+              <label class="text-xs font-extrabold text-gray-500 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
             </div>
             <button v-if="sintomaSeleccionado" type="button"
               @click="sintomaSeleccionado = null"
@@ -670,7 +670,7 @@ const onSubmit = async () => {
         <div v-if="maquinaSeleccionadaId" class="px-4 pt-3 pb-3 border-b border-gray-100 animate-in fade-in duration-200">
           <div class="flex items-center gap-2 mb-2">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">ESTADO DE LA MÁQUINA</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">ESTADO DE LA MÁQUINA</label>
           </div>
           <div class="grid grid-cols-3 gap-2">
             <button
@@ -697,13 +697,13 @@ const onSubmit = async () => {
         <div class="px-4 py-3 border-b border-gray-50">
           <div class="flex items-center gap-2 mb-2">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
-            <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">OBSERVACIONES</label>
+            <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
           </div>
           <textarea
             v-model="observaciones"
             rows="2"
             placeholder="Describe el problema observado... (opcional)"
-            class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-orange-400 focus:border-orange-400 block p-2.5 shadow-sm min-h-15 resize-none outline-none"
+            class="w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-orange-400 focus:border-orange-400 block p-2.5 shadow-sm min-h-15 resize-none outline-none"
           ></textarea>
         </div>
 

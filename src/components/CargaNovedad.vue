@@ -1,13 +1,13 @@
 <script setup>
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { catalogoService } from '../services/catalogoService';
 import { userProfile, userRole } from '../services/authService';
-import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList, getQuickActions } from '../constants/organization';
+import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
-import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, BellRing, ScanLine, Eye as EyeIcon, ClipboardCheck, Route as RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users, Gauge } from 'lucide-vue-next';
+import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, History, ArrowLeftRight, NotebookPen, Package, ChevronLeft, Loader2 } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import Swal from 'sweetalert2';
 
@@ -44,9 +44,12 @@ const maquinasError = ref(false);
 const isCompressing = ref(false);
 const menuAccionesAbierto = ref(false);
 
-const iconMap = { AlertTriangle, BellRing, ScanLine, Eye: EyeIcon, ClipboardCheck, Route: RouteIcon, ClipboardList, History, ShieldCheck, Settings2, Users, Gauge };
-
-const accionesRapidas = computed(() => getQuickActions(userRole.value));
+// Bottom Sheet — Acciones Contextuales
+const bottomSheetMode = ref(null); // null | 'historial' | 'derivar' | 'notaTurno'
+const historialMaquina = ref([]);
+const cargandoHistorial = ref(false);
+const notaTurno = ref('');
+const enviandoNota = ref(false);
 
 const sectoresUsuario = computed(() => {
   if (!userProfile.value) return [DEFAULT_SECTOR];
@@ -481,12 +484,67 @@ const toggleMenuAcciones = () => {
 
 const cerrarMenuAcciones = () => {
   menuAccionesAbierto.value = false;
+  bottomSheetMode.value = null;
 };
 
-const seleccionarAccionRapida = (accion) => {
+const abrirHistorial = async () => {
+  bottomSheetMode.value = 'historial';
+  cargandoHistorial.value = true;
+  historialMaquina.value = [];
+  try {
+    const q = query(
+      collection(db, 'novedades'),
+      where('maquinaId', '==', maquinaSeleccionadaId.value),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+    const snap = await getDocs(q);
+    historialMaquina.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.error('Error cargando historial', e);
+  } finally {
+    cargandoHistorial.value = false;
+  }
+};
+
+const abrirDerivar = () => {
+  bottomSheetMode.value = 'derivar';
+};
+
+const confirmarDerivar = (nuevoTipo) => {
+  if (nuevoTipo === tipoProblema.value) return;
+  tipoProblema.value = nuevoTipo;
+  if (observaciones.value.trim()) {
+    observaciones.value = `[Derivado a ${nuevoTipo}] ${observaciones.value}`;
+  }
+  bottomSheetMode.value = null;
   menuAccionesAbierto.value = false;
-  if (accion.route) {
-    router.push(accion.route);
+};
+
+const enviarNotaTurno = async () => {
+  if (!notaTurno.value.trim()) return;
+  enviandoNota.value = true;
+  try {
+    const maq = detallesMaquina.value;
+    await addDoc(collection(db, 'notas_turno'), {
+      maquinaId: maquinaSeleccionadaId.value,
+      nombreMaquina: maq ? `${maq.nombre_maquina} ${maq.maquina}` : maquinaSeleccionadaId.value,
+      sector: maq?.sector || sectorPrincipalUsuario.value,
+      nota: notaTurno.value.trim(),
+      creadoPorNombre: userProfile.value?.displayName || 'Anónimo',
+      creadoPorEmail: userProfile.value?.email || null,
+      createdAt: serverTimestamp(),
+      leida: false,
+    });
+    notaTurno.value = '';
+    bottomSheetMode.value = null;
+    menuAccionesAbierto.value = false;
+    successMessage.value = 'Nota enviada al próximo turno.';
+    setTimeout(() => { successMessage.value = ''; }, 3000);
+  } catch (e) {
+    console.error('Error guardando nota turno', e);
+  } finally {
+    enviandoNota.value = false;
   }
 };
 </script>
@@ -703,29 +761,125 @@ const seleccionarAccionRapida = (accion) => {
               class="px-3 pt-3 pb-2 border-b border-gray-100 animate-in slide-in-from-bottom-4 duration-200"
             >
               <div class="w-12 h-1.5 rounded-full bg-gray-300 mx-auto mb-3"></div>
+              <!-- Header dinámico -->
               <div class="flex items-center justify-between mb-3 px-1">
-                <p class="text-sm font-black text-gray-700 tracking-wide">Acciones rapidas</p>
-                <button
-                  type="button"
+                <div class="flex items-center gap-2">
+                  <button v-if="bottomSheetMode" type="button" @click="bottomSheetMode = null"
+                    class="w-7 h-7 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-500 transition hover:bg-gray-100">
+                    <ChevronLeft class="w-4 h-4" />
+                  </button>
+                  <p class="text-sm font-black text-gray-700 tracking-wide">
+                    {{ bottomSheetMode === 'historial' ? 'Historial Máquina'
+                      : bottomSheetMode === 'derivar' ? 'Derivar Tipo'
+                      : bottomSheetMode === 'notaTurno' ? 'Nota p/ Turno Siguiente'
+                      : 'Acciones' }}
+                  </p>
+                </div>
+                <button type="button" @click="cerrarMenuAcciones"
                   class="w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center transition"
-                  @click="cerrarMenuAcciones"
-                  aria-label="Cerrar menu"
-                >
+                  aria-label="Cerrar menu">
                   <X class="w-4 h-4" />
                 </button>
               </div>
-              <div class="grid grid-cols-4 gap-2">
-                <button
-                  v-for="accion in accionesRapidas"
-                  :key="accion.id"
-                  type="button"
-                  class="h-20 rounded-2xl border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 active:scale-[0.98] transition-all flex flex-col items-center justify-center gap-1.5"
-                  @click="seleccionarAccionRapida(accion)"
-                >
+
+              <!-- Modo: 4 botones principales -->
+              <div v-if="!bottomSheetMode" class="grid grid-cols-2 gap-2">
+                <!-- Historial Máquina -->
+                <button type="button" :disabled="!maquinaSeleccionadaId" @click="abrirHistorial"
+                  class="h-20 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                  :class="maquinaSeleccionadaId ? 'border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200' : 'border-gray-100 bg-gray-50/50 opacity-40 cursor-not-allowed'">
                   <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-blue-600">
-                    <component :is="iconMap[accion.icon]" v-if="iconMap[accion.icon]" class="w-4 h-4" />
+                    <History class="w-4 h-4" />
                   </span>
-                  <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">{{ accion.label }}</span>
+                  <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">Historial Máquina</span>
+                </button>
+                <!-- Derivar Tipo -->
+                <button type="button" :disabled="!maquinaSeleccionadaId" @click="abrirDerivar"
+                  class="h-20 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                  :class="maquinaSeleccionadaId ? 'border-gray-200 bg-gray-50 hover:bg-amber-50 hover:border-amber-200' : 'border-gray-100 bg-gray-50/50 opacity-40 cursor-not-allowed'">
+                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-amber-500">
+                    <ArrowLeftRight class="w-4 h-4" />
+                  </span>
+                  <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">Derivar Tipo</span>
+                </button>
+                <!-- Nota Turno -->
+                <button type="button" :disabled="!maquinaSeleccionadaId" @click="bottomSheetMode = 'notaTurno'; notaTurno = ''"
+                  class="h-20 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                  :class="maquinaSeleccionadaId ? 'border-gray-200 bg-gray-50 hover:bg-violet-50 hover:border-violet-200' : 'border-gray-100 bg-gray-50/50 opacity-40 cursor-not-allowed'">
+                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-violet-600">
+                    <NotebookPen class="w-4 h-4" />
+                  </span>
+                  <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">Nota Turno</span>
+                </button>
+                <!-- Pedir Pieza (placeholder) -->
+                <button type="button" disabled title="Próximamente"
+                  class="h-20 rounded-2xl border border-gray-100 bg-gray-50/50 opacity-40 cursor-not-allowed flex flex-col items-center justify-center gap-1">
+                  <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400">
+                    <Package class="w-4 h-4" />
+                  </span>
+                  <span class="text-[10px] font-bold text-gray-500 leading-tight text-center px-1">Pedir Pieza</span>
+                  <span class="text-[8px] text-gray-400 font-medium -mt-0.5">Próximamente</span>
+                </button>
+              </div>
+
+              <!-- Modo: historial -->
+              <div v-else-if="bottomSheetMode === 'historial'" class="space-y-2">
+                <div v-if="cargandoHistorial" class="flex justify-center py-4">
+                  <Loader2 class="w-5 h-5 text-blue-500 animate-spin" />
+                </div>
+                <p v-else-if="historialMaquina.length === 0" class="text-center py-4 text-gray-400 text-xs font-medium">
+                  Sin reportes anteriores para esta máquina.
+                </p>
+                <div v-else v-for="h in historialMaquina" :key="h.id"
+                  class="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+                  <span class="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                    :class="h.tipoProblema === 'Mecánico' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'">
+                    <Wrench v-if="h.tipoProblema === 'Mecánico'" class="w-2.5 h-2.5" />
+                    <Zap v-else class="w-2.5 h-2.5" />
+                  </span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] font-bold text-gray-700 truncate">{{ h.motivo }}</p>
+                    <p class="text-[10px] text-gray-400 truncate">{{ h.observaciones }}</p>
+                    <p class="text-[9px] text-gray-300 font-medium mt-0.5">
+                      {{ h.createdAt?.toDate ? h.createdAt.toDate().toLocaleDateString('es-AR') : '—' }}
+                      · <span :class="h.estado === 'resuelto' ? 'text-green-500' : 'text-orange-400'">{{ h.estado }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Modo: derivar -->
+              <div v-else-if="bottomSheetMode === 'derivar'" class="space-y-3">
+                <p class="text-xs text-gray-500 px-1">
+                  Tipo actual: <strong>{{ tipoProblema }}</strong>. Seleccioná el tipo al que querés derivar el reporte.
+                </p>
+                <div class="grid grid-cols-2 gap-2">
+                  <button type="button" @click="confirmarDerivar('Mecánico')" :disabled="tipoProblema === 'Mecánico'"
+                    class="h-16 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.98]"
+                    :class="tipoProblema === 'Mecánico' ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-200 cursor-default' : 'border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-200'">
+                    <Wrench class="w-5 h-5" :class="tipoProblema === 'Mecánico' ? 'text-blue-600' : 'text-gray-500'" />
+                    <span class="text-[10px] font-bold" :class="tipoProblema === 'Mecánico' ? 'text-blue-700' : 'text-gray-600'">Mecánico {{ tipoProblema === 'Mecánico' ? '✓' : '' }}</span>
+                  </button>
+                  <button type="button" @click="confirmarDerivar('Eléctrico')" :disabled="tipoProblema === 'Eléctrico'"
+                    class="h-16 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.98]"
+                    :class="tipoProblema === 'Eléctrico' ? 'border-amber-300 bg-amber-50 ring-2 ring-amber-200 cursor-default' : 'border-gray-200 bg-gray-50 hover:bg-amber-50 hover:border-amber-200'">
+                    <Zap class="w-5 h-5" :class="tipoProblema === 'Eléctrico' ? 'text-amber-500' : 'text-gray-500'" />
+                    <span class="text-[10px] font-bold" :class="tipoProblema === 'Eléctrico' ? 'text-amber-700' : 'text-gray-600'">Eléctrico {{ tipoProblema === 'Eléctrico' ? '✓' : '' }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Modo: nota turno -->
+              <div v-else-if="bottomSheetMode === 'notaTurno'" class="space-y-2">
+                <textarea v-model="notaTurno" rows="3" placeholder="Ej: La máquina quedó con vibración en el motor izquierdo, revisar al inicio del turno..."
+                  class="w-full bg-gray-50 border border-gray-200 text-gray-900 text-xs rounded-xl focus:ring-blue-500 focus:border-blue-500 p-2.5 resize-none"
+                ></textarea>
+                <button type="button" :disabled="!notaTurno.trim() || enviandoNota" @click="enviarNotaTurno"
+                  class="w-full h-10 rounded-xl text-sm font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  :class="notaTurno.trim() && !enviandoNota ? 'bg-violet-600 text-white hover:bg-violet-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'">
+                  <Loader2 v-if="enviandoNota" class="w-4 h-4 animate-spin" />
+                  <NotebookPen v-else class="w-4 h-4" />
+                  {{ enviandoNota ? 'Enviando...' : 'Enviar Nota' }}
                 </button>
               </div>
             </div>

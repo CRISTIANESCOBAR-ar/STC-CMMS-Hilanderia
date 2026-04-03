@@ -35,6 +35,11 @@ const editandoItem  = ref(null);
 const editandoPasos = ref([]);
 const guardando     = ref(false);
 
+// ── Estado CRUD Catálogo ───────────────────────────────────────────────────
+const catEditando    = ref(null);   // { id, denominacion, numeroCatalogo, numeroArticulo, visible }
+const catGuardando   = ref(false);
+const catNuevoForm   = ref(null);   // { seccion, grupo, denominacion, numeroCatalogo, numeroArticulo }
+
 // Secciones expandidas en el catálogo
 const seccionesExpandidas = ref(new Set());
 
@@ -103,11 +108,15 @@ const seleccionarModelo = async (modelo) => {
 // ── Estructura del catálogo: seccion > grupo > items ─────────────────────────
 const catalogoEstructura = computed(() => {
   const mapa = {};
-  const itemsFiltrados = filtroProc.value === null
+  // Admin ve todos; el resto solo ve los visibles
+  const visibles = userRole.value === 'admin'
     ? catalogoItems.value
+    : catalogoItems.value.filter(i => i.visible !== false);
+  const itemsFiltrados = filtroProc.value === null
+    ? visibles
     : filtroProc.value === 'con'
-      ? catalogoItems.value.filter(i => Array.isArray(i.procedimiento) && i.procedimiento.length > 0)
-      : catalogoItems.value.filter(i => !Array.isArray(i.procedimiento) || i.procedimiento.length === 0);
+      ? visibles.filter(i => Array.isArray(i.procedimiento) && i.procedimiento.length > 0)
+      : visibles.filter(i => !Array.isArray(i.procedimiento) || i.procedimiento.length === 0);
   itemsFiltrados.forEach(item => {
     const sec = item.seccion || 'Sin sección';
     const grp = String(item.grupo || 'Sin grupo');
@@ -288,6 +297,87 @@ const guardarEdicion = async () => {
     Swal.fire({ icon: 'error', title: 'Error al guardar', text: e.message });
   } finally {
     guardando.value = false;
+  }
+};// ── CRUD Catálogo ─────────────────────────────────────────────────────────
+const catIniciarEdicion = (item) => {
+  catEditando.value = {
+    id: item.id,
+    denominacion: item.denominacion || '',
+    numeroCatalogo: item.numeroCatalogo || '',
+    numeroArticulo: item.numeroArticulo || '',
+    visible: item.visible !== false,
+  };
+};
+const catCancelarEdicion = () => { catEditando.value = null; };
+
+const catGuardarEdicion = async () => {
+  if (!catEditando.value) return;
+  catGuardando.value = true;
+  const { id, ...campos } = catEditando.value;
+  try {
+    await catalogoService.actualizarItemCatalogo(id, campos);
+    const idx = catalogoItems.value.findIndex(i => i.id === id);
+    if (idx !== -1) catalogoItems.value[idx] = { ...catalogoItems.value[idx], ...campos };
+    catEditando.value = null;
+    Swal.fire({ icon: 'success', title: 'Guardado', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error al guardar', text: e.message });
+  } finally {
+    catGuardando.value = false;
+  }
+};
+
+const catToggleVisible = async (item) => {
+  const newVisible = item.visible === false;
+  try {
+    await catalogoService.toggleVisibleItem(item.id, newVisible);
+    const idx = catalogoItems.value.findIndex(i => i.id === item.id);
+    if (idx !== -1) catalogoItems.value[idx] = { ...catalogoItems.value[idx], visible: newVisible };
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+  }
+};
+
+const catAbrirNuevo = (seccion, grupo) => {
+  catNuevoForm.value = { seccion, grupo, denominacion: '', numeroCatalogo: '', numeroArticulo: '' };
+};
+const catCancelarNuevo = () => { catNuevoForm.value = null; };
+
+const catCrearItem = async () => {
+  if (!catNuevoForm.value?.denominacion?.trim()) return;
+  catGuardando.value = true;
+  try {
+    const datos = {
+      modelo: modeloSeleccionado.value,
+      seccion: catNuevoForm.value.seccion,
+      grupo: catNuevoForm.value.grupo,
+      denominacion: catNuevoForm.value.denominacion.trim(),
+      numeroCatalogo: catNuevoForm.value.numeroCatalogo.trim() || '-',
+      numeroArticulo: catNuevoForm.value.numeroArticulo.trim() || '-',
+    };
+    const newId = await catalogoService.crearItemCatalogo(datos);
+    catalogoItems.value.push({ id: newId, ...datos, visible: true, procedimiento: [] });
+    catNuevoForm.value = null;
+    Swal.fire({ icon: 'success', title: 'Ítem creado', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error al crear', text: e.message });
+  } finally {
+    catGuardando.value = false;
+  }
+};
+
+const catEliminar = async (item) => {
+  const result = await Swal.fire({
+    icon: 'warning', title: '¿Eliminar ítem?', text: item.denominacion,
+    showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar',
+    confirmButtonColor: '#dc2626',
+  });
+  if (!result.isConfirmed) return;
+  try {
+    await catalogoService.eliminarItemCatalogo(item.id);
+    catalogoItems.value = catalogoItems.value.filter(i => i.id !== item.id);
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: e.message });
   }
 };
 </script>
@@ -538,74 +628,189 @@ const guardarEdicion = async () => {
                         <li
                           v-for="item in items"
                           :key="item.id"
-                          class="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 transition-colors"
+                          class="px-4 py-2 hover:bg-gray-50 transition-colors"
+                          :class="item.visible === false ? 'opacity-50' : ''"
                         >
-                          <!-- Indicador procedimiento -->
-                          <div class="shrink-0 mt-0.5">
-                            <CheckCircle2
-                              v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                              class="w-4 h-4 text-emerald-500"
-                              title="Tiene procedimiento"
+                          <!-- ── Modo edición inline ── -->
+                          <div v-if="catEditando && catEditando.id === item.id" class="space-y-1.5">
+                            <input
+                              v-model="catEditando.denominacion"
+                              placeholder="Denominación"
+                              class="w-full border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                             />
-                            <XCircle
-                              v-else
-                              class="w-4 h-4 text-gray-300"
-                              title="Sin procedimiento"
-                            />
-                          </div>
-
-                          <!-- Nombre -->
-                          <div class="flex-1 min-w-0">
-                            <p class="text-sm text-gray-700 font-medium leading-snug">{{ item.denominacion }}</p>
-                            <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                              <span v-if="item.numeroCatalogo && item.numeroCatalogo !== '-'" class="text-xs text-gray-400">Cat: {{ item.numeroCatalogo }}</span>
-                              <span v-if="item.numeroArticulo && item.numeroArticulo !== '-'" class="text-xs text-gray-400">Art: {{ item.numeroArticulo }}</span>
-                              <span v-if="item.tipoTarea" class="text-xs font-medium"
-                                :class="{
-                                  'text-blue-500': item.tipoTarea === 'Preventivo',
-                                  'text-orange-500': item.tipoTarea === 'Mecánico',
-                                  'text-violet-500': item.tipoTarea === 'Eléctrico',
-                                }">
-                                {{ item.tipoTarea }}
-                              </span>
-                              <span v-if="item.tiempoEstimado" class="text-xs text-gray-400">⏱ {{ item.tiempoEstimado }}</span>
+                            <div class="flex gap-2">
+                              <input
+                                v-model="catEditando.numeroCatalogo"
+                                placeholder="Nº Catálogo"
+                                class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none"
+                              />
+                              <input
+                                v-model="catEditando.numeroArticulo"
+                                placeholder="Nº Artículo"
+                                class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none"
+                              />
                             </div>
-
-                            <!-- Pasos del procedimiento (colapsados, solo count) -->
-                            <div v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                              class="mt-1 text-xs text-emerald-600 font-medium">
-                              {{ item.procedimiento.length }} pasos · {{ item.herramientas?.length || 0 }} herramientas
-                              <span v-if="item.repuestos?.length > 0"> · {{ item.repuestos.length }} repuesto(s)</span>
+                            <div class="flex items-center gap-2 pt-1">
+                              <button
+                                @click="catGuardarEdicion"
+                                :disabled="catGuardando"
+                                class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+                              >
+                                <Loader2 v-if="catGuardando" class="w-3.5 h-3.5 animate-spin" />
+                                <Save v-else class="w-3.5 h-3.5" />
+                                Guardar
+                              </button>
+                              <button @click="catCancelarEdicion" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition">
+                                Cancelar
+                              </button>
                             </div>
                           </div>
 
-                          <!-- Acciones -->
-                          <div class="shrink-0 flex items-center gap-1 mt-0.5">
-                            <!-- Ver procedimiento -->
-                            <button
-                              v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                              @click="abrirViewer(item)"
-                              class="p-1 rounded-md text-indigo-500 hover:bg-indigo-50 transition-colors"
-                              title="Ver procedimiento"
-                            >
-                              <Eye class="w-4 h-4" />
-                            </button>
-                            <!-- Admin: editar o crear procedimiento -->
-                            <button
-                              v-if="userRole === 'admin'"
-                              @click="abrirEditor(item)"
-                              class="p-1 rounded-md transition-colors"
-                              :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
-                                ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-                                : 'text-amber-500 hover:bg-amber-50'"
-                              :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Editar procedimiento' : 'Crear procedimiento'"
-                            >
-                              <Pencil v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
-                              <Plus v-else class="w-4 h-4" />
-                            </button>
+                          <!-- ── Modo lectura ── -->
+                          <div v-else class="flex items-start gap-3">
+                            <!-- Indicador procedimiento -->
+                            <div class="shrink-0 mt-0.5">
+                              <CheckCircle2
+                                v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
+                                class="w-4 h-4 text-emerald-500"
+                                title="Tiene procedimiento"
+                              />
+                              <XCircle
+                                v-else
+                                class="w-4 h-4 text-gray-300"
+                                title="Sin procedimiento"
+                              />
+                            </div>
+
+                            <!-- Nombre -->
+                            <div class="flex-1 min-w-0">
+                              <p class="text-sm font-medium leading-snug" :class="item.visible === false ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.denominacion }}</p>
+                              <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                <span v-if="item.numeroCatalogo && item.numeroCatalogo !== '-'" class="text-xs text-gray-400">Cat: {{ item.numeroCatalogo }}</span>
+                                <span v-if="item.numeroArticulo && item.numeroArticulo !== '-'" class="text-xs text-gray-400">Art: {{ item.numeroArticulo }}</span>
+                                <span v-if="item.tipoTarea" class="text-xs font-medium"
+                                  :class="{
+                                    'text-blue-500': item.tipoTarea === 'Preventivo',
+                                    'text-orange-500': item.tipoTarea === 'Mecánico',
+                                    'text-violet-500': item.tipoTarea === 'Eléctrico',
+                                  }">
+                                  {{ item.tipoTarea }}
+                                </span>
+                                <span v-if="item.tiempoEstimado" class="text-xs text-gray-400">⏱ {{ item.tiempoEstimado }}</span>
+                              </div>
+
+                              <!-- Pasos del procedimiento (colapsados, solo count) -->
+                              <div v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
+                                class="mt-1 text-xs text-emerald-600 font-medium">
+                                {{ item.procedimiento.length }} pasos · {{ item.herramientas?.length || 0 }} herramientas
+                                <span v-if="item.repuestos?.length > 0"> · {{ item.repuestos.length }} repuesto(s)</span>
+                              </div>
+                            </div>
+
+                            <!-- Acciones -->
+                            <div class="shrink-0 flex items-center gap-1 mt-0.5">
+                              <!-- Admin: toggle visible -->
+                              <button
+                                v-if="userRole === 'admin'"
+                                @click="catToggleVisible(item)"
+                                :title="item.visible !== false ? 'Visible — click para ocultar' : 'Oculto — click para mostrar'"
+                                class="p-1 rounded-md transition-colors hover:bg-gray-100"
+                              >
+                                <Eye v-if="item.visible !== false" class="w-4 h-4 text-green-500" />
+                                <EyeOff v-else class="w-4 h-4 text-gray-300" />
+                              </button>
+                              <!-- Admin: editar campos del ítem -->
+                              <button
+                                v-if="userRole === 'admin'"
+                                @click="catIniciarEdicion(item)"
+                                class="p-1 rounded-md text-indigo-400 hover:bg-indigo-50 transition-colors"
+                                title="Editar campos"
+                              >
+                                <Pencil class="w-4 h-4" />
+                              </button>
+                              <!-- Ver procedimiento -->
+                              <button
+                                v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
+                                @click="abrirViewer(item)"
+                                class="p-1 rounded-md text-indigo-500 hover:bg-indigo-50 transition-colors"
+                                title="Ver procedimiento"
+                              >
+                                <BookOpen class="w-4 h-4" />
+                              </button>
+                              <!-- Admin: editar o crear procedimiento -->
+                              <button
+                                v-if="userRole === 'admin'"
+                                @click="abrirEditor(item)"
+                                class="p-1 rounded-md transition-colors"
+                                :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
+                                  ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+                                  : 'text-amber-500 hover:bg-amber-50'"
+                                :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Editar procedimiento' : 'Crear procedimiento'"
+                              >
+                                <ClipboardList v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
+                                <Plus v-else class="w-4 h-4" />
+                              </button>
+                              <!-- Admin: eliminar ítem -->
+                              <button
+                                v-if="userRole === 'admin'"
+                                @click="catEliminar(item)"
+                                class="p-1 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Eliminar ítem"
+                              >
+                                <Trash2 class="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         </li>
                       </ul>
+
+                      <!-- Admin: agregar nuevo ítem en este grupo -->
+                      <div v-if="userRole === 'admin'" class="px-4 py-2 border-t border-gray-50 bg-white">
+                        <!-- Formulario inline si el grupo activo coincide -->
+                        <template v-if="catNuevoForm && catNuevoForm.seccion === seccion && catNuevoForm.grupo === grupo">
+                          <div class="space-y-1.5 py-1">
+                            <input
+                              v-model="catNuevoForm.denominacion"
+                              placeholder="Denominación del nuevo ítem *"
+                              class="w-full border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                              autofocus
+                            />
+                            <div class="flex gap-2">
+                              <input
+                                v-model="catNuevoForm.numeroCatalogo"
+                                placeholder="Nº Catálogo (opcional)"
+                                class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none"
+                              />
+                              <input
+                                v-model="catNuevoForm.numeroArticulo"
+                                placeholder="Nº Artículo (opcional)"
+                                class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none"
+                              />
+                            </div>
+                            <div class="flex items-center gap-2 pt-1">
+                              <button
+                                @click="catCrearItem"
+                                :disabled="!catNuevoForm.denominacion?.trim() || catGuardando"
+                                class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition"
+                              >
+                                <Loader2 v-if="catGuardando" class="w-3.5 h-3.5 animate-spin" />
+                                <Save v-else class="w-3.5 h-3.5" />
+                                Crear ítem
+                              </button>
+                              <button @click="catCancelarNuevo" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition">
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        </template>
+                        <button
+                          v-else
+                          @click="catAbrirNuevo(seccion, grupo)"
+                          class="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors py-0.5"
+                        >
+                          <Plus class="w-3.5 h-3.5" /> Agregar ítem
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

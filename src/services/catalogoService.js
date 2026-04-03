@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, writeBatch, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, writeBatch, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const COLLECTION_NAME = 'catalogo_puestos_control';
@@ -118,6 +118,41 @@ export const catalogoService = {
         if (String(a.grupo) !== String(b.grupo)) return String(a.grupo || '').localeCompare(String(b.grupo || ''));
         return (a.denominacion || '').localeCompare(b.denominacion || '');
       });
+  },
+
+  /**
+   * Actualiza campos editables de un ítem del catálogo (denominacion, numeroCatalogo, etc.)
+   */
+  async actualizarItemCatalogo(docId, campos) {
+    await updateDoc(doc(db, COLLECTION_NAME, docId), { ...campos, updatedAt: new Date() });
+  },
+
+  /**
+   * Cambia el flag visible de un ítem. visible:false lo oculta en CargaNovedad.
+   */
+  async toggleVisibleItem(docId, visible) {
+    await updateDoc(doc(db, COLLECTION_NAME, docId), { visible, updatedAt: new Date() });
+  },
+
+  /**
+   * Crea un nuevo ítem en el catálogo.
+   */
+  async crearItemCatalogo(datos) {
+    const ref = await addDoc(collection(db, COLLECTION_NAME), {
+      ...datos,
+      visible: true,
+      procedimiento: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return ref.id;
+  },
+
+  /**
+   * Elimina un ítem del catálogo (solo usar en casos excepcionales).
+   */
+  async eliminarItemCatalogo(docId) {
+    await deleteDoc(doc(db, COLLECTION_NAME, docId));
   },
 
   /**

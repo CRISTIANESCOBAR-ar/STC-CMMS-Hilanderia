@@ -658,7 +658,7 @@ const guardarEdicion = async () => {
                 <!-- Lista editable -->
                 <ul class="border border-gray-200 rounded-lg divide-y divide-gray-50 overflow-hidden">
                   <li v-for="(m, idx) in motivoEditLista" :key="idx"
-                    class="flex items-center gap-2 px-3 py-2.5"
+                    class="flex items-center gap-2 px-3 py-2"
                     :class="m.visible ? 'bg-white' : 'bg-gray-50'">
                     <!-- Ícono visible/oculto -->
                     <button @click="toggleVisible(idx)" :title="m.visible ? 'Visible en app — click para ocultar' : 'Oculto en app — click para mostrar'"
@@ -666,10 +666,13 @@ const guardarEdicion = async () => {
                       <Eye v-if="m.visible" class="w-4 h-4 text-green-500" />
                       <EyeOff v-else class="w-4 h-4 text-gray-300" />
                     </button>
-                    <span class="flex-1 text-sm font-medium"
-                      :class="m.visible ? 'text-gray-800' : 'text-gray-400 line-through'">
-                      {{ m.nombre }}
-                    </span>
+                    <!-- Input editable inline -->
+                    <input
+                      v-model="motivoEditLista[idx].nombre"
+                      @input="motivoEditLista[idx].nombre = motivoEditLista[idx].nombre.toUpperCase()"
+                      class="flex-1 text-sm font-medium bg-transparent border-0 border-b border-transparent focus:border-indigo-400 focus:outline-none py-1 transition-colors"
+                      :class="m.visible ? 'text-gray-800' : 'text-gray-400 line-through'"
+                    />
                     <button @click="eliminarMotivo(idx)"
                       class="shrink-0 p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition">
                       <Trash2 class="w-3.5 h-3.5" />

@@ -781,7 +781,7 @@ const seleccionarAccionRapida = (accion) => {
     <Teleport to="body">
       <div
         v-if="showProcedimientoViewer"
-        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showProcedimientoViewer = false"
       >
         <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
@@ -806,7 +806,7 @@ const seleccionarAccionRapida = (accion) => {
               </div>
             </div>
           </div>
-          <div class="p-4 border-t border-gray-100 shrink-0">
+          <div class="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 shrink-0">
             <button @click="showProcedimientoViewer = false" type="button" class="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition">
               Cerrar
             </button>

@@ -816,7 +816,7 @@ const guardarEdicion = async () => {
     <Transition name="fade">
       <div
         v-if="showViewer && itemViewer"
-        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showViewer = false"
       >
         <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
@@ -879,7 +879,7 @@ const guardarEdicion = async () => {
           </div>
 
           <!-- Footer -->
-          <div class="p-4 border-t border-gray-100 flex gap-2 shrink-0">
+          <div class="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 flex gap-2 shrink-0">
             <button
               v-if="userRole === 'admin'"
               @click="abrirEditor(itemViewer); showViewer = false"
@@ -901,7 +901,7 @@ const guardarEdicion = async () => {
     <Transition name="fade">
       <div
         v-if="showEditor && editandoItem"
-        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showEditor = false"
       >
         <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -957,7 +957,7 @@ const guardarEdicion = async () => {
           </div>
 
           <!-- Footer editor -->
-          <div class="p-4 border-t border-gray-100 flex gap-2 shrink-0">
+          <div class="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 flex gap-2 shrink-0">
             <button
               @click="showEditor = false"
               class="flex-none px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"

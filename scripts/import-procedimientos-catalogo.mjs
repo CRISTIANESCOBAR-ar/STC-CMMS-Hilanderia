@@ -109,6 +109,7 @@ const makeDocId = (modelo, grupo, denominacion) => {
 // ── Mapa modelo → marca (extendible) ─────────────────────────────────────────
 const MARCA_POR_MODELO = {
   'C60':       'RIETER',
+  'CBA-4':     'RIETER',
   'TC7':       'TRUTZSCHLER',
   'TD03':      'TRUTZSCHLER',
   'BO-A':      'TRUTZSCHLER',

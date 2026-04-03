@@ -1,15 +1,16 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { maquinaService } from '../services/maquinaService';
 import { catalogoService } from '../services/catalogoService';
 import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
+import { getMotivosFirestore, updateCategoriaMotivos } from '../services/motivosService';
 import { userRole } from '../services/authService';
 import Swal from 'sweetalert2';
 import {
   ChevronRight, ChevronDown, BookOpen, Wrench, Zap,
   CheckCircle2, XCircle, ClipboardList, Loader2, Info,
   ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X,
-  ArrowLeft
+  ArrowLeft, ToggleLeft, ToggleRight, GripVertical, EyeOff
 } from 'lucide-vue-next';
 
 // ── Estado ────────────────────────────────────────────────────────────────────
@@ -151,9 +152,89 @@ const expandirTodo = () => {
 };
 const colapsarTodo = () => { seccionesExpandidas.value.clear(); };
 
-// ── Motivos ───────────────────────────────────────────────────────────────────
+// ── Motivos desde Firestore ───────────────────────────────────────────────────
+const motivosFirestore = ref(null);   // { 'Mecánico': [{nombre,visible}], 'Eléctrico': [...] }
+const cargandoMotivos  = ref(false);
+
+// Cargar motivos cada vez que cambia el tipo o se activa la tab
+watch([() => tipoSeleccionado.value, () => tabActiva.value], async ([tipo, tab]) => {
+  if (tab !== 'motivos' || !tipo) return;
+  cargandoMotivos.value = true;
+  try {
+    const data = await getMotivosFirestore(tipo);
+    // Si no hay doc en Firestore, construir desde hardcoded
+    if (data) {
+      motivosFirestore.value = {
+        'Mecánico':  data['Mecánico']  || [],
+        'Eléctrico': data['Eléctrico'] || [],
+      };
+    } else {
+      const fallback = MOTIVOS_POR_TIPO[tipo] || MOTIVOS_DEFAULT;
+      motivosFirestore.value = {
+        'Mecánico':  (fallback['Mecánico']  || []).map(n => ({ nombre: n, visible: true })),
+        'Eléctrico': (fallback['Eléctrico'] || []).map(n => ({ nombre: n, visible: true })),
+      };
+    }
+  } finally {
+    cargandoMotivos.value = false;
+  }
+}, { immediate: false });
+
+// Estado CRUD de motivos
+const motivoEditCat    = ref(null);   // 'Mecánico' | 'Eléctrico'
+const motivoEditLista  = ref([]);     // copia editable
+const motivoNuevo      = ref('');
+const guardandoMotivos = ref(false);
+
+const iniciarEditMotivos = (cat) => {
+  motivoEditCat.value = cat;
+  motivoEditLista.value = (motivosFirestore.value?.[cat] || []).map(m => ({ ...m }));
+  motivoNuevo.value = '';
+};
+
+const cancelarEditMotivos = () => {
+  motivoEditCat.value = null;
+  motivoEditLista.value = [];
+};
+
+const agregarMotivo = () => {
+  const nombre = motivoNuevo.value.trim().toUpperCase();
+  if (!nombre) return;
+  if (motivoEditLista.value.some(m => m.nombre === nombre)) return;
+  motivoEditLista.value.push({ nombre, visible: true });
+  motivoNuevo.value = '';
+};
+
+const eliminarMotivo = (idx) => {
+  motivoEditLista.value.splice(idx, 1);
+};
+
+const toggleVisible = (idx) => {
+  motivoEditLista.value[idx].visible = !motivoEditLista.value[idx].visible;
+};
+
+const guardarMotivos = async () => {
+  guardandoMotivos.value = true;
+  try {
+    await updateCategoriaMotivos(
+      tipoSeleccionado.value,
+      motivoEditCat.value,
+      motivoEditLista.value
+    );
+    motivosFirestore.value[motivoEditCat.value] = [...motivoEditLista.value];
+    motivoEditCat.value = null;
+    motivoEditLista.value = [];
+  } catch (e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: e.message, confirmButtonColor: '#2563eb' });
+  } finally {
+    guardandoMotivos.value = false;
+  }
+};
+
+// motivosDelTipo para compatibilidad (sinónimo readonly)
 const motivosDelTipo = computed(() => {
   if (!tipoSeleccionado.value) return null;
+  if (motivosFirestore.value) return motivosFirestore.value;
   return MOTIVOS_POR_TIPO[tipoSeleccionado.value] || MOTIVOS_DEFAULT || null;
 });
 
@@ -534,26 +615,99 @@ const guardarEdicion = async () => {
 
           <!-- ── TAB: MOTIVOS ── -->
           <div v-if="tabActiva === 'motivos'" class="p-4">
-            <div v-if="!motivosDelTipo" class="flex flex-col items-center py-16 text-gray-300 gap-2">
+            <!-- Cargando -->
+            <div v-if="cargandoMotivos" class="flex justify-center py-16">
+              <Loader2 class="w-6 h-6 animate-spin text-indigo-400" />
+            </div>
+
+            <!-- Sin motivos -->
+            <div v-else-if="!motivosDelTipo" class="flex flex-col items-center py-16 text-gray-300 gap-2">
               <Info class="w-8 h-8" />
               <p class="text-sm">Sin motivos configurados para {{ tipoSeleccionado }}</p>
             </div>
 
             <template v-else>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- ── MODO EDICIÓN ── -->
+              <div v-if="motivoEditCat" class="space-y-3">
+                <div class="flex items-center gap-2 mb-1">
+                  <button @click="cancelarEditMotivos" class="p-1 hover:bg-gray-100 rounded-lg transition">
+                    <ArrowLeft class="w-4 h-4 text-gray-500" />
+                  </button>
+                  <span class="font-bold text-sm text-gray-800">
+                    Editando motivos — <span :class="motivoEditCat === 'Mecánico' ? 'text-orange-600' : 'text-violet-600'">{{ motivoEditCat }}</span>
+                  </span>
+                  <button @click="guardarMotivos" :disabled="guardandoMotivos"
+                    class="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+                    <Loader2 v-if="guardandoMotivos" class="w-3.5 h-3.5 animate-spin" />
+                    <Save v-else class="w-3.5 h-3.5" />
+                    Guardar
+                  </button>
+                </div>
+
+                <!-- Campo agregar nuevo motivo -->
+                <div class="flex gap-2">
+                  <input v-model="motivoNuevo" @keyup.enter="agregarMotivo"
+                    placeholder="Nombre del motivo (Enter para agregar)..."
+                    class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none uppercase" />
+                  <button @click="agregarMotivo" :disabled="!motivoNuevo.trim()"
+                    class="px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition">
+                    <Plus class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <!-- Lista editable -->
+                <ul class="border border-gray-200 rounded-lg divide-y divide-gray-50 overflow-hidden">
+                  <li v-for="(m, idx) in motivoEditLista" :key="idx"
+                    class="flex items-center gap-2 px-3 py-2.5"
+                    :class="m.visible ? 'bg-white' : 'bg-gray-50'">
+                    <!-- Ícono visible/oculto -->
+                    <button @click="toggleVisible(idx)" :title="m.visible ? 'Visible en app — click para ocultar' : 'Oculto en app — click para mostrar'"
+                      class="shrink-0 transition-colors">
+                      <Eye v-if="m.visible" class="w-4 h-4 text-green-500" />
+                      <EyeOff v-else class="w-4 h-4 text-gray-300" />
+                    </button>
+                    <span class="flex-1 text-sm font-medium"
+                      :class="m.visible ? 'text-gray-800' : 'text-gray-400 line-through'">
+                      {{ m.nombre }}
+                    </span>
+                    <button @click="eliminarMotivo(idx)"
+                      class="shrink-0 p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition">
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                  <li v-if="motivoEditLista.length === 0" class="px-4 py-6 text-center text-gray-400 text-sm">
+                    Sin motivos. Agregá el primero arriba.
+                  </li>
+                </ul>
+
+                <p class="text-[10px] text-gray-400 px-1">
+                  <Eye class="w-3 h-3 inline mr-0.5 text-green-500" /> visible en "Reportar Falla" ·
+                  <EyeOff class="w-3 h-3 inline mr-0.5 text-gray-300" /> oculto (no aparece en la app)
+                </p>
+              </div>
+
+              <!-- ── MODO LECTURA ── -->
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Mecánico -->
                 <div v-if="motivosDelTipo['Mecánico']" class="border border-gray-200 rounded-lg overflow-hidden">
                   <div class="flex items-center gap-2 px-4 py-3 bg-orange-50 border-b border-orange-100">
                     <Wrench class="w-4 h-4 text-orange-500" />
                     <span class="font-bold text-orange-700 text-sm">Mecánico</span>
-                    <span class="ml-auto text-xs text-orange-400">{{ motivosDelTipo['Mecánico'].length }} motivos</span>
+                    <span class="text-xs text-orange-400">{{ motivosDelTipo['Mecánico'].filter(m => m.visible !== false).length }} visibles</span>
+                    <button v-if="userRole === 'admin'" @click="iniciarEditMotivos('Mecánico')"
+                      class="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 transition">
+                      <Pencil class="w-3 h-3" /> Editar
+                    </button>
                   </div>
                   <ul class="divide-y divide-gray-50">
-                    <li
-                      v-for="m in motivosDelTipo['Mecánico']"
-                      :key="m"
-                      class="px-4 py-2.5 text-sm text-gray-700"
-                    >{{ m }}</li>
+                    <li v-for="m in motivosDelTipo['Mecánico']" :key="m.nombre || m"
+                      class="flex items-center gap-2 px-4 py-2.5"
+                      :class="(m.visible === false) ? 'opacity-40' : ''">
+                      <EyeOff v-if="m.visible === false" class="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      <span class="text-sm text-gray-700" :class="m.visible === false ? 'line-through' : ''">
+                        {{ m.nombre || m }}
+                      </span>
+                    </li>
                   </ul>
                 </div>
 
@@ -562,14 +716,21 @@ const guardarEdicion = async () => {
                   <div class="flex items-center gap-2 px-4 py-3 bg-violet-50 border-b border-violet-100">
                     <Zap class="w-4 h-4 text-violet-500" />
                     <span class="font-bold text-violet-700 text-sm">Eléctrico</span>
-                    <span class="ml-auto text-xs text-violet-400">{{ motivosDelTipo['Eléctrico'].length }} motivos</span>
+                    <span class="text-xs text-violet-400">{{ motivosDelTipo['Eléctrico'].filter(m => m.visible !== false).length }} visibles</span>
+                    <button v-if="userRole === 'admin'" @click="iniciarEditMotivos('Eléctrico')"
+                      class="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-white border border-violet-200 text-violet-600 hover:bg-violet-50 transition">
+                      <Pencil class="w-3 h-3" /> Editar
+                    </button>
                   </div>
                   <ul class="divide-y divide-gray-50">
-                    <li
-                      v-for="m in motivosDelTipo['Eléctrico']"
-                      :key="m"
-                      class="px-4 py-2.5 text-sm text-gray-700"
-                    >{{ m }}</li>
+                    <li v-for="m in motivosDelTipo['Eléctrico']" :key="m.nombre || m"
+                      class="flex items-center gap-2 px-4 py-2.5"
+                      :class="(m.visible === false) ? 'opacity-40' : ''">
+                      <EyeOff v-if="m.visible === false" class="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      <span class="text-sm text-gray-700" :class="m.visible === false ? 'line-through' : ''">
+                        {{ m.nombre || m }}
+                      </span>
+                    </li>
                   </ul>
                 </div>
               </div>

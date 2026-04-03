@@ -14,6 +14,7 @@ import Swal from 'sweetalert2';
 import { compressImage, formatSize } from '../utils/imageCompressor';
 import CameraCapture from './CameraCapture.vue';
 import { getMotivos } from '../constants/motivos';
+import { getMotivosList } from '../services/motivosService';
 
 const maquinas = ref([]);
 const router = useRouter();
@@ -30,6 +31,7 @@ const denominacionSeleccionada = ref(null); // Objeto completo del punto selecci
 
 const isCritico = ref(false);
 const motivoLlamado = ref('VERIFICACIÓN');
+const motivosCache = ref({}); // cache tipo+categoria → string[]
 
 // Visor de procedimiento
 const showProcedimientoViewer = ref(false);
@@ -161,10 +163,13 @@ const maquinasFiltradas = computed(() => {
 });
 
 // Reset machine selection and catalog when type or machine changes
-watch(tipoSeleccionado, () => {
+watch(tipoSeleccionado, (tipo) => {
   gpSeleccionado.value = '';
   maquinaSeleccionadaId.value = '';
   resetCatalogo();
+  // Limpiar cache para que recargue desde Firestore
+  delete motivosCache.value[`${tipo}__Mecánico`];
+  delete motivosCache.value[`${tipo}__Eléctrico`];
   motivoLlamado.value = motivosDisponibles.value[0];
 });
 
@@ -188,8 +193,23 @@ const detallesMaquina = computed(() => {
   return maquinasPorSector.value.find(m => m.id === maquinaSeleccionadaId.value);
 });
 
+// Carga motivos desde Firestore (con cache) y fallback a motivos.js
+const cargarMotivos = async (tipo, categoria) => {
+  const key = `${tipo}__${categoria}`;
+  if (motivosCache.value[key]) return;
+  const lista = await getMotivosList(tipo, categoria);
+  motivosCache.value[key] = lista || getMotivos(tipo, categoria);
+};
+
 const motivosDisponibles = computed(() => {
-  return getMotivos(tipoSeleccionado.value, tipoProblema.value);
+  const tipo = tipoSeleccionado.value;
+  const cat  = tipoProblema.value;
+  const key  = `${tipo}__${cat}`;
+  // Disparar carga async si no está en cache
+  if (tipo && cat && !motivosCache.value[key]) {
+    cargarMotivos(tipo, cat);
+  }
+  return motivosCache.value[key] || getMotivos(tipo, cat);
 });
 
 const gmSeleccionado = computed(() => {

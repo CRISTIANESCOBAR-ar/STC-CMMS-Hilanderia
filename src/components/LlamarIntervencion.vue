@@ -193,11 +193,33 @@ watch(tiposDisponibles, (tipos) => {
   if (!tipos.includes(tipoSeleccionado.value)) tipoSeleccionado.value = tipos[0] || '';
 }, { immediate: true });
 
+// Lista de síntomas según el tipo de máquina seleccionado:
+// - TELAR → usa sintomas_tejeduria de Firestore (con derivaA, destacado, etc.)
+// - Resto → genera lista sintética desde MOTIVOS_POR_TIPO
+const GENERICOS = new Set(['AJUSTE','LIMPIEZA','LUBRICACIÓN','CAMBIO','VERIFICACIÓN','VERIFICACIÓN ELÉCTRICA','AJUSTE PARÁMETROS']);
+const sintomasParaTipo = computed(() => {
+  if (esTipoTelar.value) return todosSintomas.value;
+  const tipo = tipoSeleccionado.value;
+  if (!tipo) return todosSintomas.value;
+  const mapa = MOTIVOS_POR_TIPO[tipo] || MOTIVOS_DEFAULT;
+  const result = [];
+  let counter = 0;
+  for (const [derivaLabel, lista] of Object.entries(mapa)) {
+    const derivaA = derivaLabel === 'Mecánico' ? 'MECANICO' : 'ELECTRICO';
+    lista
+      .filter(n => !n.startsWith('//')) // ignorar comentarios si los hubiera
+      .forEach(nombre => {
+        result.push({ id: `${tipo}_${counter++}`, nombre, destacado: !GENERICOS.has(nombre), derivaA });
+      });
+  }
+  return result;
+});
+
 // Binding para el <select> de síntomas
 const sintomaIdSel = computed({
   get: () => sintomaSeleccionado.value?.id ?? '',
   set: (id) => {
-    sintomaSeleccionado.value = todosSintomas.value.find(s => s.id === id) ?? null;
+    sintomaSeleccionado.value = sintomasParaTipo.value.find(s => s.id === id) ?? null;
   },
 });
 
@@ -608,7 +630,7 @@ const onSubmit = async () => {
               :class="sintomaSeleccionado ? 'text-orange-700' : 'text-gray-400'"
             >
               <option value="" disabled>Seleccionar síntoma…</option>
-              <option v-for="s in todosSintomas" :key="s.id" :value="s.id">
+              <option v-for="s in sintomasParaTipo" :key="s.id" :value="s.id">
                 {{ s.destacado ? '★ ' : '' }}{{ s.nombre }}
               </option>
             </select>

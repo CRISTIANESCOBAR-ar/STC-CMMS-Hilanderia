@@ -35,12 +35,17 @@ export const MOTIVOS_POR_TIPO = {
   // ── CARDA ───────────────────────────────────────────────────────────────────
   CARDA: {
     'Mecánico': [
-      'ROTURA DE GUARNICIÓN',
-      'DESGASTE CHAPEADO',
-      'ATASCO DE FIBRA',
-      'ROTURA DE CINTA',
-      'DESAJUSTE PEINES',
-      'ROTURA DE CORREA',
+      // ★ Más frecuentes
+      'ROTURA GUARNICIÓN TAMBOR',
+      'DESGASTE CHAPONES',
+      'ROTURA CINTA',
+      'ATASCO LICKER-IN',
+      'ROTURA CORREA DENTADA',
+      // Otros mecánicos
+      'DESGASTE GUARNICIÓN DOFFER',
+      'FALLA APILADORA CBA',
+      'DESAJUSTE GALGA CHAPÓN/TAMBOR',
+      'DESGASTE RODILLOS CALANDRA',
       'AJUSTE',
       'LIMPIEZA',
       'LUBRICACIÓN',
@@ -48,9 +53,13 @@ export const MOTIVOS_POR_TIPO = {
       'VERIFICACIÓN',
     ],
     'Eléctrico': [
+      // ★ Más frecuentes
+      'ERROR VARIADOR TAMBOR',
       'DISPARO TÉRMICO MOTOR',
-      'ERROR DE VARIADOR',
-      'FALLA SENSOR PESO CINTA',
+      'FALLA AUTOLEVELER',
+      // Otros eléctricos
+      'FALLA SENSOR CINTA (ITOR)',
+      'ALARMA VELOCIDAD TAMBOR',
       'VERIFICACIÓN ELÉCTRICA',
       'AJUSTE PARÁMETROS',
     ],

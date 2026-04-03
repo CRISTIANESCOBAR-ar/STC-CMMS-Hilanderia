@@ -1126,33 +1126,115 @@ const catEliminar = async (item) => {
                   <!-- Items -->
                   <ul class="divide-y divide-gray-50 bg-white">
                     <li v-for="item in items" :key="item.id"
-                      class="flex items-center gap-3 px-4 py-3 active:bg-gray-50 transition-colors">
-                      <CheckCircle2 v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4 text-emerald-500 shrink-0" />
-                      <XCircle v-else class="w-4 h-4 text-gray-300 shrink-0" />
-                      <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-gray-800 leading-snug">{{ item.denominacion }}</p>
-                        <div class="flex flex-wrap gap-x-2 mt-0.5">
-                          <span v-if="item.tipoTarea" class="text-xs font-bold"
-                            :class="{ 'text-blue-500': item.tipoTarea==='Preventivo', 'text-orange-500': item.tipoTarea==='Mecánico', 'text-violet-500': item.tipoTarea==='Eléctrico' }">
-                            {{ item.tipoTarea }}
-                          </span>
-                          <span v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="text-xs text-emerald-600 font-medium">{{ item.procedimiento.length }} pasos</span>
+                      class="px-4 py-3 transition-colors"
+                      :class="item.visible === false ? 'opacity-50' : 'active:bg-gray-50'">
+
+                      <!-- ── Modo edición inline mobile ── -->
+                      <div v-if="catEditando && catEditando.id === item.id" class="space-y-1.5">
+                        <input v-model="catEditando.denominacion" placeholder="Denominación"
+                          class="w-full border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <div class="flex gap-2">
+                          <input v-model="catEditando.numeroCatalogo" placeholder="Nº Catálogo"
+                            class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                          <input v-model="catEditando.numeroArticulo" placeholder="Nº Artículo"
+                            class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                        </div>
+                        <div class="flex items-center gap-2 pt-1">
+                          <button @click="catGuardarEdicion" :disabled="catGuardando"
+                            class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+                            <Loader2 v-if="catGuardando" class="w-3.5 h-3.5 animate-spin" />
+                            <Save v-else class="w-3.5 h-3.5" />
+                            Guardar
+                          </button>
+                          <button @click="catCancelarEdicion" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition">
+                            Cancelar
+                          </button>
                         </div>
                       </div>
-                      <div class="flex gap-1 shrink-0">
-                        <button v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                          @click="abrirViewer(item)" class="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-50">
-                          <Eye class="w-4 h-4" />
-                        </button>
-                        <button v-if="userRole === 'admin'" @click="abrirEditor(item)"
-                          class="p-1.5 rounded-lg transition-colors"
-                          :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'text-gray-400 hover:bg-gray-100' : 'text-amber-500 hover:bg-amber-50'">
-                          <Pencil v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
-                          <Plus v-else class="w-4 h-4" />
-                        </button>
+
+                      <!-- ── Modo lectura mobile ── -->
+                      <div v-else class="flex items-center gap-3">
+                        <CheckCircle2 v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4 text-emerald-500 shrink-0" />
+                        <XCircle v-else class="w-4 h-4 text-gray-300 shrink-0" />
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-start gap-1.5">
+                            <button v-if="userRole === 'admin'" @click="catToggleVisible(item)"
+                              class="shrink-0 mt-0.5 p-0.5 rounded transition-colors">
+                              <Eye v-if="item.visible !== false" class="w-3.5 h-3.5 text-green-500" />
+                              <EyeOff v-else class="w-3.5 h-3.5 text-gray-300" />
+                            </button>
+                            <p class="text-sm font-medium leading-snug"
+                              :class="item.visible === false ? 'text-gray-400 line-through' : 'text-gray-800'">{{ item.denominacion }}</p>
+                          </div>
+                          <div class="flex flex-wrap gap-x-2 mt-0.5" :class="userRole === 'admin' ? 'pl-5' : ''">
+                            <span v-if="item.numeroCatalogo && item.numeroCatalogo !== '-'" class="text-xs text-gray-400">Cat: {{ item.numeroCatalogo }}</span>
+                            <span v-if="item.tipoTarea" class="text-xs font-bold"
+                              :class="{ 'text-blue-500': item.tipoTarea==='Preventivo', 'text-orange-500': item.tipoTarea==='Mecánico', 'text-violet-500': item.tipoTarea==='Eléctrico' }">
+                              {{ item.tipoTarea }}
+                            </span>
+                            <span v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="text-xs text-emerald-600 font-medium">{{ item.procedimiento.length }} pasos</span>
+                          </div>
+                        </div>
+                        <div class="flex gap-1 shrink-0">
+                          <!-- Editar campos (admin) -->
+                          <button v-if="userRole === 'admin'" @click="catIniciarEdicion(item)"
+                            class="p-1.5 rounded-lg text-indigo-400 hover:bg-indigo-50 transition-colors">
+                            <Pencil class="w-4 h-4" />
+                          </button>
+                          <!-- Ver procedimiento — siempre visible -->
+                          <button
+                            @click="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? abrirViewer(item) : null"
+                            class="p-1.5 rounded-lg transition-colors"
+                            :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'text-indigo-500 hover:bg-indigo-50' : 'text-gray-200 cursor-default'">
+                            <BookOpen class="w-4 h-4" />
+                          </button>
+                          <!-- Editar/crear procedimiento (admin) -->
+                          <button v-if="userRole === 'admin'" @click="abrirEditor(item)"
+                            class="p-1.5 rounded-lg transition-colors"
+                            :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'text-gray-400 hover:bg-gray-100' : 'text-amber-500 hover:bg-amber-50'">
+                            <ClipboardList v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0" class="w-4 h-4" />
+                            <Plus v-else class="w-4 h-4" />
+                          </button>
+                          <!-- Eliminar (admin) -->
+                          <button v-if="userRole === 'admin'" @click="catEliminar(item)"
+                            class="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                            <Trash2 class="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </li>
                   </ul>
+
+                  <!-- Admin: agregar nuevo ítem en este grupo (mobile) -->
+                  <div v-if="userRole === 'admin'" class="px-4 py-2 border-t border-gray-50 bg-white">
+                    <template v-if="catNuevoForm && catNuevoForm.seccion === seccion && catNuevoForm.grupo === grupo">
+                      <div class="space-y-1.5 py-1">
+                        <input v-model="catNuevoForm.denominacion" placeholder="Denominación del nuevo ítem *"
+                          class="w-full border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <div class="flex gap-2">
+                          <input v-model="catNuevoForm.numeroCatalogo" placeholder="Nº Catálogo (opc.)"
+                            class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                          <input v-model="catNuevoForm.numeroArticulo" placeholder="Nº Artículo (opc.)"
+                            class="w-1/2 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-indigo-400 outline-none" />
+                        </div>
+                        <div class="flex items-center gap-2 pt-1">
+                          <button @click="catCrearItem" :disabled="!catNuevoForm.denominacion?.trim() || catGuardando"
+                            class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition">
+                            <Loader2 v-if="catGuardando" class="w-3.5 h-3.5 animate-spin" />
+                            <Save v-else class="w-3.5 h-3.5" />
+                            Crear ítem
+                          </button>
+                          <button @click="catCancelarNuevo" class="px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition">
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </template>
+                    <button v-else @click="catAbrirNuevo(seccion, grupo)"
+                      class="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors py-0.5">
+                      <Plus class="w-3.5 h-3.5" /> Agregar ítem
+                    </button>
+                  </div>
                 </div>
               </div>
             </template>
@@ -1160,26 +1242,100 @@ const catEliminar = async (item) => {
 
           <!-- Motivos mobile -->
           <div v-else-if="tabActiva === 'motivos'" class="p-4 space-y-4">
-            <div v-if="!motivosDelTipo" class="flex flex-col items-center py-12 text-gray-300 gap-2">
+            <div v-if="cargandoMotivos" class="flex justify-center py-12">
+              <Loader2 class="w-6 h-6 animate-spin text-indigo-400" />
+            </div>
+            <div v-else-if="!motivosDelTipo" class="flex flex-col items-center py-12 text-gray-300 gap-2">
               <Info class="w-8 h-8" /><p class="text-sm">Sin motivos para {{ tipoSeleccionado }}</p>
             </div>
             <template v-else>
-              <div v-if="motivosDelTipo['Mecánico']" class="border border-gray-200 rounded-xl overflow-hidden">
-                <div class="flex items-center gap-2 px-4 py-3 bg-orange-50 border-b border-orange-100">
-                  <Wrench class="w-4 h-4 text-orange-500" /><span class="font-bold text-orange-700 text-sm">Mecánico</span>
+
+              <!-- ── MODO EDICIÓN mobile ── -->
+              <div v-if="motivoEditCat" class="space-y-3">
+                <div class="flex items-center gap-2 mb-1">
+                  <button @click="cancelarEditMotivos" class="p-1 hover:bg-gray-100 rounded-lg transition">
+                    <ArrowLeft class="w-4 h-4 text-gray-500" />
+                  </button>
+                  <span class="font-bold text-sm text-gray-800">
+                    Editando — <span :class="motivoEditCat === 'Mecánico' ? 'text-orange-600' : 'text-violet-600'">{{ motivoEditCat }}</span>
+                  </span>
+                  <button @click="guardarMotivos" :disabled="guardandoMotivos"
+                    class="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+                    <Loader2 v-if="guardandoMotivos" class="w-3.5 h-3.5 animate-spin" />
+                    <Save v-else class="w-3.5 h-3.5" />
+                    Guardar
+                  </button>
                 </div>
-                <ul class="divide-y divide-gray-50">
-                  <li v-for="m in motivosDelTipo['Mecánico']" :key="m" class="px-4 py-3 text-sm text-gray-700">{{ m }}</li>
+                <div class="flex gap-2">
+                  <input v-model="motivoNuevo" @keyup.enter="agregarMotivo"
+                    placeholder="Nuevo motivo (Enter para agregar)..."
+                    class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none uppercase" />
+                  <button @click="agregarMotivo" :disabled="!motivoNuevo.trim()"
+                    class="px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-100 disabled:opacity-40 transition">
+                    <Plus class="w-4 h-4" />
+                  </button>
+                </div>
+                <ul class="border border-gray-200 rounded-lg divide-y divide-gray-50 overflow-hidden">
+                  <li v-for="(m, idx) in motivoEditLista" :key="idx"
+                    class="flex items-center gap-2 px-3 py-2" :class="m.visible ? 'bg-white' : 'bg-gray-50'">
+                    <button @click="toggleVisible(idx)" class="shrink-0 transition-colors">
+                      <Eye v-if="m.visible" class="w-4 h-4 text-green-500" />
+                      <EyeOff v-else class="w-4 h-4 text-gray-300" />
+                    </button>
+                    <input v-model="motivoEditLista[idx].nombre"
+                      @input="motivoEditLista[idx].nombre = motivoEditLista[idx].nombre.toUpperCase()"
+                      class="flex-1 text-sm font-medium bg-transparent border-0 border-b border-transparent focus:border-indigo-400 focus:outline-none py-1 transition-colors"
+                      :class="m.visible ? 'text-gray-800' : 'text-gray-400 line-through'" />
+                    <button @click="eliminarMotivo(idx)"
+                      class="shrink-0 p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition">
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                  <li v-if="motivoEditLista.length === 0" class="px-4 py-6 text-center text-gray-400 text-sm">
+                    Sin motivos. Agregá el primero arriba.
+                  </li>
                 </ul>
               </div>
-              <div v-if="motivosDelTipo['Eléctrico']" class="border border-gray-200 rounded-xl overflow-hidden">
-                <div class="flex items-center gap-2 px-4 py-3 bg-violet-50 border-b border-violet-100">
-                  <Zap class="w-4 h-4 text-violet-500" /><span class="font-bold text-violet-700 text-sm">Eléctrico</span>
+
+              <!-- ── MODO LECTURA mobile ── -->
+              <template v-else>
+                <div v-if="motivosDelTipo['Mecánico']" class="border border-gray-200 rounded-xl overflow-hidden">
+                  <div class="flex items-center gap-2 px-4 py-3 bg-orange-50 border-b border-orange-100">
+                    <Wrench class="w-4 h-4 text-orange-500" />
+                    <span class="font-bold text-orange-700 text-sm">Mecánico</span>
+                    <span class="text-xs text-orange-400">{{ motivosDelTipo['Mecánico'].filter(m => m.visible !== false).length }} visibles</span>
+                    <button v-if="userRole === 'admin'" @click="iniciarEditMotivos('Mecánico')"
+                      class="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 transition">
+                      <Pencil class="w-3 h-3" /> Editar
+                    </button>
+                  </div>
+                  <ul class="divide-y divide-gray-50">
+                    <li v-for="m in motivosDelTipo['Mecánico']" :key="m.nombre || m"
+                      class="flex items-center gap-2 px-4 py-2.5" :class="m.visible === false ? 'opacity-40' : ''">
+                      <EyeOff v-if="m.visible === false" class="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      <span class="text-sm text-gray-700" :class="m.visible === false ? 'line-through' : ''">{{ m.nombre || m }}</span>
+                    </li>
+                  </ul>
                 </div>
-                <ul class="divide-y divide-gray-50">
-                  <li v-for="m in motivosDelTipo['Eléctrico']" :key="m" class="px-4 py-3 text-sm text-gray-700">{{ m }}</li>
-                </ul>
-              </div>
+                <div v-if="motivosDelTipo['Eléctrico']" class="border border-gray-200 rounded-xl overflow-hidden">
+                  <div class="flex items-center gap-2 px-4 py-3 bg-violet-50 border-b border-violet-100">
+                    <Zap class="w-4 h-4 text-violet-500" />
+                    <span class="font-bold text-violet-700 text-sm">Eléctrico</span>
+                    <span class="text-xs text-violet-400">{{ motivosDelTipo['Eléctrico'].filter(m => m.visible !== false).length }} visibles</span>
+                    <button v-if="userRole === 'admin'" @click="iniciarEditMotivos('Eléctrico')"
+                      class="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-white border border-violet-200 text-violet-600 hover:bg-violet-50 transition">
+                      <Pencil class="w-3 h-3" /> Editar
+                    </button>
+                  </div>
+                  <ul class="divide-y divide-gray-50">
+                    <li v-for="m in motivosDelTipo['Eléctrico']" :key="m.nombre || m"
+                      class="flex items-center gap-2 px-4 py-2.5" :class="m.visible === false ? 'opacity-40' : ''">
+                      <EyeOff v-if="m.visible === false" class="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      <span class="text-sm text-gray-700" :class="m.visible === false ? 'line-through' : ''">{{ m.nombre || m }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </template>
             </template>
           </div>
 

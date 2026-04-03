@@ -684,8 +684,20 @@ const catEliminar = async (item) => {
 
                             <!-- Nombre -->
                             <div class="flex-1 min-w-0">
-                              <p class="text-sm font-medium leading-snug" :class="item.visible === false ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.denominacion }}</p>
-                              <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                              <!-- Toggle visible al comienzo del texto (solo admin) -->
+                              <div class="flex items-start gap-1.5">
+                                <button
+                                  v-if="userRole === 'admin'"
+                                  @click="catToggleVisible(item)"
+                                  :title="item.visible !== false ? 'Visible — click para ocultar' : 'Oculto — click para mostrar'"
+                                  class="shrink-0 mt-0.5 p-0.5 rounded transition-colors hover:bg-gray-100"
+                                >
+                                  <Eye v-if="item.visible !== false" class="w-3.5 h-3.5 text-green-500" />
+                                  <EyeOff v-else class="w-3.5 h-3.5 text-gray-300" />
+                                </button>
+                                <p class="text-sm font-medium leading-snug" :class="item.visible === false ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.denominacion }}</p>
+                              </div>
+                              <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5" :class="userRole === 'admin' ? 'pl-5' : ''">
                                 <span v-if="item.numeroCatalogo && item.numeroCatalogo !== '-'" class="text-xs text-gray-400">Cat: {{ item.numeroCatalogo }}</span>
                                 <span v-if="item.numeroArticulo && item.numeroArticulo !== '-'" class="text-xs text-gray-400">Art: {{ item.numeroArticulo }}</span>
                                 <span v-if="item.tipoTarea" class="text-xs font-medium"
@@ -701,7 +713,7 @@ const catEliminar = async (item) => {
 
                               <!-- Pasos del procedimiento (colapsados, solo count) -->
                               <div v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                                class="mt-1 text-xs text-emerald-600 font-medium">
+                                class="mt-1 text-xs text-emerald-600 font-medium" :class="userRole === 'admin' ? 'pl-5' : ''">
                                 {{ item.procedimiento.length }} pasos · {{ item.herramientas?.length || 0 }} herramientas
                                 <span v-if="item.repuestos?.length > 0"> · {{ item.repuestos.length }} repuesto(s)</span>
                               </div>
@@ -709,16 +721,6 @@ const catEliminar = async (item) => {
 
                             <!-- Acciones -->
                             <div class="shrink-0 flex items-center gap-1 mt-0.5">
-                              <!-- Admin: toggle visible -->
-                              <button
-                                v-if="userRole === 'admin'"
-                                @click="catToggleVisible(item)"
-                                :title="item.visible !== false ? 'Visible — click para ocultar' : 'Oculto — click para mostrar'"
-                                class="p-1 rounded-md transition-colors hover:bg-gray-100"
-                              >
-                                <Eye v-if="item.visible !== false" class="w-4 h-4 text-green-500" />
-                                <EyeOff v-else class="w-4 h-4 text-gray-300" />
-                              </button>
                               <!-- Admin: editar campos del ítem -->
                               <button
                                 v-if="userRole === 'admin'"
@@ -728,12 +730,14 @@ const catEliminar = async (item) => {
                               >
                                 <Pencil class="w-4 h-4" />
                               </button>
-                              <!-- Ver procedimiento -->
+                              <!-- Ver procedimiento — siempre visible, apagado si no hay contenido -->
                               <button
-                                v-if="Array.isArray(item.procedimiento) && item.procedimiento.length > 0"
-                                @click="abrirViewer(item)"
-                                class="p-1 rounded-md text-indigo-500 hover:bg-indigo-50 transition-colors"
-                                title="Ver procedimiento"
+                                @click="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? abrirViewer(item) : null"
+                                :title="Array.isArray(item.procedimiento) && item.procedimiento.length > 0 ? 'Ver procedimiento' : 'Sin procedimiento cargado'"
+                                class="p-1 rounded-md transition-colors"
+                                :class="Array.isArray(item.procedimiento) && item.procedimiento.length > 0
+                                  ? 'text-indigo-500 hover:bg-indigo-50 cursor-pointer'
+                                  : 'text-gray-200 cursor-default'"
                               >
                                 <BookOpen class="w-4 h-4" />
                               </button>

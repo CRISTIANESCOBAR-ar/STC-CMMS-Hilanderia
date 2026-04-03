@@ -784,7 +784,7 @@ const seleccionarAccionRapida = (accion) => {
         class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showProcedimientoViewer = false"
       >
-        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[85vh] flex flex-col">
           <div class="p-4 border-b border-gray-100 flex justify-between items-start shrink-0">
             <div class="flex-1 pr-2">
               <p class="text-[10px] font-extrabold text-indigo-500 tracking-widest mb-0.5">PROCEDIMIENTO</p>

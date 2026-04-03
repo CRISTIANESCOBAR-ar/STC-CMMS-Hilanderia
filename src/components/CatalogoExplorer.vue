@@ -819,7 +819,7 @@ const guardarEdicion = async () => {
         class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showViewer = false"
       >
-        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[85vh] flex flex-col">
           <!-- Header -->
           <div class="p-4 border-b border-gray-100 flex items-start justify-between shrink-0">
             <div class="flex-1 min-w-0 pr-3">
@@ -904,7 +904,7 @@ const guardarEdicion = async () => {
         class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
         @click.self="showEditor = false"
       >
-        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
           <!-- Header editor -->
           <div class="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
             <div>

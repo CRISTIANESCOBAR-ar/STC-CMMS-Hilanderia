@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userRole } from '../services/authService';
@@ -10,6 +10,9 @@ import {
   eliminarRutaPatrulla,
 } from '../services/patrullaService';
 import { Loader2, Plus, Trash2, Save, Lock, Star, ChevronUp, ChevronDown, X } from 'lucide-vue-next';
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 
 // ── Tipos ────────────────────────────────────────────────────────
 const TIPOS_POR_SECTOR = {
@@ -79,6 +82,28 @@ const maquinasEnRuta = computed(() => {
 const maquinasDisponibles = computed(() =>
   maquinasFiltradas.value.filter(m => !idsEnRuta.value.has(m.id))
 );
+
+// Grid fijo sala de telares: 8 filas × 10 columnas (solo TEJEDURIA)
+// celda(fila, col) = col*8 + fila + 1 → n=1..80 → máquina 35001..35080
+const gridTelar = computed(() => {
+  if (form.value.sector !== 'TEJEDURIA') return null;
+  const porNumero = new Map();
+  for (const m of maquinasFiltradas.value) {
+    const n = parseInt(String(m.maquina || '').slice(-3), 10);
+    if (!isNaN(n) && n >= 1 && n <= 80) porNumero.set(n, m);
+  }
+  const rows = [];
+  for (let fila = 0; fila < 8; fila++) {
+    const cols = [];
+    for (let col = 0; col < 10; col++) {
+      const n = col * 8 + fila + 1;
+      const maq = porNumero.get(n) || null;
+      cols.push({ n, maq, inRuta: maq ? idsEnRuta.value.has(maq.id) : false });
+    }
+    rows.push(cols);
+  }
+  return rows;
+});
 
 // ── Helpers ────────────────────────────────────────────────────────
 function toast(texto, tipo = 'success') {
@@ -231,6 +256,16 @@ function moverAbajo(index) {
   [sorted[index].orden, sorted[index + 1].orden] = [sorted[index + 1].orden, sorted[index].orden];
   form.value.maquinas = sorted;
 }
+
+// ── Tippy ─────────────────────────────────────────────────────────
+function initTippy() {
+  nextTick(() => {
+    tippy('[data-tippy-content]', { theme: 'light-border', duration: [100, 80], arrow: true });
+  });
+}
+
+watch(() => form.value.maquinas, () => initTippy(), { deep: true });
+watch(modoEditor, (v) => { if (v) initTippy(); });
 </script>
 
 <template>
@@ -391,51 +426,48 @@ function moverAbajo(index) {
 
             <!-- Máquinas en la ruta -->
             <div>
-              <div class="flex items-center justify-between mb-2">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Secuencia de máquinas ({{ maquinasEnRuta.length }})
-                </label>
-              </div>
-
-              <!-- Lista de máquinas asignadas -->
-              <div v-if="maquinasEnRuta.length === 0"
-                class="text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl px-4 py-3 text-center">
-                Sin máquinas. Agrega desde la lista de abajo.
-              </div>
-              <div v-else class="space-y-1 mb-3">
-                <div v-for="(m, idx) in maquinasEnRuta" :key="m.maquinaId"
-                  class="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
-                  <span class="text-xs font-mono text-gray-400 w-5 text-right shrink-0">{{ idx + 1 }}</span>
-                  <span class="flex-1 text-sm font-medium text-gray-700">
-                    {{ m.datos?.maquina || m.maquinaId }}
-                    <span v-if="m.datos?.grp_tear" class="text-xs text-gray-400 ml-1">(GP{{ m.datos.grp_tear }})</span>
+              <!-- Mapa sala de telares (TEJEDURIA) — SIEMPRE ARRIBA -->
+              <div v-if="form.sector === 'TEJEDURIA' && gridTelar">
+                <div class="text-xs text-gray-400 mb-2">Sala de telares — clic para agregar:</div>
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="inline-flex items-center gap-1 text-[9px] text-blue-600">
+                    <span class="inline-block w-3 h-3 rounded bg-blue-100 border border-blue-300"></span> Disponible
                   </span>
-                  <div class="flex items-center gap-1 shrink-0">
-                    <button @click="moverArriba(idx)"
-                      :disabled="idx === 0"
-                      class="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                      <ChevronUp :size="14" />
+                  <span class="inline-flex items-center gap-1 text-[9px] text-gray-400">
+                    <span class="inline-block w-3 h-3 rounded bg-gray-200 border border-gray-300"></span> En ruta
+                  </span>
+                  <span class="inline-flex items-center gap-1 text-[9px] text-gray-300">
+                    <span class="inline-block w-3 h-3 rounded bg-gray-50"></span> Sin máquina
+                  </span>
+                </div>
+                <div class="grid grid-cols-10 gap-0.5">
+                  <template v-for="(row, ri) in gridTelar" :key="'r'+ri">
+                    <button
+                      v-for="cell in row" :key="cell.n"
+                      @click="cell.maq && !cell.inRuta && agregarMaquina(cell.maq)"
+                      :disabled="!cell.maq || cell.inRuta"
+                      :data-tippy-content="cell.maq ? (cell.inRuta ? 'Ya en ruta' : 'Agregar ' + cell.maq.maquina) : undefined"
+                      :class="[
+                        'text-[10px] font-bold py-1.5 px-0.5 rounded text-center transition-all leading-none',
+                        !cell.maq
+                          ? 'bg-gray-50 text-transparent cursor-default'
+                          : cell.inRuta
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed line-through'
+                            : 'bg-blue-50 hover:bg-blue-200 active:bg-blue-300 text-blue-700 border border-blue-200 cursor-pointer'
+                      ]"
+                    >
+                      {{ cell.maq ? cell.maq.maquina : '\u00a0' }}
                     </button>
-                    <button @click="moverAbajo(idx)"
-                      :disabled="idx === maquinasEnRuta.length - 1"
-                      class="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                      <ChevronDown :size="14" />
-                    </button>
-                    <button @click="quitarMaquina(m.maquinaId)"
-                      class="p-1 rounded-lg hover:bg-red-100 text-red-500 transition-colors">
-                      <X :size="14" />
-                    </button>
-                  </div>
+                  </template>
                 </div>
               </div>
 
-              <!-- Máquinas disponibles para agregar -->
-              <div>
-                <div class="text-xs text-gray-400 mb-2 mt-3">
+              <!-- Chips para otros sectores (HILANDERIA, etc.) -->
+              <div v-else>
+                <div class="text-xs text-gray-400 mb-2">
                   Disponibles para agregar ({{ maquinasDisponibles.length }}):
                 </div>
-                <div v-if="maquinasDisponibles.length === 0"
-                  class="text-xs text-gray-400 italic">
+                <div v-if="maquinasDisponibles.length === 0" class="text-xs text-gray-400 italic">
                   {{ maquinasFiltradas.length === 0 ? 'No hay máquinas para el sector/tipo seleccionado.' : 'Todas las máquinas ya están en la ruta.' }}
                 </div>
                 <div v-else class="flex flex-wrap gap-2">
@@ -445,6 +477,48 @@ function moverAbajo(index) {
                     <Plus :size="12" />
                     {{ maq.maquina || maq.id }}
                   </button>
+                </div>
+              </div>
+
+              <!-- Secuencia de máquinas — SIEMPRE ABAJO -->
+              <div class="mt-4">
+                <div class="flex items-center justify-between mb-2">
+                  <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Secuencia de máquinas ({{ maquinasEnRuta.length }})
+                  </label>
+                </div>
+                <div v-if="maquinasEnRuta.length === 0"
+                  class="text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl px-4 py-3 text-center">
+                  Sin máquinas. Agrega desde el mapa de arriba.
+                </div>
+                <div v-else class="space-y-1">
+                  <div v-for="(m, idx) in maquinasEnRuta" :key="m.maquinaId"
+                    class="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                    <span class="text-xs font-mono text-gray-400 w-5 text-right shrink-0">{{ idx + 1 }}</span>
+                    <span class="flex-1 text-sm font-medium text-gray-700">
+                      {{ m.datos?.maquina || m.maquinaId }}
+                      <span v-if="m.datos?.grp_tear" class="text-xs text-gray-400 ml-1">(GP{{ m.datos.grp_tear }})</span>
+                    </span>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button @click="moverArriba(idx)"
+                        :disabled="idx === 0"
+                        data-tippy-content="Mover arriba"
+                        class="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <ChevronUp :size="14" />
+                      </button>
+                      <button @click="moverAbajo(idx)"
+                        :disabled="idx === maquinasEnRuta.length - 1"
+                        data-tippy-content="Mover abajo"
+                        class="p-1 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                        <ChevronDown :size="14" />
+                      </button>
+                      <button @click="quitarMaquina(m.maquinaId)"
+                        data-tippy-content="Quitar de la ruta"
+                        class="p-1 rounded-lg hover:bg-red-100 text-red-500 transition-colors">
+                        <X :size="14" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

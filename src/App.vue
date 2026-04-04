@@ -168,6 +168,7 @@ const pageTitle = computed(() => {
   if (path === '/codigos')   return 'Códigos de Defectos y Paradas';
   if (path === '/catalogo')  return 'Explorador de Catálogo';
   if (path === '/sintomas')  return 'Síntomas de Tejeduría';
+  if (path === '/rondas')    return 'Rutas de Ronda';
   if (path === '/login') return 'Ingreso al Sistema';
   if (path === '/patrulla') return 'Patrulla de Calidad';
   if (path.startsWith('/patrulla/roturas')) return 'R1 — ROTURAS';
@@ -450,6 +451,17 @@ const navigateTab = (action) => {
             >
               <Stethoscope class="w-6 h-6 mr-4" />
               Síntomas de Tejeduría
+            </router-link>
+
+            <router-link
+              v-if="canAccessView(userRole, 'rondas')"
+              to="/rondas"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-violet-600 text-white shadow-lg shadow-violet-900/20"
+            >
+              <Route class="w-6 h-6 mr-4" />
+              Rutas de Ronda
             </router-link>
 
             <router-link

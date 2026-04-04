@@ -61,6 +61,6 @@ export default defineConfig({
     host: true,
   },
   define: {
-    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString())
+    __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('es-AR', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }))
   }
 });

@@ -19,6 +19,7 @@ const routes = [
   { path: '/codigos', component: () => import('./components/CodigosAdmin.vue'), meta: { requiresAuth: true, role: 'admin' } },
   { path: '/catalogo', component: () => import('./components/CatalogoExplorer.vue'), meta: { requiresAuth: true, role: 'admin' } },
   { path: '/sintomas', component: () => import('./components/SintomasAdmin.vue'), meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/rondas', component: () => import('./components/RondasAdmin.vue'), meta: { requiresAuth: true, role: 'admin' } },
   { path: '/intervenciones/:id', component: () => import('./components/IntervencionDetalle.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla/:sub', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },

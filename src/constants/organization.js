@@ -34,6 +34,7 @@ export const VISTA_OPTIONS = [
   { slug: 'codigos',        label: 'Códigos de Falla',       route: '/codigos' },
   { slug: 'catalogo',       label: 'Catálogo de Máquinas',   route: '/catalogo' },
   { slug: 'sintomas',       label: 'Síntomas',               route: '/sintomas' },
+  { slug: 'rondas',         label: 'Rutas de Ronda',         route: '/rondas' },
   { slug: 'patrulla',       label: 'Patrulla Calidad',       route: '/patrulla' },
   { slug: 'shiftreport',    label: 'Shift Report',            route: '/shiftreport' },
   { slug: 'eficiencia',       label: 'Registro Eficiencia',      route: '/eficiencia' },

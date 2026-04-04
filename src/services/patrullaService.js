@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, getDoc, setDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getTurnoActual } from '../constants/organization';
 
@@ -248,4 +248,53 @@ export async function reabrirRonda(patrullaId, rondaKey) {
     [`rondas.${rondaKey}.hora`]: null,
     [`rondas.${rondaKey}.reabierta`]: new Date().toISOString(),
   });
+}
+
+// ── Rutas de Patrulla ────────────────────────────────────────────
+
+const COL_RUTAS = 'rutas_patrulla';
+
+/**
+ * Carga rutas activas filtradas por tipo y sector (para uso en inspector).
+ * tipo: 'roturas' | 'eficiencia' | 'ambos' | null
+ * sector: 'TEJEDURIA' | 'HILANDERIA' | null
+ */
+export async function cargarRutasPatrulla(tipo = null, sector = null) {
+  const snap = await getDocs(collection(db, COL_RUTAS));
+  let rutas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  rutas = rutas.filter(r => r.activa !== false);
+  if (tipo) rutas = rutas.filter(r => r.tipo === tipo || r.tipo === 'ambos');
+  if (sector) rutas = rutas.filter(r => !r.sector || r.sector === sector);
+  return rutas.sort((a, b) => (a.orden || 999) - (b.orden || 999));
+}
+
+/**
+ * Carga TODAS las rutas (incluyendo inactivas) para el panel admin.
+ */
+export async function cargarTodasRutasPatrulla() {
+  const snap = await getDocs(collection(db, COL_RUTAS));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.orden || 999) - (b.orden || 999));
+}
+
+/**
+ * Crea o actualiza una ruta de patrulla.
+ * Si rutaId es null/undefined, crea un documento nuevo.
+ */
+export async function guardarRutaPatrulla(rutaId, data) {
+  if (rutaId) {
+    await setDoc(doc(db, COL_RUTAS, rutaId), data, { merge: true });
+    return rutaId;
+  } else {
+    const ref = await addDoc(collection(db, COL_RUTAS), data);
+    return ref.id;
+  }
+}
+
+/**
+ * Elimina permanentemente una ruta de patrulla.
+ */
+export async function eliminarRutaPatrulla(rutaId) {
+  await deleteDoc(doc(db, COL_RUTAS, rutaId));
 }

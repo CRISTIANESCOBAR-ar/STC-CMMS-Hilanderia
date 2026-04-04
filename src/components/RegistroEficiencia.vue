@@ -6,8 +6,8 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR, getTurnoActual, getTurnoLabel } from '../constants/organization';
-import { cargarPatrullaActiva, crearPatrulla, guardarRondaEficiencia, guardarRondaParcialEficiencia } from '../services/patrullaService';
-import { Loader2, ChevronDown, CloudUpload, BarChart3, Check, ArrowLeft } from 'lucide-vue-next';
+import { cargarPatrullaActiva, crearPatrulla, guardarRondaEficiencia, guardarRondaParcialEficiencia, cargarRutasPatrulla } from '../services/patrullaService';
+import { Loader2, ChevronDown, CloudUpload, BarChart3, Check, ArrowLeft, Lock } from 'lucide-vue-next';
 
 const router = useRouter();
 const turnoActual = ref(getTurnoActual());
@@ -26,6 +26,10 @@ const grupoSeleccionado = ref('');
 const mensajeToast = ref(null);
 const vistaResumen = ref(false);
 let _toastTimer = null;
+
+// Rutas de patrulla
+const rutasDisponibles = ref([]);
+const rutaActivaId = ref('');
 
 // Auto-guardado
 const autoSaveStatus = ref('idle');
@@ -46,12 +50,25 @@ const sectoresUsuario = computed(() =>
 );
 
 const telaresOrdenados = computed(() => {
+  // Si hay una ruta activa con máquinas, usarla como fuente de orden
+  if (rutaActiva.value?.maquinas?.length) {
+    const ordenMap = new Map(rutaActiva.value.maquinas.map(m => [m.maquinaId, m.orden]));
+    let list = telares.value.filter(t => ordenMap.has(t.id));
+    if (grupoSeleccionado.value) {
+      list = list.filter(t => String(t.grp_tear || '').trim() === grupoSeleccionado.value);
+    }
+    return list.sort((a, b) => (ordenMap.get(a.id) || 999) - (ordenMap.get(b.id) || 999));
+  }
+  // Fallback: campo orden_patrulla
   let list = [...telares.value];
   if (grupoSeleccionado.value) {
     list = list.filter(t => String(t.grp_tear || '').trim() === grupoSeleccionado.value);
   }
   return list.sort((a, b) => (a.orden_patrulla || 999) - (b.orden_patrulla || 999));
 });
+
+const rutaActiva = computed(() => rutasDisponibles.value.find(r => r.id === rutaActivaId.value) || null);
+const rutaObligatoria = computed(() => rutasDisponibles.value.find(r => r.obligatoria) || null);
 
 const gruposDisponibles = computed(() => {
   const gs = telares.value.map(t => String(t.grp_tear || '').trim()).filter(Boolean);
@@ -181,6 +198,13 @@ const promedioGeneral = computed(() => {
 // ── Lifecycle ────────────────────────────────────────────────────
 onMounted(async () => {
   try {
+    rutasDisponibles.value = await cargarRutasPatrulla('eficiencia', sectoresUsuario.value[0] || 'TEJEDURIA');
+    // Pre-seleccionar ruta: obligatoria > esDefault
+    const obligatoria = rutasDisponibles.value.find(r => r.obligatoria);
+    const porDefecto  = rutasDisponibles.value.find(r => r.esDefault);
+    if (obligatoria) rutaActivaId.value = obligatoria.id;
+    else if (porDefecto) rutaActivaId.value = porDefecto.id;
+
     const snap = await getDocs(collection(db, 'maquinas'));
     const list = [];
     snap.forEach(d => {
@@ -377,6 +401,21 @@ function mostrarToast(tipo, texto) {
     <!-- ═══ STICKY HEADER ═══ -->
     <div class="sticky top-0 z-30 bg-gray-50 pb-0.5">
       <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-2">
+        <!-- Selector de ruta de patrulla (si hay rutas definidas) -->
+        <div v-if="rutasDisponibles.length > 0">
+          <div v-if="rutaObligatoria"
+               class="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs font-bold text-red-700">
+            <Lock class="w-3.5 h-3.5 shrink-0" />
+            Ruta obligatoria: {{ rutaObligatoria.nombre }}
+          </div>
+          <select v-else v-model="rutaActivaId"
+                  class="w-full appearance-none bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+            <option value="">Sin ruta — orden predeterminado</option>
+            <option v-for="r in rutasDisponibles" :key="r.id" :value="r.id">
+              {{ r.nombre }}{{ r.esDefault ? ' ★' : '' }}
+            </option>
+          </select>
+        </div>
         <!-- Ronda selector -->
         <div class="flex items-center gap-1.5">
           <button v-for="rd in rondasConEstado" :key="rd.key"

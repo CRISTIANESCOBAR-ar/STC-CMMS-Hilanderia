@@ -211,14 +211,22 @@ async function guardarTelar() {
   if (!telarAbierto.value) return;
   const loom = telarAbierto.value.loom;
   isSaving.value = true;
+
+  // Capturar y proteger TODOS los turnos con datos antes de cualquier await,
+  // para que el onSnapshot que dispara cada guardado no los sobreescriba.
+  const keysToSave = [];
+  for (const turno of ['A', 'B', 'C']) {
+    const key = `${loom}_${turno}`;
+    if (registros.value[key]) {
+      keysToSave.push({ key, turno, data: { ...registros.value[key] } });
+      pendingSaves.add(key);
+    }
+  }
+
   try {
-    for (const turno of ['A', 'B', 'C']) {
-      const key = `${loom}_${turno}`;
-      if (registros.value[key]) {
-        pendingSaves.add(key);
-        await guardarRegistro(fechaReporte.value, loom, turno, registros.value[key]);
-        pendingSaves.delete(key);
-      }
+    for (const { key, turno, data } of keysToSave) {
+      await guardarRegistro(fechaReporte.value, loom, turno, data);
+      pendingSaves.delete(key);
     }
     Swal.fire({ icon: 'success', title: 'Guardado', timer: 1200, showConfirmButton: false });
     // Saltar al siguiente telar o cerrar si es el último
@@ -229,6 +237,7 @@ async function guardarTelar() {
       telarAbiertoIdx.value = null;
     }
   } catch (e) {
+    for (const { key } of keysToSave) pendingSaves.delete(key);
     console.error(e);
     Swal.fire('Error', 'No se pudo guardar', 'error');
   } finally {

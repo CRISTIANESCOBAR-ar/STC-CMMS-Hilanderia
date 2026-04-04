@@ -22,6 +22,7 @@ const routes = [
   { path: '/intervenciones/:id', component: () => import('./components/IntervencionDetalle.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
   { path: '/patrulla/:sub', component: () => import('./components/PatrullaCalidad.vue'), meta: { requiresAuth: true } },
+  { path: '/patrulla-historial', component: () => import('./components/HistorialPatrullas.vue'), meta: { requiresAuth: true } },
   { path: '/calidad', component: () => import('./components/CalidadSala.vue'), meta: { requiresAuth: true } },
   { path: '/shiftreport', component: () => import('./components/ShiftReport.vue'), meta: { requiresAuth: true } },
   { path: '/eficiencia', component: () => import('./components/RegistroEficiencia.vue'), meta: { requiresAuth: true } },

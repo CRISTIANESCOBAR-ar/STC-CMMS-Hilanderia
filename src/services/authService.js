@@ -35,7 +35,9 @@ const normalizePerfil = (data = {}) => {
     sectorDefault,
     sectoresAsignados,
     alcance,
-    jefeDeSectores
+    jefeDeSectores,
+    nombre: data.nombre || data.displayName || null,
+    email: data.email || null,
   };
 };
 

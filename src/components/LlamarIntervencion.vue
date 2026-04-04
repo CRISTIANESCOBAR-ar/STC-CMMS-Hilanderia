@@ -74,7 +74,7 @@ onMounted(async () => {
   try {
     const [snapMaq, snapSint] = await Promise.all([
       getDocs(collection(db, 'maquinas')),
-      getDocs(query(collection(db, 'sintomas_tejeduria'), where('activo', '==', true))),
+      getDocs(query(collection(db, 'sintomas'), where('activo', '==', true))),
     ]);
     maquinas.value = snapMaq.docs.map(d => ({
       id: d.id, ...d.data(),
@@ -82,6 +82,7 @@ onMounted(async () => {
     }));
     todosSintomas.value = snapSint.docs
       .map(d => ({ id: d.id, ...d.data() }))
+      .filter(s => s.sector === 'TEJEDURIA' && s.tipoMaquina === 'TELAR')
       .sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
 
     // Default TELAR para inspector
@@ -195,7 +196,7 @@ watch(tiposDisponibles, (tipos) => {
 }, { immediate: true });
 
 // Lista de síntomas según el tipo de máquina seleccionado:
-// - TELAR → usa sintomas_tejeduria de Firestore (con derivaA, destacado, etc.)
+// - TELAR → usa colección `sintomas` de Firestore (sector=TEJEDURIA, tipoMaquina=TELAR)
 // - Resto → genera lista sintética desde MOTIVOS_POR_TIPO
 const GENERICOS = new Set(['AJUSTE','LIMPIEZA','LUBRICACIÓN','CAMBIO','VERIFICACIÓN','VERIFICACIÓN ELÉCTRICA','AJUSTE PARÁMETROS']);
 const sintomasParaTipo = computed(() => {

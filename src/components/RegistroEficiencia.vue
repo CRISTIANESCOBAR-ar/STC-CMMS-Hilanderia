@@ -202,7 +202,8 @@ onMounted(async () => {
       if (!activa) {
         activa = await crearPatrulla({
           inspectorUid: uid,
-          inspectorNombre: userProfile.value?.nombre || '',
+          inspectorNombre: userProfile.value?.nombre || getAuth().currentUser?.displayName || getAuth().currentUser?.email || '',
+          inspectorEmail: userProfile.value?.email || getAuth().currentUser?.email || null,
           sector: sectoresUsuario.value[0] || DEFAULT_SECTOR,
         });
       }

@@ -5,7 +5,7 @@ import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
 import { cargarPatrullaActiva } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw } from 'lucide-vue-next';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History } from 'lucide-vue-next';
 import { reabrirRonda } from '../services/patrullaService';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
@@ -138,6 +138,19 @@ onMounted(async () => {
         </div>
 
         <template v-else>
+          <!-- Historial de patrullas -->
+          <div @click="router.push('/patrulla-historial')"
+               class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
+            <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+              <History class="w-4 h-4 text-gray-500" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-black text-gray-700">Ver historial</p>
+              <p class="text-[10px] text-gray-400 font-medium">Patrullas anteriores</p>
+            </div>
+            <span class="text-[10px] text-gray-400 font-bold">→</span>
+          </div>
+
           <!-- Card Eficiencia para supervisores -->
           <div v-if="['supervisor','supervisor_mecanico','admin'].includes(userRole)"
                @click="router.push('/eficiencia')"

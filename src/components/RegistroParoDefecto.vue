@@ -200,7 +200,8 @@ onMounted(async () => {
       } else {
         const nueva = await crearPatrulla({
           inspectorUid: uid,
-          inspectorNombre: userProfile.value?.nombre || 'Inspector',
+          inspectorNombre: userProfile.value?.nombre || getAuth().currentUser?.displayName || getAuth().currentUser?.email || 'Inspector',
+          inspectorEmail: userProfile.value?.email || getAuth().currentUser?.email || null,
           sector: sectoresUsuario.value[0] || DEFAULT_SECTOR,
         });
         patrullaId.value = nueva.id;

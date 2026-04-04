@@ -82,11 +82,12 @@ export async function cargarPatrullasTurnoActual() {
 /**
  * Crea una nueva patrulla para el turno actual.
  */
-export async function crearPatrulla({ inspectorUid, inspectorNombre, sector }) {
+export async function crearPatrulla({ inspectorUid, inspectorNombre, inspectorEmail, sector }) {
   const hoy = new Date();
   const data = {
     inspectorUid,
     inspectorNombre,
+    inspectorEmail: inspectorEmail || null,
     sector,
     turno: getTurnoActual(hoy),
     fecha: hoy.toISOString().slice(0, 10),
@@ -211,6 +212,29 @@ export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos)
     [`rondas.${rondaKey}.datos`]: datos,
     [`rondas.${rondaKey}.ultimoGuardado`]: new Date().toISOString(),
   });
+}
+
+/**
+ * Carga historial de patrullas.
+ * Si inspectorUid se pasa, filtra por ese inspector; si no, trae todas (para supervisores).
+ */
+export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30) {
+  // Un solo orderBy evita requerir índice compuesto en Firestore.
+  // El ordenado secundario por turno se hace en cliente.
+  const constraints = [orderBy('fecha', 'desc'), limit(limite)];
+  if (inspectorUid) constraints.unshift(where('inspectorUid', '==', inspectorUid));
+  const q = query(collection(db, COL_PATRULLAS), ...constraints);
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Carga una patrulla específica por ID.
+ */
+export async function cargarPatrullaPorId(patrullaId) {
+  const snap = await getDoc(doc(db, COL_PATRULLAS, patrullaId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
 }
 
 /**

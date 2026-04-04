@@ -4,7 +4,7 @@ import { getAuth } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
-import { normalizeSectorValue, DEFAULT_SECTOR } from '../constants/organization';
+import { normalizeSectorValue, DEFAULT_SECTOR, getTurnoLabel } from '../constants/organization';
 import { loadPatrullaConfig, cargarPatrullaActiva } from '../services/patrullaService';
 import { Loader2, TrendingDown, TrendingUp, Minus, Share2, AlertTriangle, ChevronDown } from 'lucide-vue-next';
 
@@ -171,31 +171,73 @@ function nombreCorto(t) {
 // ── Compartir por WhatsApp ───────────────────────────────────────
 function compartirWhatsApp() {
   const r = resumen.value;
+
+  // Encabezado
+  const fecha = patrullaData.value?.fecha
+    ? new Date(patrullaData.value.fecha + 'T12:00:00').toLocaleDateString('es-AR')
+    : new Date().toLocaleDateString('es-AR');
+  const turnoLabel = patrullaData.value?.turno ? getTurnoLabel(patrullaData.value.turno) : '';
+  const inspector = patrullaData.value?.inspectorNombre || '';
+
   let msg = `📊 *Seguimiento de Roturas — Evaluación*\n`;
-  msg += `📅 ${new Date().toLocaleDateString('es-AR')}\n\n`;
+  msg += `📅 ${fecha}`;
+  if (turnoLabel) msg += `  |  🕐 Turno: ${turnoLabel}`;
+  if (inspector)  msg += `  |  👷 ${inspector}`;
+  msg += `\n\n`;
+
   msg += `✅ Mejoras: ${r.mejoras}\n`;
   msg += `❌ Empeoramientos: ${r.empeoramientos}\n`;
   if (r.leves) msg += `⚠️ Leves: ${r.leves}\n`;
-  msg += `➖ Sin cambio: ${r.iguales}\n\n`;
+  msg += `➖ Sin cambio: ${r.iguales}\n`;
 
-  // Detalle de empeoramientos
-  const peores = comparacion.value.filter(c => c.evalU === 'peor' || c.evalT === 'peor');
-  if (peores.length) {
-    msg += `🔴 *Empeoramientos:*\n`;
-    for (const c of peores) {
-      if (c.evalU === 'peor') msg += `• ${nombreCorto(c.telar)} Rot. Urdido: ${c.r1U} → ${c.r6U} (${diffTexto(c.r1U, c.r6U)})\n`;
-      if (c.evalT === 'peor') msg += `• ${nombreCorto(c.telar)} Rot. Trama: ${c.r1T} → ${c.r6T} (${diffTexto(c.r1T, c.r6T)})\n`;
-    }
-    msg += '\n';
+  // Helpers de alineación
+  function getModelo(t) {
+    const raw = String(t.nombre || t.maquina || t.id || '');
+    const match = raw.match(/^([A-Za-záéíóúÁÉÍÓÚñÑ\s]+?)\s+\d/);
+    return match ? match[1].trim() : 'Sin modelo';
+  }
+  function getNumero(t) {
+    const raw = String(t.nombre || t.maquina || t.id || '');
+    const n = parseInt(raw.replace(/[^0-9]/g, '').slice(-3), 10);
+    return isNaN(n) ? 0 : n;
+  }
+  function pN(n) { return n != null ? n.toFixed(1).padStart(5) : '     '; }
+  function pD(r1, r6) {
+    if (r1 == null || r6 == null) return '       ';
+    const d = r6 - r1;
+    return `(${(d > 0 ? '+' : '') + d.toFixed(1)})`.padStart(7);
   }
 
-  // Detalle de mejoras
-  const mejores = comparacion.value.filter(c => c.evalU === 'mejor' || c.evalT === 'mejor');
-  if (mejores.length) {
-    msg += `🟢 *Mejoras:*\n`;
-    for (const c of mejores) {
-      if (c.evalU === 'mejor') msg += `• ${nombreCorto(c.telar)} Rot. Urdido: ${c.r1U} → ${c.r6U} (${diffTexto(c.r1U, c.r6U)})\n`;
-      if (c.evalT === 'mejor') msg += `• ${nombreCorto(c.telar)} Rot. Trama: ${c.r1T} → ${c.r6T} (${diffTexto(c.r1T, c.r6T)})\n`;
+  // Construir líneas de un grupo filtrado por tipo de evaluación
+  function buildLines(items, tipos) {
+    const lines = [];
+    for (const c of items) {
+      const num = String(getNumero(c.telar)).padStart(3);
+      if (tipos.includes(c.evalU)) lines.push(`${num} Rot. URD: ${pN(c.r1U)} → ${pN(c.r6U)} ${pD(c.r1U, c.r6U)}`);
+      if (tipos.includes(c.evalT)) lines.push(`${num} Rot. TRA: ${pN(c.r1T)} → ${pN(c.r6T)} ${pD(c.r1T, c.r6T)}`);
+    }
+    return lines;
+  }
+
+  // Agrupar todo por modelo
+  const todos = comparacion.value;
+  const modelos = [...new Set(todos.map(c => getModelo(c.telar)))].sort();
+
+  for (const modelo of modelos) {
+    const items = todos.filter(c => getModelo(c.telar) === modelo);
+    const peores = items.filter(c => c.evalU === 'peor' || c.evalT === 'peor' || c.evalU === 'leve' || c.evalT === 'leve');
+    const mejores = items.filter(c => c.evalU === 'mejor' || c.evalT === 'mejor');
+    if (!peores.length && !mejores.length) continue;
+
+    msg += `\n*${modelo}*\n`;
+
+    if (peores.length) {
+      const lines = buildLines(peores, ['peor', 'leve']);
+      if (lines.length) msg += `🔴 *Empeoramientos:*\n\`\`\`\n${lines.join('\n')}\n\`\`\`\n`;
+    }
+    if (mejores.length) {
+      const lines = buildLines(mejores, ['mejor']);
+      if (lines.length) msg += `🟢 *Mejoras:*\n\`\`\`\n${lines.join('\n')}\n\`\`\`\n`;
     }
   }
 

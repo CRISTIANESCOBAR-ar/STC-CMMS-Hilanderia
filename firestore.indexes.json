@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "patrullas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inspectorUid", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "patrullas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inspectorUid", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

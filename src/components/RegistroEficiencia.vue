@@ -195,16 +195,23 @@ const promedioGeneral = computed(() => {
   return count > 0 ? (sum / count).toFixed(1) : '—';
 });
 
+// ── Helper: cargar rutas con el sector ya resuelto ───────────────
+async function cargarRutasConSector() {
+  const sector = sectoresUsuario.value[0] || null;
+  let rutas = sector ? await cargarRutasPatrulla('eficiencia', sector) : [];
+  if (!rutas.length) {
+    rutas = await cargarRutasPatrulla('eficiencia', null);
+  }
+  rutasDisponibles.value = rutas;
+  const obligatoria = rutas.find(r => r.obligatoria);
+  const porDefecto  = rutas.find(r => r.esDefault);
+  if (obligatoria) rutaActivaId.value = obligatoria.id;
+  else if (!rutaActivaId.value && porDefecto) rutaActivaId.value = porDefecto.id;
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    rutasDisponibles.value = await cargarRutasPatrulla('eficiencia', sectoresUsuario.value[0] || 'TEJEDURIA');
-    // Pre-seleccionar ruta: obligatoria > esDefault
-    const obligatoria = rutasDisponibles.value.find(r => r.obligatoria);
-    const porDefecto  = rutasDisponibles.value.find(r => r.esDefault);
-    if (obligatoria) rutaActivaId.value = obligatoria.id;
-    else if (porDefecto) rutaActivaId.value = porDefecto.id;
-
     const snap = await getDocs(collection(db, 'maquinas'));
     const list = [];
     snap.forEach(d => {
@@ -215,6 +222,9 @@ onMounted(async () => {
       }
     });
     telares.value = list;
+
+    // Cargar rutas DESPUÉS de máquinas: userProfile ya resuelto
+    await cargarRutasConSector();
 
     const regs = {};
     for (const t of list) regs[t.id] = { eficiencia: '', hora: null };
@@ -247,6 +257,16 @@ onMounted(async () => {
     cargando.value = false;
   }
 });
+
+// Respaldo: recargar rutas si userProfile cambia tarde
+watch(userProfile, async (newProfile, oldProfile) => {
+  if (!newProfile) return;
+  const oldSector = oldProfile?.sectoresAsignados?.[0] || oldProfile?.sectorDefault;
+  const newSector = newProfile?.sectoresAsignados?.[0] || newProfile?.sectorDefault;
+  if (newSector && newSector !== oldSector) {
+    await cargarRutasConSector();
+  }
+}, { deep: false });
 
 watch(rondaSeleccionada, () => cargarDatosRonda());
 

@@ -744,22 +744,22 @@ const estadoBadge = (op) => {
           <div class="grid grid-cols-2 gap-px bg-slate-100 text-center text-xs">
             <div class="bg-white py-2">
               <p class="font-black text-emerald-600 uppercase tracking-wider text-[9px] mb-0.5">Ingreso</p>
-              <span v-if="op.ingreso" class="font-mono font-bold text-emerald-700">{{ op.ingreso }}</span>
+              <span v-if="op.ingreso" class="font-mono font-bold text-emerald-700 text-base">{{ op.ingreso }}</span>
               <span v-else class="text-gray-300">—</span>
             </div>
             <div class="bg-white py-2">
               <p class="font-black text-red-500 uppercase tracking-wider text-[9px] mb-0.5">Salida</p>
-              <span v-if="op.salida" class="font-mono font-bold text-red-600">{{ op.salida }}</span>
+              <span v-if="op.salida" class="font-mono font-bold text-red-600 text-base">{{ op.salida }}</span>
               <span v-else class="text-gray-300">—</span>
             </div>
             <div class="bg-white py-2">
               <p class="font-black text-blue-500 uppercase tracking-wider text-[9px] mb-0.5">Inicio</p>
-              <span v-if="op.inicio" class="font-mono font-bold text-blue-700">{{ op.inicio }}</span>
+              <span v-if="op.inicio" class="font-mono font-bold text-blue-700 text-base">{{ op.inicio }}</span>
               <span v-else class="text-gray-300">—</span>
             </div>
             <div class="bg-white py-2">
               <p class="font-black text-orange-500 uppercase tracking-wider text-[9px] mb-0.5">Final</p>
-              <span v-if="op.final" class="font-mono font-bold text-orange-600">{{ op.final }}</span>
+              <span v-if="op.final" class="font-mono font-bold text-orange-600 text-base">{{ op.final }}</span>
               <span v-else class="text-gray-300">—</span>
             </div>
           </div>

@@ -179,18 +179,30 @@ function iconCambio(eval_) {
   return '—';
 }
 
+// ── Helper: cargar rutas con el sector ya resuelto ───────────────
+async function cargarRutasConSector() {
+  const sector = sectoresUsuario.value[0] || null;
+  console.log('[Roturas] sector usuario:', sector, '| sectoresAsignados:', userProfile.value?.sectoresAsignados, '| sectorDefault:', userProfile.value?.sectorDefault);
+  let rutas = sector ? await cargarRutasPatrulla('roturas', sector) : [];
+  console.log('[Roturas] rutas con sector', sector, ':', rutas.length, rutas.map(r => `${r.nombre}(${r.tipo}/${r.sector})`));
+  // Fallback: si no hay rutas para el sector, cargar todas las de roturas (sin filtro sector)
+  if (!rutas.length) {
+    rutas = await cargarRutasPatrulla('roturas', null);
+    console.log('[Roturas] rutas fallback sin sector:', rutas.length, rutas.map(r => `${r.nombre}(${r.tipo}/${r.sector})`));
+  }
+  rutasDisponibles.value = rutas;
+  console.log('[Roturas] rutasDisponibles final:', rutasDisponibles.value.length);
+  // Pre-seleccionar ruta: obligatoria > esDefault
+  const obligatoria = rutas.find(r => r.obligatoria);
+  const porDefecto  = rutas.find(r => r.esDefault);
+  if (obligatoria) rutaActivaId.value = obligatoria.id;
+  else if (!rutaActivaId.value && porDefecto) rutaActivaId.value = porDefecto.id;
+}
+
 // ── Carga inicial ────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    [config.value, rutasDisponibles.value] = await Promise.all([
-      loadPatrullaConfig(),
-      cargarRutasPatrulla('roturas', sectoresUsuario.value[0] || 'TEJEDURIA'),
-    ]);
-    // Pre-seleccionar ruta: obligatoria > esDefault
-    const obligatoria = rutasDisponibles.value.find(r => r.obligatoria);
-    const porDefecto  = rutasDisponibles.value.find(r => r.esDefault);
-    if (obligatoria) rutaActivaId.value = obligatoria.id;
-    else if (porDefecto) rutaActivaId.value = porDefecto.id;
+    config.value = await loadPatrullaConfig();
 
     const snap = await getDocs(collection(db, 'maquinas'));
     const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -199,6 +211,9 @@ onMounted(async () => {
       (m.activo ?? true) &&
       sectoresUsuario.value.includes(normalizeSectorValue(m.sector || DEFAULT_SECTOR))
     );
+
+    // Cargar rutas DESPUÉS de máquinas: en este punto userProfile ya está resuelto
+    await cargarRutasConSector();
 
     // Inicializar registros vacíos
     const regs = {};
@@ -232,6 +247,17 @@ onMounted(async () => {
     cargando.value = false;
   }
 });
+
+// Respaldo: si userProfile cambia después del mounted (timing Firebase Auth),
+// recargar rutas con el sector correcto
+watch(userProfile, async (newProfile, oldProfile) => {
+  if (!newProfile) return;
+  const oldSector = oldProfile?.sectoresAsignados?.[0] || oldProfile?.sectorDefault;
+  const newSector = newProfile?.sectoresAsignados?.[0] || newProfile?.sectorDefault;
+  if (newSector && newSector !== oldSector) {
+    await cargarRutasConSector();
+  }
+}, { deep: false });
 
 // ── Cambio de ronda: recargar datos ──────────────────────────────
 watch(rondaSeleccionada, (newRonda) => {

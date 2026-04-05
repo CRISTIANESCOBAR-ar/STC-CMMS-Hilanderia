@@ -186,6 +186,7 @@ export const authService = {
   observarEstado(callback) {
     return onAuthStateChanged(auth, async (user) => {
       if (user) {
+        await this.asegurarUsuarioEnFirestore(user);
         const perfil = await this.getUsuarioPerfil(user.uid);
         userProfile.value = perfil;
         userRole.value = perfil.role;

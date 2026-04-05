@@ -1,23 +1,19 @@
-const CACHE_NAME = 'cmms-cache-v7';
+const CACHE_NAME = 'cmms-cache-v14';
 
 self.addEventListener('install', event => {
-  // Activa el nuevo SW inmediatamente sin esperar que se cierren las pestañas.
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME));
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
-    // Eliminar todos los caches de versiones anteriores
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames
       .filter(name => name !== CACHE_NAME)
       .map(name => caches.delete(name)));
-    // Tomar control inmediato de todas las pestañas abiertas
     await self.clients.claim();
-    // Recargar todos los clientes para que carguen la versión nueva
-    const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach(client => client.navigate(client.url));
+    // NO se usa client.navigate() — es bloqueado por COOP policy.
+    // El usuario verá la versión nueva en la próxima carga normal.
   })());
 });
 
@@ -27,10 +23,12 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
   // NUNCA cachear el HTML (navegación) - siempre ir a la red.
-  // Esto evita que el SW sirva una versión vieja de la app.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html') || new Response('Sin conexión', { status: 503 }))
+      fetch(event.request).catch(async () => {
+        const cached = await caches.match('/index.html');
+        return cached || new Response('Sin conexión', { status: 503 });
+      })
     );
     return;
   }
@@ -58,7 +56,10 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(c => c.put(event.request, clone)).catch(() => {});
         return resp;
       })
-      .catch(() => caches.match(event.request).then(c => c || new Response('Sin conexión', { status: 503 })))
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        return cached || new Response('Sin conexión', { status: 503 });
+      })
   );
 });
 

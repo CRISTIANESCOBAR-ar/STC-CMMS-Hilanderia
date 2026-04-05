@@ -263,7 +263,10 @@ export async function cargarRutasPatrulla(tipo = null, sector = null) {
   const snap = await getDocs(collection(db, COL_RUTAS));
   let rutas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   rutas = rutas.filter(r => r.activa !== false);
-  if (tipo) rutas = rutas.filter(r => r.tipo === tipo || r.tipo === 'ambos');
+  if (tipo) rutas = rutas.filter(r => {
+    const t = String(r.tipo || '').toLowerCase();
+    return t === tipo.toLowerCase() || t === 'ambos';
+  });
   if (sector) rutas = rutas.filter(r => !r.sector || r.sector === sector);
   return rutas.sort((a, b) => (a.orden || 999) - (b.orden || 999));
 }

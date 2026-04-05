@@ -56,15 +56,22 @@ const closeMenu = () => {
   isMenuOpen.value = false;
 };
 
+let _updateDialogOpen = false; // evita múltiples Swal simultáneos
+
 // Función para verificar actualizaciones del Service Worker
 const checkForUpdates = async () => {
+  if (_updateDialogOpen) return;
   try {
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       for (let reg of regs) {
-        if (reg.waiting) {
+        if (reg.waiting && navigator.serviceWorker.controller) {
           hasUpdate.value = true;
-          // Mostrar toast con Swal
+          _updateDialogOpen = true;
+          // Parar el polling mientras el diálogo está visible
+          clearInterval(updateCheckInterval);
+          updateCheckInterval = null;
+
           Swal.fire({
             icon: 'info',
             title: 'Nueva versión disponible',
@@ -72,13 +79,19 @@ const checkForUpdates = async () => {
             toast: true,
             position: 'top-end',
             showConfirmButton: true,
-            timer: 10000,
-            timerProgressBar: true,
+            showDenyButton: true,
+            timer: undefined,
             confirmButtonText: 'Actualizar',
+            denyButtonText: 'Ahora no',
             confirmButtonColor: '#16a34a'
           }).then((result) => {
+            _updateDialogOpen = false;
             if (result.isConfirmed) {
               limpiarCacheYActualizar();
+            } else {
+              // Reiniciar polling en 10 minutos
+              hasUpdate.value = false;
+              updateCheckInterval = setInterval(checkForUpdates, 10 * 60 * 1000);
             }
           });
           return;

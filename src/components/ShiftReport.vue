@@ -1,10 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { collection, getDocs, query } from 'firebase/firestore';
+import { collection, getDocs, query, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { parseShiftReportCSV, transformRows, generarReportePRD } from '../services/shiftReportService';
 import { guardarReporteCSV, guardarRegistro, suscribirReporte } from '../services/shiftReportFirestore';
-import { Upload, Download, Cloud, X, Save, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { Upload, Download, Cloud, X, Save, ChevronLeft, ChevronRight, FolderOpen } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 const isLoading = ref(false);
@@ -16,11 +16,12 @@ const telarAbiertoIdx = ref(null); // null = ninguno abierto
 
 const registros = ref({});
 
-const fechaHoy = () => {
+const fechaAyer = () => {
   const d = new Date();
+  d.setDate(d.getDate() - 1);
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 };
-const fechaReporte = ref(fechaHoy());
+const fechaReporte = ref(fechaAyer());
 
 const fechaInput = computed({
   get: () => fechaReporte.value.replace(/\//g, '-'),
@@ -29,6 +30,140 @@ const fechaInput = computed({
 
 let unsubscribeFn = null;
 const pendingSaves = new Set();
+
+// --- File System Access API: persistir carpeta de CSVs en IndexedDB ---
+const soportaFSA = 'showDirectoryPicker' in window;
+const savedDirHandle = ref(null);
+const savedDirName = ref('');
+
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('shift-report-prefs', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = rej;
+  });
+}
+async function idbPut(key, val) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('handles', 'readwrite');
+    if (val !== null && val !== undefined) {
+      tx.objectStore('handles').put(val, key);
+    } else {
+      tx.objectStore('handles').delete(key);
+    }
+    tx.oncomplete = res; tx.onerror = rej;
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const req = db.transaction('handles', 'readonly').objectStore('handles').get(key);
+    req.onsuccess = e => res(e.target.result ?? null);
+    req.onerror = rej;
+  });
+}
+
+/** "2026/04/05" → "SR050426.csv" */
+function csvNombreDesde(fecha) {
+  const [yyyy, mm, dd] = (fecha || '').split('/');
+  if (!yyyy || !mm || !dd) return null;
+  return `SR${dd}${mm}${yyyy.slice(2)}.csv`;
+}
+
+async function limpiarCarpeta() {
+  savedDirHandle.value = null;
+  savedDirName.value = '';
+  try { await idbPut('csvFolder', null); } catch { /* ignorar */ }
+}
+
+async function writeBackupToFolder(text, fecha) {
+  if (!savedDirHandle.value) return;
+  let wroteRoot = false;
+  let wroteBackup = false;
+  let srName = null;
+  let abbr = null;
+  let yyyy = null;
+  try {
+    let perm = await savedDirHandle.value.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') perm = await savedDirHandle.value.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') return;
+    const blob = new Blob([text], { type: 'text/csv' });
+    // Escribir shiftreport.csv en la raíz (si posible)
+    try {
+      const rootFh = await savedDirHandle.value.getFileHandle('shiftreport.csv', { create: true });
+      const rootWritable = await rootFh.createWritable();
+      await rootWritable.write(blob);
+      await rootWritable.close();
+      wroteRoot = true;
+    } catch (e) {
+      console.warn('No se pudo escribir shiftreport.csv en la raíz:', e);
+    }
+
+    // Escribir backup renombrado en Backup/{mesAbrev}-{YYYY}/SRDDMMYY.csv
+    try {
+      const parts = (fecha || '').split('/');
+      yyyy = parts[0];
+      const mm = parts[1];
+      const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      abbr = months[Number(mm) - 1] || mm;
+      srName = csvNombreDesde(fecha);
+      const backupRoot = await savedDirHandle.value.getDirectoryHandle('Backup', { create: true });
+      const monthly = await backupRoot.getDirectoryHandle(`${abbr}-${yyyy}`, { create: true });
+      if (srName) {
+        const fh = await monthly.getFileHandle(srName, { create: true });
+        const writable = await fh.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        wroteBackup = true;
+      }
+    } catch (e) {
+      console.warn('No se pudo escribir backup en subcarpeta:', e);
+    }
+
+    if (wroteRoot || wroteBackup) {
+      const lines = [];
+      if (wroteRoot) lines.push('shiftreport.csv en la raíz');
+      if (wroteBackup) lines.push(`Backup/${abbr}-${yyyy}/${srName}`);
+      Swal.fire({ icon: 'success', title: 'Backup guardado', html: lines.join('<br/>'), timer: 2200, showConfirmButton: false });
+    }
+  } catch (e) {
+    console.warn('No se pudo escribir backup:', e);
+  }
+}
+
+async function elegirCarpeta() {
+  if (!soportaFSA) return;
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    savedDirHandle.value = dirHandle;
+    savedDirName.value = dirHandle.name;
+    try { await idbPut('csvFolder', dirHandle); } catch { /* no crítico */ }
+    // Intentar leer el CSV de la fecha activa desde la carpeta recién elegida
+    isLoading.value = true;
+    try {
+      const candidatos = [csvNombreDesde(fechaReporte.value), 'shiftreport.csv', 'ShiftReport.csv'];
+      let file = null;
+      for (const nombre of candidatos) {
+        try {
+          const fh = await dirHandle.getFileHandle(nombre);
+          file = await fh.getFile();
+          break;
+        } catch {}
+      }
+      if (file) {
+        await procesarArchivoCSV(file);
+      } else {
+        Swal.fire({ icon: 'success', title: 'Carpeta guardada', text: `"${dirHandle.name}" se recordará para próximas lecturas`, timer: 2200, showConfirmButton: false });
+      }
+    } finally {
+      isLoading.value = false;
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') Swal.fire('Error', err.message, 'error');
+  }
+}
 
 function suscribir() {
   if (unsubscribeFn) unsubscribeFn();
@@ -51,6 +186,12 @@ function suscribir() {
 }
 
 onMounted(async () => {
+  // Recuperar carpeta guardada del IDB
+  try {
+    const h = await idbGet('csvFolder');
+    if (h) { savedDirHandle.value = h; savedDirName.value = h.name; }
+  } catch { /* IDB no disponible en este entorno */ }
+
   try {
     const snap = await getDocs(query(collection(db, 'maquinas')));
     telaresMaquinas.value = snap.docs
@@ -246,29 +387,89 @@ async function guardarTelar() {
 }
 
 // CSV
-async function cargarCSV() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.csv';
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    isLoading.value = true;
-    try {
-      const text = await file.text();
-      const { meta, rows } = parseShiftReportCSV(text);
-      const records = transformRows(rows);
-      const fecha = records[0]?.fecha || fechaReporte.value;
-      await guardarReporteCSV(fecha, meta, records);
+function pickCSVFile() {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = e => resolve(e.target.files[0] || null);
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
+async function procesarArchivoCSV(file) {
+  const text = await file.text();
+  const { meta, rows } = parseShiftReportCSV(text);
+  const records = transformRows(rows);
+  const fecha = records[0]?.fecha || fechaReporte.value;
+
+  // Verificar si ya hay datos en Firestore para esta fecha
+  const docSnap = await getDoc(doc(db, 'shift_reports', fecha.replace(/\//g, '-')));
+  if (docSnap.exists() && Object.keys(docSnap.data().registros || {}).length > 0) {
+    const res = await Swal.fire({
+      title: '¿Qué deseas hacer?',
+      html: `Ya hay datos guardados para <b>${fecha}</b>.`,
+      icon: 'question',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'Ver datos de Firestore',
+      denyButtonText: 'Sobreescribir con CSV',
+      cancelButtonText: 'Cancelar',
+      denyButtonColor: '#dc2626',
+      confirmButtonColor: '#2563eb',
+    });
+    if (res.isConfirmed) {
       if (fecha !== fechaReporte.value) fechaReporte.value = fecha;
-      const telaresCSV = new Set(records.map(r => r.loom));
-      const telaresMatch = telaresMaquinas.value.filter(m => telaresCSV.has(String(m.maquina))).length;
-      Swal.fire({ icon: 'success', title: 'CSV cargado', text: `${telaresMatch} telar(es) con datos`, timer: 2500, showConfirmButton: false });
-    } catch (err) {
-      Swal.fire('Error', err.message, 'error');
-    } finally { isLoading.value = false; }
-  };
-  input.click();
+      return;
+    }
+    if (!res.isDenied) return; // cancelado
+  }
+
+  // Intentar escribir backups locales si hay carpeta guardada
+  try {
+    await writeBackupToFolder(text, fecha);
+  } catch (e) {
+    console.warn('Backup local falló', e);
+  }
+
+  await guardarReporteCSV(fecha, meta, records);
+  if (fecha !== fechaReporte.value) fechaReporte.value = fecha;
+  const telaresCSV = new Set(records.map(r => r.loom));
+  const telaresMatch = telaresMaquinas.value.filter(m => telaresCSV.has(String(m.maquina))).length;
+  Swal.fire({ icon: 'success', title: 'CSV cargado', text: `${telaresMatch} telar(es) con datos`, timer: 2500, showConfirmButton: false });
+}
+
+async function cargarCSV() {
+  isLoading.value = true;
+  try {
+    // Si hay carpeta guardada, intentar leer el CSV por nombre automáticamente (archivado o genérico)
+    if (savedDirHandle.value) {
+      let perm = await savedDirHandle.value.queryPermission({ mode: 'read' });
+      if (perm !== 'granted') perm = await savedDirHandle.value.requestPermission({ mode: 'read' });
+      if (perm === 'granted') {
+        const candidatos = [csvNombreDesde(fechaReporte.value), 'shiftreport.csv', 'ShiftReport.csv'];
+        for (const nombre of candidatos) {
+          try {
+            const fh = await savedDirHandle.value.getFileHandle(nombre);
+            const file = await fh.getFile();
+            await procesarArchivoCSV(file);
+            return;
+          } catch {}
+        }
+        Swal.fire({ icon: 'info', title: `${csvNombreDesde(fechaReporte.value)} no encontrado`, text: 'Selecciona el archivo CSV manualmente.', timer: 2500, showConfirmButton: false });
+      } else {
+        await limpiarCarpeta();
+      }
+    }
+    // Fallback: selector de archivo clásico
+    const file = await pickCSVFile();
+    if (file) await procesarArchivoCSV(file);
+  } catch (err) {
+    if (err.name !== 'AbortError') Swal.fire('Error', err.message, 'error');
+  } finally {
+    isLoading.value = false;
+  }
 }
 
 function exportarPRD() {
@@ -303,6 +504,15 @@ function descargarTXT(records) {
           <input type="date" v-model="fechaInput" class="px-2 py-1.5 rounded-lg border border-gray-300 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500" />
           <Cloud class="w-4 h-4 shrink-0 transition-colors" :class="isSaving ? 'text-amber-500 animate-pulse' : 'text-emerald-500'" />
           <div class="flex-1" />
+          <!-- Badge de carpeta guardada o botón para elegir carpeta -->
+          <div v-if="savedDirName" class="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 max-w-[140px]">
+            <FolderOpen class="w-3.5 h-3.5 shrink-0" />
+            <span class="truncate">{{ savedDirName }}</span>
+            <button @click.stop="limpiarCarpeta" title="Quitar carpeta guardada" class="ml-0.5 text-gray-400 hover:text-red-500 shrink-0 transition-colors"><X class="w-3 h-3" /></button>
+          </div>
+          <button v-else-if="soportaFSA" @click="elegirCarpeta" :disabled="isLoading" title="Elegir carpeta de CSVs (se recordará)" class="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-gray-500 hover:bg-gray-50 active:scale-95 disabled:opacity-50 transition-all">
+            <FolderOpen class="w-3.5 h-3.5" /> Carpeta
+          </button>
           <button @click="cargarCSV" :disabled="isLoading" class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 active:scale-95 disabled:opacity-50">
             <Upload class="w-4 h-4" /> CSV
           </button>

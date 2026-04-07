@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "muestras_anudados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fecha",      "order": "ASCENDING" },
+        { "fieldPath": "turno",      "order": "ASCENDING" },
+        { "fieldPath": "createdAt",  "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "patrullas",
       "queryScope": "COLLECTION",
       "fields": [

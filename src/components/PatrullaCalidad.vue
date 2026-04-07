@@ -5,9 +5,10 @@ import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
 import { cargarPatrullaActiva } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History } from 'lucide-vue-next';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors } from 'lucide-vue-next';
 import { reabrirRonda } from '../services/patrullaService';
 import RegistroRoturas from './RegistroRoturas.vue';
+import RegistroMuestrasAnudados from './RegistroMuestrasAnudados.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
 import PruebaTramaNegra from './PruebaTramaNegra.vue';
 import SeguimientoRoturas from './SeguimientoRoturas.vue';
@@ -138,6 +139,19 @@ onMounted(async () => {
         </div>
 
         <template v-else>
+          <!-- Muestras de Anudados -->
+          <div @click="router.push('/patrulla/anudados')"
+               class="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
+            <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+              <Scissors class="w-4 h-4 text-rose-600" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-black text-rose-700">Muestras de Anudados</p>
+              <p class="text-[10px] text-rose-400 font-medium">Registro diario de control</p>
+            </div>
+            <span class="text-[10px] text-rose-300 font-bold">→</span>
+          </div>
+
           <!-- Historial de patrullas -->
           <div @click="router.push('/patrulla-historial')"
                class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
@@ -274,6 +288,11 @@ onMounted(async () => {
       <!-- Ronda 7: Seguimiento/Evaluación -->
       <template v-else-if="subVista === 'seguimiento'">
         <SeguimientoRoturas @completada="onRondaCompletada" />
+      </template>
+
+      <!-- Muestras de Anudados -->
+      <template v-else-if="subVista === 'anudados'">
+        <RegistroMuestrasAnudados />
       </template>
 
 

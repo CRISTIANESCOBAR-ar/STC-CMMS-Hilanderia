@@ -538,6 +538,10 @@ onMounted(async () => {
                         </span>
                         <span v-else-if="!p.rondas?.[rDef.key]?.completada && p.rondas?.[rDef.key]?.horaInicio"
                               class="text-[9px] text-blue-500 font-bold">en curso</span>
+                        <span v-if="p.rondas?.[rDef.key]?.cubiertoNombre"
+                              class="ml-0.5 text-[8px] font-black bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                          👤 {{ p.rondas[rDef.key].cubiertoNombre }}
+                        </span>
                       </div>
                       <!-- Botón Ver datos -->
                       <button

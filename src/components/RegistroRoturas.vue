@@ -11,9 +11,11 @@ import { Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Share2, Cloud
 import { intervencionService } from '../services/intervencionService';
 
 const props = defineProps({
-  rondaInicial:     { type: String,  default: null },
-  soloLectura:      { type: Boolean, default: false },
-  patrullaIdExterno: { type: String, default: null },
+  rondaInicial:      { type: String,  default: null },
+  soloLectura:       { type: Boolean, default: false },
+  patrullaIdExterno: { type: String,  default: null },
+  coberturaUid:      { type: String,  default: null },
+  coberturaNombre:   { type: String,  default: null },
 });
 const emit = defineEmits(['completada']);
 
@@ -411,7 +413,9 @@ async function guardarRonda() {
         };
       }
     }
-    await guardarRondaRoturas(patrullaId.value, rondaSeleccionada.value, datos);
+    const meta = {};
+    if (props.coberturaUid) { meta.cubiertoPor = props.coberturaUid; meta.cubiertoNombre = props.coberturaNombre || ''; }
+    await guardarRondaRoturas(patrullaId.value, rondaSeleccionada.value, datos, meta);
     // Actualizar patrullaData local para ronda 7
     if (!patrullaData.value.rondas) patrullaData.value.rondas = {};
     patrullaData.value.rondas[rondaSeleccionada.value] = { tipo: 'roturas', completada: true, datos };

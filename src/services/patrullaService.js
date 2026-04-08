@@ -140,9 +140,13 @@ export async function iniciarRonda(patrullaId, rondaKey, tipo) {
  * @param {string} rondaKey - 'ronda_1' | 'ronda_6'
  * @param {Object} datos - { maq_id: { roU: number, roT: number }, ... }
  */
-export async function guardarRondaRoturas(patrullaId, rondaKey, datos) {
+export async function guardarRondaRoturas(patrullaId, rondaKey, datos, meta = {}) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
+  const metaFields = Object.fromEntries(
+    Object.entries(meta).map(([k, v]) => [`rondas.${rondaKey}.${k}`, v])
+  );
   await updateDoc(ref, {
+    ...metaFields,
     [`rondas.${rondaKey}.tipo`]: 'roturas',
     [`rondas.${rondaKey}.completada`]: true,
     [`rondas.${rondaKey}.hora`]: new Date().toISOString(),
@@ -155,9 +159,13 @@ export async function guardarRondaRoturas(patrullaId, rondaKey, datos) {
  * @param {string} patrullaId
  * @param {Object} datos - { maq_id: { defectos: [], sinDefectos: bool, metros: number, hora: string }, ... }
  */
-export async function guardarRondaTrama(patrullaId, datos) {
+export async function guardarRondaTrama(patrullaId, datos, meta = {}) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
+  const metaFields = Object.fromEntries(
+    Object.entries(meta).map(([k, v]) => [`rondas.ronda_3.${k}`, v])
+  );
   await updateDoc(ref, {
+    ...metaFields,
     ['rondas.ronda_3.tipo']: 'trama_negra',
     ['rondas.ronda_3.completada']: true,
     ['rondas.ronda_3.hora']: new Date().toISOString(),
@@ -216,6 +224,19 @@ export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos)
  * Carga historial de patrullas.
  * Si inspectorUid se pasa, filtra por ese inspector; si no, trae todas (para supervisores).
  */
+/**
+ * Carga patrullas para una fecha y turno específicos (para vista de seguimiento).
+ */
+export async function cargarPatrullasPorFechaTurno(fecha, turno) {
+  const q = query(
+    collection(db, COL_PATRULLAS),
+    where('fecha', '==', fecha),
+    where('turno', '==', turno),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30) {
   // Un solo orderBy evita requerir índice compuesto en Firestore.
   // El ordenado secundario por turno se hace en cliente.

@@ -219,7 +219,7 @@ const userRoleLabelClass = computed(() => {
 const tabIconMap = {
   AlertTriangle, BellRing, ScanSearch, Eye, ClipboardList,
   History, ShieldCheck, Settings2, Users, Stethoscope,
-  ScanLine, ClipboardCheck, Route,
+  ScanLine, ClipboardCheck, Route, Gauge,
 };
 
 const tabActions = computed(() => {

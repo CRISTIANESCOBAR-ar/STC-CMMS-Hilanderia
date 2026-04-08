@@ -17,6 +17,8 @@ const props = defineProps({
   rondaLabel:        { type: String,  default: '' },
   soloLectura:       { type: Boolean, default: false },
   patrullaIdExterno: { type: String,  default: null },
+  coberturaUid:      { type: String,  default: null },
+  coberturaNombre:   { type: String,  default: null },
 });
 
 const emit = defineEmits(['completada']);
@@ -258,9 +260,12 @@ async function completarRonda() {
   guardando.value = true;
   try {
     const datos = buildDatos();
+    const metaExtra = {};
+    if (props.coberturaUid) { metaExtra.cubiertoPor = props.coberturaUid; metaExtra.cubiertoNombre = props.coberturaNombre || ''; }
     await guardarRondaParoDefecto(patrullaId.value, props.rondaKey, datos, {
       rutaId: rutaSeleccionada.value?.id || null,
       rutaNombre: rutaSeleccionada.value?.nombre || null,
+      ...metaExtra,
     });
     if (!patrullaData.value.rondas) patrullaData.value.rondas = {};
     patrullaData.value.rondas[props.rondaKey] = { tipo: 'paro_defecto', completada: true, datos };

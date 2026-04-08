@@ -14,6 +14,8 @@ const emit = defineEmits(['completada']);
 const props = defineProps({
   soloLectura:       { type: Boolean, default: false },
   patrullaIdExterno: { type: String,  default: null },
+  coberturaUid:      { type: String,  default: null },
+  coberturaNombre:   { type: String,  default: null },
 });
 
 // ── Estado ───────────────────────────────────────────────────────
@@ -141,7 +143,9 @@ async function guardarYCerrar() {
           };
         }
       }
-      await guardarRondaTrama(patrullaId.value, datos);
+      const meta = {};
+      if (props.coberturaUid) { meta.cubiertoPor = props.coberturaUid; meta.cubiertoNombre = props.coberturaNombre || ''; }
+      await guardarRondaTrama(patrullaId.value, datos, meta);
       emit('completada');
     } catch (e) {
       console.error('Error guardando trama:', e);

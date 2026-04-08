@@ -436,32 +436,50 @@ onMounted(async () => {
 
       <!-- Ronda 1: Roturas -->
       <template v-else-if="subVista === 'roturas'">
-        <RegistroRoturas ronda-inicial="ronda_1" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <RegistroRoturas ronda-inicial="ronda_1" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 2: Paro/Defecto -->
       <template v-else-if="subVista === 'paro2'">
-        <RegistroParoDefecto ronda-key="ronda_2" ronda-label="Ronda 2 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_2" ronda-label="Ronda 2 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 3: Trama Negra -->
       <template v-else-if="subVista === 'trama'">
-        <PruebaTramaNegra :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <PruebaTramaNegra :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 4: Paro/Defecto -->
       <template v-else-if="subVista === 'paro4'">
-        <RegistroParoDefecto ronda-key="ronda_4" ronda-label="Ronda 4 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_4" ronda-label="Ronda 4 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 5: Paro/Defecto -->
       <template v-else-if="subVista === 'paro5'">
-        <RegistroParoDefecto ronda-key="ronda_5" ronda-label="Ronda 5 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_5" ronda-label="Ronda 5 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 6: Roturas (misma vista, distinta ronda seleccionada) -->
       <template v-else-if="subVista === 'roturas6'">
-        <RegistroRoturas ronda-inicial="ronda_6" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
+        <RegistroRoturas ronda-inicial="ronda_6" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId"
+          :cobertura-uid="cubriendo ? (userProfile?.uid || null) : null"
+          :cobertura-nombre="cubriendo ? (userProfile?.nombre || null) : null"
+          @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 7: Seguimiento/Evaluación -->

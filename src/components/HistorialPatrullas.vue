@@ -32,6 +32,8 @@ function resolverTelar(maqId) {
 }
 
 function getModelo(t, fallbackId) {
+  // Campo modelo explícito (ej: "JA7010", "Toyota JA7010")
+  if (t?.modelo) return String(t.modelo).trim();
   const raw = t
     ? String(t.nombre || t.maquina || t.id || '')
     : String(fallbackId || '');
@@ -334,7 +336,26 @@ function buildDetalleEvaluacion(patrulla) {
   const mejores = items.filter(i => (i.evalU === 'mejor' || i.evalT === 'mejor') && i.evalU !== 'peor' && i.evalT !== 'peor' && i.evalU !== 'leve' && i.evalT !== 'leve');
   const iguales = items.filter(i => i.evalU === 'igual' && i.evalT === 'igual');
 
-  return { tipo: 'evaluacion', peores, leves, mejores, iguales, total: items.length };
+  // Detectar si R6 es sospechosamente similar a R1 (>90% iguales, sin diferencias)
+  const totalSlots = (function() {
+    let c = 0;
+    for (const i of items) {
+      if (i.evalU !== null) c++;
+      if (i.evalT !== null) c++;
+    }
+    return c;
+  })();
+  const igualesSlots = (function() {
+    let c = 0;
+    for (const i of items) {
+      if (i.evalU === 'igual') c++;
+      if (i.evalT === 'igual') c++;
+    }
+    return c;
+  })();
+  const sospechoso = totalSlots > 10 && igualesSlots / totalSlots > 0.90;
+
+  return { tipo: 'evaluacion', peores, leves, mejores, iguales, total: items.length, sospechoso };
 }
 
 // ── Carga ────────────────────────────────────────────────────────
@@ -616,6 +637,11 @@ onMounted(async () => {
                         </div>
                         <template v-else>
                           <div class="px-3 py-2">
+                            <!-- Advertencia similitud sospechosa -->
+                            <div v-if="det.sospechoso"
+                                 class="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mb-2 text-[9px] text-amber-700 font-bold">
+                              ⚠️ R6 muy similar a R1 (&gt;90% sin cambio). Los datos de R6 podrían haber sido cargados incorrectamente.
+                            </div>
                             <!-- Encabezado columnas -->
                             <div class="grid grid-cols-[1fr_44px_44px_44px_44px_52px] gap-x-1.5 text-[8px] font-black text-gray-400 uppercase border-b border-gray-100 pb-1 mb-1">
                               <span>Telar</span>

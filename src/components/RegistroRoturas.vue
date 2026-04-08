@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { getAuth } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -253,6 +253,13 @@ onMounted(async () => {
   } finally {
     cargando.value = false;
   }
+});
+
+onUnmounted(() => {
+  clearTimeout(_autoSaveTimer);
+  clearTimeout(_autoSaveStatusTimer);
+  clearTimeout(_umbralTimer);
+  clearTimeout(_toastTimer);
 });
 
 // Respaldo: si userProfile cambia después del mounted (timing Firebase Auth),

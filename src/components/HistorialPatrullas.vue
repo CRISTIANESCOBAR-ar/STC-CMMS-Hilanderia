@@ -284,6 +284,59 @@ function buildDetalleRonda(patrulla, rondaKey) {
   return null;
 }
 
+function buildDetalleEvaluacion(patrulla) {
+  const d1 = patrulla.rondas?.ronda_1?.datos || {};
+  const d6 = patrulla.rondas?.ronda_6?.datos || {};
+  if (!Object.keys(d1).length && !Object.keys(d6).length) return null;
+
+  const allIds = new Set([...Object.keys(d1), ...Object.keys(d6)]);
+  const items = [];
+
+  for (const id of allIds) {
+    const t = resolverTelar(id);
+    const num = getNumero(t, id);
+    const nombre = telarNombre(id);
+    const r1U = d1[id]?.roU != null ? parseFloat(d1[id].roU) : null;
+    const r1T = d1[id]?.roT != null ? parseFloat(d1[id].roT) : null;
+    const r6U = d6[id]?.roU != null ? parseFloat(d6[id].roU) : null;
+    const r6T = d6[id]?.roT != null ? parseFloat(d6[id].roT) : null;
+
+    // Reutiliza la misma lógica de evaluación del historial
+    const evalU = (function(r1, r6) {
+      if (r1 == null || r6 == null) return null;
+      const diff = r6 - r1, abs = Math.abs(diff);
+      if (abs <= TOLS_ABS) return 'igual';
+      if (r1 === 0) return diff > 0 ? 'peor' : 'mejor';
+      const pct = (abs / Math.abs(r1)) * 100;
+      if (pct <= TOLS_PCT) return diff > 0 ? 'leve' : 'mejor';
+      return diff < 0 ? 'mejor' : 'peor';
+    })(r1U, r6U);
+
+    const evalT = (function(r1, r6) {
+      if (r1 == null || r6 == null) return null;
+      const diff = r6 - r1, abs = Math.abs(diff);
+      if (abs <= TOLS_ABS) return 'igual';
+      if (r1 === 0) return diff > 0 ? 'peor' : 'mejor';
+      const pct = (abs / Math.abs(r1)) * 100;
+      if (pct <= TOLS_PCT) return diff > 0 ? 'leve' : 'mejor';
+      return diff < 0 ? 'mejor' : 'peor';
+    })(r1T, r6T);
+
+    if (r1U == null && r1T == null && r6U == null && r6T == null) continue;
+    items.push({ id, nombre, num, r1U, r1T, r6U, r6T, evalU, evalT });
+  }
+
+  items.sort((a, b) => a.num - b.num);
+
+  // Separar por resultado para mostrar primero lo relevante
+  const peores  = items.filter(i => i.evalU === 'peor'  || i.evalT === 'peor');
+  const leves   = items.filter(i => (i.evalU === 'leve'  || i.evalT === 'leve') && i.evalU !== 'peor' && i.evalT !== 'peor');
+  const mejores = items.filter(i => (i.evalU === 'mejor' || i.evalT === 'mejor') && i.evalU !== 'peor' && i.evalT !== 'peor' && i.evalU !== 'leve' && i.evalT !== 'leve');
+  const iguales = items.filter(i => i.evalU === 'igual' && i.evalT === 'igual');
+
+  return { tipo: 'evaluacion', peores, leves, mejores, iguales, total: items.length };
+}
+
 // ── Carga ────────────────────────────────────────────────────────
 async function cargar() {
   cargando.value = true;
@@ -467,7 +520,7 @@ onMounted(async () => {
                       </div>
                       <!-- Botón Ver datos -->
                       <button
-                        v-if="(p.rondas?.[rDef.key]?.completada || p.rondas?.[rDef.key]?.datos) && rDef.tipo !== 'evaluacion'"
+                        v-if="p.rondas?.[rDef.key]?.completada || p.rondas?.[rDef.key]?.datos"
                         @click.stop="toggleRondaDetalle(p.id, rDef.key)"
                         class="shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded transition-all"
                         :class="rondaDetalle?.patId === p.id && rondaDetalle?.key === rDef.key
@@ -481,7 +534,7 @@ onMounted(async () => {
                     <!-- Panel de detalle inline -->
                     <div v-if="rondaDetalle?.patId === p.id && rondaDetalle?.key === rDef.key"
                          class="mx-1 mb-1 rounded-lg border border-indigo-100 bg-white overflow-hidden">
-                      <template v-for="det in [buildDetalleRonda(p, rDef.key)]" :key="rDef.key + '_det'">
+                      <template v-if="rDef.tipo !== 'evaluacion'" v-for="det in [buildDetalleRonda(p, rDef.key)]" :key="rDef.key + '_det'">
                         <div v-if="!det" class="px-3 py-3 text-[10px] text-gray-400 text-center italic">
                           Sin datos registrados
                         </div>
@@ -552,6 +605,82 @@ onMounted(async () => {
                               </span>
                               <span v-else class="text-[9px] text-gray-400">—</span>
                             </div>
+                          </div>
+                        </template>
+                      </template>
+
+                      <!-- Evaluación R7 -->
+                      <template v-if="rDef.tipo === 'evaluacion'" v-for="det in [buildDetalleEvaluacion(p)]" :key="rDef.key + '_eval'">
+                        <div v-if="!det" class="px-3 py-3 text-[10px] text-gray-400 text-center italic">
+                          Sin datos de R1 o R6 para comparar
+                        </div>
+                        <template v-else>
+                          <div class="px-3 py-2">
+                            <!-- Encabezado columnas -->
+                            <div class="grid grid-cols-[1fr_44px_44px_44px_44px_52px] gap-x-1.5 text-[8px] font-black text-gray-400 uppercase border-b border-gray-100 pb-1 mb-1">
+                              <span>Telar</span>
+                              <span class="text-right">Urd R1</span>
+                              <span class="text-right">Urd R6</span>
+                              <span class="text-right">Tra R1</span>
+                              <span class="text-right">Tra R6</span>
+                              <span class="text-center">Estado</span>
+                            </div>
+
+                            <!-- Empeoramientos primero -->
+                            <template v-if="det.peores.length">
+                              <p class="text-[8px] font-black text-red-500 uppercase tracking-wider mt-1 mb-0.5">🔴 Empeoramientos ({{ det.peores.length }})</p>
+                              <div v-for="item in det.peores" :key="item.id"
+                                   class="grid grid-cols-[1fr_44px_44px_44px_44px_52px] gap-x-1.5 py-0.5 border-b border-red-50 last:border-0 bg-red-50/40">
+                                <span class="font-bold text-gray-700 truncate text-[10px]">{{ item.nombre }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black" :class="item.evalU === 'peor' ? 'text-red-600' : 'text-gray-700'">{{ item.r6U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1T?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black" :class="item.evalT === 'peor' ? 'text-red-600' : 'text-gray-700'">{{ item.r6T?.toFixed(1) ?? '—' }}</span>
+                                <div class="flex flex-col gap-0.5 items-center">
+                                  <span v-if="item.evalU === 'peor'" class="text-[8px] font-black bg-red-100 text-red-700 rounded px-1">↑Urd</span>
+                                  <span v-if="item.evalT === 'peor'" class="text-[8px] font-black bg-red-100 text-red-700 rounded px-1">↑Tra</span>
+                                </div>
+                              </div>
+                            </template>
+
+                            <!-- Leves -->
+                            <template v-if="det.leves.length">
+                              <p class="text-[8px] font-black text-amber-500 uppercase tracking-wider mt-1.5 mb-0.5">⚠️ Leves ({{ det.leves.length }})</p>
+                              <div v-for="item in det.leves" :key="item.id"
+                                   class="grid grid-cols-[1fr_44px_44px_44px_44px_52px] gap-x-1.5 py-0.5 border-b border-amber-50 last:border-0 bg-amber-50/40">
+                                <span class="font-bold text-gray-700 truncate text-[10px]">{{ item.nombre }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black" :class="item.evalU === 'leve' ? 'text-amber-600' : 'text-gray-700'">{{ item.r6U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1T?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black" :class="item.evalT === 'leve' ? 'text-amber-600' : 'text-gray-700'">{{ item.r6T?.toFixed(1) ?? '—' }}</span>
+                                <div class="flex flex-col gap-0.5 items-center">
+                                  <span v-if="item.evalU === 'leve'" class="text-[8px] font-black bg-amber-100 text-amber-700 rounded px-1">↑Urd</span>
+                                  <span v-if="item.evalT === 'leve'" class="text-[8px] font-black bg-amber-100 text-amber-700 rounded px-1">↑Tra</span>
+                                </div>
+                              </div>
+                            </template>
+
+                            <!-- Mejoras -->
+                            <template v-if="det.mejores.length">
+                              <p class="text-[8px] font-black text-emerald-600 uppercase tracking-wider mt-1.5 mb-0.5">🟢 Mejoras ({{ det.mejores.length }})</p>
+                              <div v-for="item in det.mejores" :key="item.id"
+                                   class="grid grid-cols-[1fr_44px_44px_44px_44px_52px] gap-x-1.5 py-0.5 border-b border-emerald-50 last:border-0 bg-emerald-50/40">
+                                <span class="font-bold text-gray-700 truncate text-[10px]">{{ item.nombre }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black text-emerald-700">{{ item.r6U?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-medium text-gray-500">{{ item.r1T?.toFixed(1) ?? '—' }}</span>
+                                <span class="text-right text-[10px] font-black text-emerald-700">{{ item.r6T?.toFixed(1) ?? '—' }}</span>
+                                <div class="flex flex-col gap-0.5 items-center">
+                                  <span v-if="item.evalU === 'mejor'" class="text-[8px] font-black bg-emerald-100 text-emerald-700 rounded px-1">↓Urd</span>
+                                  <span v-if="item.evalT === 'mejor'" class="text-[8px] font-black bg-emerald-100 text-emerald-700 rounded px-1">↓Tra</span>
+                                </div>
+                              </div>
+                            </template>
+
+                            <!-- Iguales colapsados -->
+                            <p v-if="det.iguales.length" class="text-[8px] text-gray-400 font-medium mt-2 text-center">
+                              ➖ {{ det.iguales.length }} telares sin cambio significativo
+                            </p>
                           </div>
                         </template>
                       </template>

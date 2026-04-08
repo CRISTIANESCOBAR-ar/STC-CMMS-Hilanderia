@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoLabel } from '../constants/organization';
+import { ESTADOS_TELAR, DEFECTOS_TRAMA } from '../constants/organization';
 import { cargarHistorialPatrullas } from '../services/patrullaService';
 import {
   ArrowLeft, Loader2, ChevronDown, ChevronUp,
@@ -21,7 +22,8 @@ const abierta     = ref(null);
 const soloPropias = ref(true);
 
 const esSupervisorOAdmin = computed(() =>
-  ['supervisor', 'supervisor_mecanico', 'admin', 'gerente_produccion', 'jefe_produccion'].includes(userRole.value)
+  ['supervisor', 'supervisor_mecanico', 'admin', 'gerente_produccion', 'jefe_produccion']
+    .includes(userProfile.value?.role || userRole.value)
 );
 
 // ── Helpers de nombre de máquina ───────────────────────────────────
@@ -168,6 +170,118 @@ function horaRonda(isoStr) {
 // ── Toggle expansión ─────────────────────────────────────────────
 function togglePatrulla(id) {
   abierta.value = abierta.value === id ? null : id;
+  if (rondaDetalle.value?.patId !== id) rondaDetalle.value = null;
+}
+
+// ── Timeline de rondas ───────────────────────────────────────────
+const RONDAS_DEF = [
+  { key: 'ronda_1', num: 1, label: 'Roturas',        tipo: 'roturas'      },
+  { key: 'ronda_2', num: 2, label: 'Paros/Defectos', tipo: 'paro_defecto' },
+  { key: 'ronda_3', num: 3, label: 'Trama Negra',    tipo: 'trama_negra'  },
+  { key: 'ronda_4', num: 4, label: 'Paros/Defectos', tipo: 'paro_defecto' },
+  { key: 'ronda_5', num: 5, label: 'Paros/Defectos', tipo: 'paro_defecto' },
+  { key: 'ronda_6', num: 6, label: 'Roturas',        tipo: 'roturas'      },
+  { key: 'ronda_7', num: 7, label: 'Evaluación',     tipo: 'evaluacion'   },
+];
+
+const rondaDetalle = ref(null); // { patId, key }
+function toggleRondaDetalle(patId, key) {
+  if (rondaDetalle.value?.patId === patId && rondaDetalle.value?.key === key) {
+    rondaDetalle.value = null;
+  } else {
+    rondaDetalle.value = { patId, key };
+  }
+}
+
+function calcDuracion(inicio, fin) {
+  if (!inicio || !fin) return null;
+  const mins = Math.round((new Date(fin) - new Date(inicio)) / 60000);
+  if (mins < 0 || isNaN(mins)) return null;
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function horaInicioAprox(rondaData) {
+  if (!rondaData) return null;
+  if (rondaData.horaInicio) return rondaData.horaInicio;
+  if (!rondaData.datos) return null;
+  const hs = Object.values(rondaData.datos).map(d => d?.hora).filter(Boolean).sort();
+  return hs[0] || null;
+}
+
+function telarNombre(id) {
+  const t = resolverTelar(id);
+  return t ? (t.nombre || t.maquina || id) : id;
+}
+
+function estadoBgClass(estadoId) {
+  const map = {
+    trabajando:         'bg-emerald-100 text-emerald-700',
+    paro_mecanico:      'bg-red-100 text-red-700',
+    paro_electrico:     'bg-amber-100 text-amber-700',
+    cambio_articulo:    'bg-blue-100 text-blue-700',
+    sin_urdido:         'bg-purple-100 text-purple-700',
+    paro_calidad:       'bg-rose-100 text-rose-700',
+    mantenimiento:      'bg-cyan-100 text-cyan-700',
+    otro:               'bg-gray-100 text-gray-600',
+  };
+  return map[estadoId] || 'bg-gray-100 text-gray-600';
+}
+
+function estadoLbl(estadoId) {
+  return ESTADOS_TELAR.find(e => e.id === estadoId)?.label || estadoId || '—';
+}
+
+function defectoLabel(id) {
+  return DEFECTOS_TRAMA.find(d => d.id === id)?.label || id;
+}
+
+function buildDetalleRonda(patrulla, rondaKey) {
+  const r = patrulla.rondas?.[rondaKey];
+  if (!r?.datos) return null;
+  const tipo = r.tipo;
+  const datos = r.datos;
+
+  if (tipo === 'roturas') {
+    return {
+      tipo,
+      items: Object.entries(datos).map(([id, d]) => ({
+        id, nombre: telarNombre(id), num: getNumero(resolverTelar(id), id),
+        roU: d.roU != null ? parseFloat(d.roU) : null,
+        roT: d.roT != null ? parseFloat(d.roT) : null,
+        hora: d.hora,
+      })).sort((a, b) => a.num - b.num),
+    };
+  }
+
+  if (tipo === 'paro_defecto') {
+    return {
+      tipo,
+      rutaNombre: r.rutaNombre || null,
+      items: Object.entries(datos)
+        .map(([id, d]) => ({
+          id, nombre: telarNombre(id), num: getNumero(resolverTelar(id), id),
+          estado: d.estado, observacion: d.observacion,
+          defectoCalidad: d.defectoCalidad, intervencion: d.intervencion, hora: d.hora,
+        }))
+        .filter(i => i.estado)
+        .sort((a, b) => a.hora && b.hora ? a.hora.localeCompare(b.hora) : a.num - b.num),
+    };
+  }
+
+  if (tipo === 'trama_negra') {
+    return {
+      tipo,
+      items: Object.entries(datos).map(([id, d]) => ({
+        id, nombre: telarNombre(id), num: getNumero(resolverTelar(id), id),
+        sinDefecto: d.sinDefecto, defectos: d.defectos || [],
+      })).sort((a, b) => a.num - b.num),
+    };
+  }
+
+  return null;
 }
 
 // ── Carga ────────────────────────────────────────────────────────
@@ -304,33 +418,145 @@ onMounted(async () => {
             <!-- Detalle expandido -->
             <div v-if="abierta === p.id" class="border-t border-gray-100 bg-gray-50/60 px-4 py-3 space-y-3">
 
-              <!-- Estado rondas -->
+              <!-- Timeline de rondas con tiempos y drill-down -->
               <div>
-                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Rondas</p>
-                <div class="flex flex-wrap gap-1.5">
-                  <span
-                    v-for="(label, key) in {
-                      ronda_1: 'R1 Roturas',
-                      ronda_2: 'R2 Paros',
-                      ronda_3: 'R3 Trama',
-                      ronda_4: 'R4 Paros',
-                      ronda_5: 'R5 Paros',
-                      ronda_6: 'R6 Roturas',
-                      ronda_7: 'R7 Eval.',
-                    }"
-                    :key="key"
-                    class="text-sm font-black px-2.5 py-1 rounded-full"
-                    :class="p.rondas?.[key]?.completada
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : p.rondas?.[key]?.datos || p.rondas?.[key]?.horaInicio
-                        ? 'bg-blue-100 text-blue-600'
-                        : 'bg-gray-100 text-gray-400'"
-                  >
-                    {{ p.rondas?.[key]?.completada ? '✓' : '·' }} {{ label }}
-                    <span v-if="p.rondas?.[key]?.hora" class="font-black opacity-80">
-                      {{ horaRonda(p.rondas[key].hora) }}
-                    </span>
-                  </span>
+                <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Rondas</p>
+                <div class="space-y-0.5">
+                  <div v-for="rDef in RONDAS_DEF" :key="rDef.key">
+                    <!-- Fila de ronda -->
+                    <div
+                      class="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                      :class="p.rondas?.[rDef.key]?.completada
+                        ? 'bg-emerald-50'
+                        : (p.rondas?.[rDef.key]?.datos || p.rondas?.[rDef.key]?.horaInicio)
+                          ? 'bg-blue-50' : ''"
+                    >
+                      <!-- Dot estado -->
+                      <div class="w-2 h-2 rounded-full shrink-0"
+                           :class="p.rondas?.[rDef.key]?.completada
+                             ? 'bg-emerald-500'
+                             : (p.rondas?.[rDef.key]?.datos || p.rondas?.[rDef.key]?.horaInicio)
+                               ? 'bg-blue-400' : 'bg-gray-300'">
+                      </div>
+                      <!-- Número + nombre -->
+                      <span class="text-[9px] font-black text-gray-400 w-5 shrink-0">R{{ rDef.num }}</span>
+                      <span class="text-[11px] font-bold flex-1 min-w-0 truncate"
+                            :class="p.rondas?.[rDef.key]?.completada
+                              ? 'text-emerald-700'
+                              : (p.rondas?.[rDef.key]?.datos || p.rondas?.[rDef.key]?.horaInicio)
+                                ? 'text-blue-600' : 'text-gray-400'">
+                        {{ rDef.label }}
+                      </span>
+                      <!-- Timing inicio → fin + duración -->
+                      <div v-if="p.rondas?.[rDef.key]?.completada || p.rondas?.[rDef.key]?.horaInicio"
+                           class="shrink-0 flex items-center gap-1 text-[9px]">
+                        <span v-if="horaInicioAprox(p.rondas?.[rDef.key])" class="text-gray-500">
+                          {{ horaRonda(horaInicioAprox(p.rondas[rDef.key])) }}
+                        </span>
+                        <span v-if="horaInicioAprox(p.rondas?.[rDef.key]) && p.rondas?.[rDef.key]?.hora"
+                              class="text-gray-400">→</span>
+                        <span v-if="p.rondas?.[rDef.key]?.hora" class="font-black text-emerald-600">
+                          {{ horaRonda(p.rondas[rDef.key].hora) }}
+                        </span>
+                        <span v-if="p.rondas?.[rDef.key]?.completada && calcDuracion(horaInicioAprox(p.rondas[rDef.key]), p.rondas[rDef.key].hora)"
+                              class="ml-0.5 bg-emerald-100 text-emerald-700 font-black rounded px-1 text-[8px]">
+                          {{ calcDuracion(horaInicioAprox(p.rondas[rDef.key]), p.rondas[rDef.key].hora) }}
+                        </span>
+                        <span v-else-if="!p.rondas?.[rDef.key]?.completada && p.rondas?.[rDef.key]?.horaInicio"
+                              class="text-[9px] text-blue-500 font-bold">en curso</span>
+                      </div>
+                      <!-- Botón Ver datos -->
+                      <button
+                        v-if="(p.rondas?.[rDef.key]?.completada || p.rondas?.[rDef.key]?.datos) && rDef.tipo !== 'evaluacion'"
+                        @click.stop="toggleRondaDetalle(p.id, rDef.key)"
+                        class="shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded transition-all"
+                        :class="rondaDetalle?.patId === p.id && rondaDetalle?.key === rDef.key
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:text-indigo-600'"
+                      >
+                        {{ rondaDetalle?.patId === p.id && rondaDetalle?.key === rDef.key ? '✕' : 'Ver ›' }}
+                      </button>
+                    </div>
+
+                    <!-- Panel de detalle inline -->
+                    <div v-if="rondaDetalle?.patId === p.id && rondaDetalle?.key === rDef.key"
+                         class="mx-1 mb-1 rounded-lg border border-indigo-100 bg-white overflow-hidden">
+                      <template v-for="det in [buildDetalleRonda(p, rDef.key)]" :key="rDef.key + '_det'">
+                        <div v-if="!det" class="px-3 py-3 text-[10px] text-gray-400 text-center italic">
+                          Sin datos registrados
+                        </div>
+
+                        <!-- Roturas -->
+                        <template v-else-if="det.tipo === 'roturas'">
+                          <div class="px-3 py-2">
+                            <div class="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-[9px] font-black text-gray-400 uppercase border-b border-gray-100 pb-1 mb-1">
+                              <span>Telar</span><span class="text-right">Rot.Urd</span><span class="text-right">Rot.Trama</span><span class="text-right">Hora</span>
+                            </div>
+                            <div v-for="item in det.items" :key="item.id"
+                                 class="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 py-0.5 text-[10px] border-b border-gray-50 last:border-0">
+                              <span class="font-bold text-gray-700 truncate">{{ item.nombre }}</span>
+                              <span class="font-black text-right"
+                                    :class="item.roU != null && item.roU >= 2 ? 'text-red-600' : 'text-gray-600'">
+                                {{ item.roU?.toFixed(1) ?? '—' }}
+                              </span>
+                              <span class="font-black text-right"
+                                    :class="item.roT != null && item.roT >= 3 ? 'text-red-600' : 'text-gray-600'">
+                                {{ item.roT?.toFixed(1) ?? '—' }}
+                              </span>
+                              <span class="text-gray-400 text-right text-[9px]">{{ item.hora ? horaRonda(item.hora) : '—' }}</span>
+                            </div>
+                          </div>
+                        </template>
+
+                        <!-- Paro / Defecto -->
+                        <template v-else-if="det.tipo === 'paro_defecto'">
+                          <div class="px-3 py-2">
+                            <div v-if="det.rutaNombre" class="text-[9px] font-black text-indigo-600 mb-2">
+                              📍 Ruta: {{ det.rutaNombre }}
+                            </div>
+                            <div v-for="(item, idx) in det.items" :key="item.id"
+                                 class="flex items-start gap-2 py-1 border-b border-gray-50 last:border-0">
+                              <span class="text-[9px] text-gray-400 font-bold w-4 shrink-0 mt-0.5">{{ idx + 1 }}</span>
+                              <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                  <span class="text-[10px] font-black text-gray-700">{{ item.nombre }}</span>
+                                  <span class="text-[9px] font-black px-1.5 py-0.5 rounded-full" :class="estadoBgClass(item.estado)">
+                                    {{ estadoLbl(item.estado) }}
+                                  </span>
+                                  <span v-if="item.defectoCalidad" class="text-[9px] bg-rose-50 text-rose-600 font-bold px-1.5 py-0.5 rounded-full border border-rose-200">
+                                    {{ defectoLabel(item.defectoCalidad) }}
+                                  </span>
+                                  <span v-if="item.intervencion" class="text-[9px] bg-orange-50 text-orange-600 font-black px-1.5 py-0.5 rounded-full border border-orange-200">
+                                    🔧 Interv.
+                                  </span>
+                                </div>
+                                <p v-if="item.observacion" class="text-[9px] text-gray-500 mt-0.5 italic">{{ item.observacion }}</p>
+                              </div>
+                              <span v-if="item.hora" class="text-[8px] text-gray-400 shrink-0 mt-0.5">{{ horaRonda(item.hora) }}</span>
+                            </div>
+                            <div v-if="!det.items.length" class="text-[10px] text-gray-400 italic text-center py-2">
+                              Ningún telar registrado en esta ronda
+                            </div>
+                          </div>
+                        </template>
+
+                        <!-- Trama Negra -->
+                        <template v-else-if="det.tipo === 'trama_negra'">
+                          <div class="px-3 py-2 space-y-0.5">
+                            <div v-for="item in det.items" :key="item.id"
+                                 class="flex items-center gap-2 py-0.5 border-b border-gray-50 last:border-0">
+                              <span class="text-[10px] font-bold text-gray-700 flex-1">{{ item.nombre }}</span>
+                              <span v-if="item.sinDefecto" class="text-[9px] font-black text-emerald-600">✓ Sin defecto</span>
+                              <span v-else-if="item.defectos.length" class="text-[9px] font-bold text-rose-600">
+                                {{ item.defectos.map(d => defectoLabel(d)).join(', ') }}
+                              </span>
+                              <span v-else class="text-[9px] text-gray-400">—</span>
+                            </div>
+                          </div>
+                        </template>
+                      </template>
+                    </div>
+                  </div>
                 </div>
               </div>
 

@@ -143,12 +143,10 @@ export async function iniciarRonda(patrullaId, rondaKey, tipo) {
 export async function guardarRondaRoturas(patrullaId, rondaKey, datos) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
   await updateDoc(ref, {
-    [`rondas.${rondaKey}`]: {
-      tipo: 'roturas',
-      completada: true,
-      hora: new Date().toISOString(),
-      datos,
-    },
+    [`rondas.${rondaKey}.tipo`]: 'roturas',
+    [`rondas.${rondaKey}.completada`]: true,
+    [`rondas.${rondaKey}.hora`]: new Date().toISOString(),
+    [`rondas.${rondaKey}.datos`]: datos,
   });
 }
 
@@ -160,12 +158,10 @@ export async function guardarRondaRoturas(patrullaId, rondaKey, datos) {
 export async function guardarRondaTrama(patrullaId, datos) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
   await updateDoc(ref, {
-    ['rondas.ronda_3']: {
-      tipo: 'trama_negra',
-      completada: true,
-      hora: new Date().toISOString(),
-      datos,
-    },
+    ['rondas.ronda_3.tipo']: 'trama_negra',
+    ['rondas.ronda_3.completada']: true,
+    ['rondas.ronda_3.hora']: new Date().toISOString(),
+    ['rondas.ronda_3.datos']: datos,
   });
 }
 
@@ -174,14 +170,15 @@ export async function guardarRondaTrama(patrullaId, datos) {
  */
 export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos, meta = {}) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
+  const metaFields = Object.fromEntries(
+    Object.entries(meta).map(([k, v]) => [`rondas.${rondaKey}.${k}`, v])
+  );
   await updateDoc(ref, {
-    [`rondas.${rondaKey}`]: {
-      tipo: 'paro_defecto',
-      completada: true,
-      hora: new Date().toISOString(),
-      datos,
-      ...meta,
-    },
+    [`rondas.${rondaKey}.tipo`]: 'paro_defecto',
+    [`rondas.${rondaKey}.completada`]: true,
+    [`rondas.${rondaKey}.hora`]: new Date().toISOString(),
+    [`rondas.${rondaKey}.datos`]: datos,
+    ...metaFields,
   });
 }
 

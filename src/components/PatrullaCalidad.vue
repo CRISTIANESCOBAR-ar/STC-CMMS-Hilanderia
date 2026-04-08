@@ -44,6 +44,8 @@ const esInspectorPropio = computed(() => {
 const puedeEditar = computed(() => {
   if (esInspectorPropio.value) return true;
   if (cubriendo.value) return true;
+  // Admin siempre puede editar (incluso en modo Vista Previa donde userRole puede ser distinto)
+  if (userProfile.value?.role === 'admin') return true;
   return false;
 });
 

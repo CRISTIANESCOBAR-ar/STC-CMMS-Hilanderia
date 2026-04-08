@@ -5,7 +5,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR } from '../constants/organization';
-import { loadPatrullaConfig, cargarPatrullaActiva, crearPatrulla, guardarRondaRoturas, guardarRondaParcial, cargarRutasPatrulla, cargarPatrullaPorId } from '../services/patrullaService';
+import { loadPatrullaConfig, cargarPatrullaActiva, crearPatrulla, guardarRondaRoturas, guardarRondaParcial, cargarRutasPatrulla, cargarPatrullaPorId, iniciarRonda } from '../services/patrullaService';
 import { useRouter } from 'vue-router';
 import { Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Share2, CloudUpload, Zap, Lock } from 'lucide-vue-next';
 import { intervencionService } from '../services/intervencionService';
@@ -234,6 +234,9 @@ onMounted(async () => {
         patrullaId.value = activa.id;
         patrullaData.value = activa;
         cargarDatosRonda(activa, rondaSeleccionada.value);
+        if (!props.soloLectura && !activa.rondas?.[rondaSeleccionada.value]?.horaInicio) {
+          iniciarRonda(activa.id, rondaSeleccionada.value, 'roturas').catch(() => {});
+        }
       } else if (!props.patrullaIdExterno) {
         const nueva = await crearPatrulla({
           inspectorUid: uid,

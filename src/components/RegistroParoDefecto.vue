@@ -6,7 +6,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR, ESTADOS_TELAR, DEFECTOS_TRAMA } from '../constants/organization';
-import { cargarPatrullaActiva, crearPatrulla, guardarRondaParoDefecto, guardarRondaParcialGenerico, cargarPatrullaPorId, cargarRutasPatrulla } from '../services/patrullaService';
+import { cargarPatrullaActiva, crearPatrulla, guardarRondaParoDefecto, guardarRondaParcialGenerico, cargarPatrullaPorId, cargarRutasPatrulla, iniciarRonda } from '../services/patrullaService';
 import Swal from 'sweetalert2';
 import { Check, Loader2, ChevronDown, ChevronUp, CloudUpload, AlertTriangle, X, Wrench, Zap } from 'lucide-vue-next';
 
@@ -315,6 +315,9 @@ onMounted(async () => {
         patrullaId.value = activa.id;
         patrullaData.value = activa;
         cargarDatosRonda(activa);
+        if (!props.soloLectura && !activa.rondas?.[props.rondaKey]?.horaInicio) {
+          iniciarRonda(activa.id, props.rondaKey, 'paro_defecto').catch(() => {});
+        }
       } else if (!props.patrullaIdExterno) {
         const nueva = await crearPatrulla({
           inspectorUid: uid,

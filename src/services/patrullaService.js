@@ -236,6 +236,21 @@ export async function cargarPatrullaPorId(patrullaId) {
 }
 
 /**
+ * Auto-completa R7 (Evaluación) con el resumen calculado desde R1 y R6.
+ * Se llama desde PatrullaCalidad cuando ambas rondas están completadas.
+ */
+export async function autoCompletarRondaEvaluacion(patrullaId, resumen) {
+  const ref = doc(db, COL_PATRULLAS, patrullaId);
+  await updateDoc(ref, {
+    ['rondas.ronda_7.tipo']: 'evaluacion',
+    ['rondas.ronda_7.completada']: true,
+    ['rondas.ronda_7.hora']: new Date().toISOString(),
+    ['rondas.ronda_7.calculadoAutomatico']: true,
+    ['rondas.ronda_7.resumen']: resumen,
+  });
+}
+
+/**
  * Reabre una ronda completada quitando el flag completada.
  * Conserva los datos cargados para que el inspector pueda corregirlos.
  */

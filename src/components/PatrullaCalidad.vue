@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
-import { cargarPatrullaActiva, cargarPatrullasTurnoActual, cargarPatrullaPorId, reabrirRonda } from '../services/patrullaService';
+import { cargarPatrullaActiva, cargarPatrullasTurnoActual, cargarPatrullaPorId, reabrirRonda, autoCompletarRondaEvaluacion } from '../services/patrullaService';
 import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors, UserCheck, EyeOff, ChevronDown, ChevronUp } from 'lucide-vue-next';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroMuestrasAnudados from './RegistroMuestrasAnudados.vue';
@@ -126,7 +126,55 @@ function irARonda(ronda) {
 
 async function onRondaCompletada() {
   await cargarPatrulla();
+  await autoEvaluarR7();
   router.push('/patrulla');
+}
+
+// ── Auto-completado R7 ──────────────────────────────────────────
+// Tolerancia igual que SeguimientoRoturas.vue
+const _TOLS_ABS = 0.5, _TOLS_PCT = 20;
+function _evalCambio(r1, r6) {
+  if (r1 == null || r6 == null || isNaN(r1) || isNaN(r6)) return null;
+  const diff = r6 - r1, abs = Math.abs(diff);
+  if (abs <= _TOLS_ABS) return 'igual';
+  if (r1 === 0) return diff > 0 ? 'peor' : 'mejor';
+  const pct = (abs / Math.abs(r1)) * 100;
+  if (pct <= _TOLS_PCT) return diff > 0 ? 'leve' : 'mejor';
+  return diff < 0 ? 'mejor' : 'peor';
+}
+
+async function autoEvaluarR7() {
+  if (!patrullaData.value?.id) return;
+  const rondas = patrullaData.value.rondas || {};
+  if (!rondas.ronda_1?.completada || !rondas.ronda_6?.completada) return;
+  if (rondas.ronda_7?.completada) return; // ya guardada
+
+  const d1 = rondas.ronda_1.datos || {};
+  const d6 = rondas.ronda_6.datos || {};
+  let mejoras = 0, empeoramientos = 0, leves = 0, iguales = 0;
+  const allIds = new Set([...Object.keys(d1), ...Object.keys(d6)]);
+  for (const id of allIds) {
+    for (const [v1, v6] of [
+      [d1[id]?.roU, d6[id]?.roU],
+      [d1[id]?.roT, d6[id]?.roT],
+    ]) {
+      const e = _evalCambio(
+        v1 != null ? parseFloat(v1) : null,
+        v6 != null ? parseFloat(v6) : null,
+      );
+      if (e === 'mejor') mejoras++;
+      else if (e === 'peor') empeoramientos++;
+      else if (e === 'leve') leves++;
+      else if (e === 'igual') iguales++;
+    }
+  }
+
+  try {
+    await autoCompletarRondaEvaluacion(patrullaData.value.id, { mejoras, empeoramientos, leves, iguales });
+    await cargarPatrulla(); // refrescar hub para mostrar R7 completada
+  } catch (e) {
+    console.error('Error auto-completando R7:', e);
+  }
 }
 
 async function cargarPatrulla() {
@@ -174,6 +222,8 @@ async function seleccionarPatrulla(id) {
 onMounted(async () => {
   await cargarPatrulla();
   cargandoPatrulla.value = false;
+  // Si al cargar ya están R1 y R6 completadas y R7 no, auto-completar
+  await autoEvaluarR7();
 });
 </script>
 

@@ -1,11 +1,14 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { authService, userRole, previewSector } from './services/authService';
+import { authService, userRole, userProfile, previewSector } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge, BookMarked } from 'lucide-vue-next';
 import { ROLE_LABEL, ROLE_OPTIONS, SECTOR_OPTIONS, isJefeRole, getQuickActions } from './constants/organization';
-import { canAccessView, getDefaultRoute } from './services/profileService';
+import { canAccessViewForUser, getDefaultRouteForUser } from './services/profileService';
 import Swal from 'sweetalert2';
+
+// Wrapper compatible con el template: respeta overrides por usuario
+const canAccessView = (role, slug) => canAccessViewForUser(role, slug, userProfile.value?.vistasPersonalizadas);
 
 const router = useRouter();
 const isAuthReady = ref(false);

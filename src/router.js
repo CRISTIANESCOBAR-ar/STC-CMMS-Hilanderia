@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { authService, userRole, authReady } from './services/authService'
+import { authService, userRole, userProfile, authReady } from './services/authService'
 import { auth } from './firebase/config'
-import { loadProfiles, canAccessRoute, getDefaultRoute } from './services/profileService'
+import { loadProfiles, canAccessRouteForUser, getDefaultRouteForUser } from './services/profileService'
 
 // Login se carga inmediato (primera pantalla), el resto lazy
 import LoginView from './components/LoginView.vue'
@@ -55,11 +55,12 @@ router.beforeEach(async (to, from) => {
     }
     await loadProfiles();
 
+    const vistasUser = userProfile.value?.vistasPersonalizadas ?? null;
     if (to.path === '/login') {
-      return getDefaultRoute(userRole.value);
+      return getDefaultRouteForUser(userRole.value, vistasUser);
     }
-    if (requiresAuth && !canAccessRoute(userRole.value, to.path)) {
-      const fallback = getDefaultRoute(userRole.value);
+    if (requiresAuth && !canAccessRouteForUser(userRole.value, to.path, vistasUser)) {
+      const fallback = getDefaultRouteForUser(userRole.value, vistasUser);
       if (fallback === to.path) return true;
       return fallback;
     }

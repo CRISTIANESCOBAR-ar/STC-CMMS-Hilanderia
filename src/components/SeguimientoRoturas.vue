@@ -5,10 +5,14 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR, getTurnoLabel } from '../constants/organization';
-import { loadPatrullaConfig, cargarPatrullaActiva } from '../services/patrullaService';
+import { loadPatrullaConfig, cargarPatrullaActiva, cargarPatrullaPorId } from '../services/patrullaService';
 import { Loader2, TrendingDown, TrendingUp, Minus, Share2, AlertTriangle, ChevronDown } from 'lucide-vue-next';
 
 // ── Estado ───────────────────────────────────────────────────────
+const props = defineProps({
+  patrullaIdExterno: { type: String, default: null },
+});
+
 const telares = ref([]);
 const config = ref({ umbralRoturaU: 2, umbralRoturaT: 3 });
 const patrullaData = ref(null);
@@ -259,7 +263,9 @@ onMounted(async () => {
 
     const uid = getAuth().currentUser?.uid;
     if (uid) {
-      const activa = await cargarPatrullaActiva(uid);
+      const activa = props.patrullaIdExterno
+        ? await cargarPatrullaPorId(props.patrullaIdExterno)
+        : await cargarPatrullaActiva(uid);
       if (activa) patrullaData.value = activa;
     }
   } catch (e) {

@@ -1,12 +1,11 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
 import { getTurnoActual, getTurnoLabel } from '../constants/organization';
-import { cargarPatrullaActiva } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors } from 'lucide-vue-next';
-import { reabrirRonda } from '../services/patrullaService';
+import { cargarPatrullaActiva, cargarPatrullasTurnoActual, cargarPatrullaPorId, reabrirRonda } from '../services/patrullaService';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors, UserCheck, EyeOff, ChevronDown, ChevronUp } from 'lucide-vue-next';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroMuestrasAnudados from './RegistroMuestrasAnudados.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
@@ -21,6 +20,36 @@ const turnoActual = ref(getTurnoActual());
 const subVista = computed(() => route.params.sub || null);
 const patrullaData = ref(null);
 const cargandoPatrulla = ref(true);
+const headerColapsado = ref(true); // colapsado por defecto al entrar a una ronda
+
+// Auto-colapsar cuando se entra a una sub-vista
+watch(subVista, (val) => { if (val) headerColapsado.value = true; }, { immediate: true });
+
+// ── Roles que pueden VER patrullas de otros inspectores (solo lectura) ──
+const ROLES_OBSERVADOR = ['supervisor', 'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion', 'admin'];
+
+// ── Solo lectura / cobertura ─────────────────────────────────────
+const cubriendo = ref(false);
+const todasPatrullas = ref([]);           // patrullas activas del turno
+const patrullaExternaId = ref(null);      // ID de la patrulla vista (no propia)
+
+const esInspectorPropio = computed(() => {
+  if (!patrullaData.value) return false;
+  const uid = patrullaData.value.inspectorUid;
+  const miUid = userProfile.value?.uid || null;
+  // Si la patrulla pertenece al usuario actual o el usuario es inspector
+  return uid === miUid || (userRole.value === 'inspector' && patrullaExternaId.value === null);
+});
+
+const puedeEditar = computed(() => {
+  if (esInspectorPropio.value) return true;
+  if (cubriendo.value) return true;
+  return false;
+});
+
+const esObservador = computed(() =>
+  ROLES_OBSERVADOR.includes(userRole.value) && !esInspectorPropio.value
+);
 
 // Definición de las 7 rondas
 const RONDAS = [
@@ -101,12 +130,42 @@ async function onRondaCompletada() {
 async function cargarPatrulla() {
   try {
     const uid = getAuth().currentUser?.uid;
-    if (uid) {
+    if (!uid) return;
+
+    if (userRole.value === 'inspector' || !ROLES_OBSERVADOR.includes(userRole.value)) {
+      // Inspector: carga su propia patrulla
       const activa = await cargarPatrullaActiva(uid);
-      if (activa) patrullaData.value = activa;
+      if (activa) {
+        patrullaData.value = activa;
+        patrullaExternaId.value = null;
+      }
+    } else {
+      // Observador autorizado: carga todas las patrullas del turno
+      const todas = await cargarPatrullasTurnoActual();
+      todasPatrullas.value = todas;
+      if (todas.length === 1) {
+        patrullaData.value = todas[0];
+        patrullaExternaId.value = todas[0].id;
+      } else if (todas.length > 1) {
+        // Por defecto muestra la primera; el usuario puede cambiar desde el selector
+        patrullaData.value = todas[0];
+        patrullaExternaId.value = todas[0].id;
+      }
     }
   } catch (e) {
     console.error('Error cargando patrulla:', e);
+  }
+}
+
+async function seleccionarPatrulla(id) {
+  patrullaExternaId.value = id;
+  cubriendo.value = false;
+  const p = todasPatrullas.value.find(p => p.id === id);
+  if (p) {
+    patrullaData.value = p;
+  } else {
+    const loaded = await cargarPatrullaPorId(id);
+    if (loaded) patrullaData.value = loaded;
   }
 }
 
@@ -120,17 +179,85 @@ onMounted(async () => {
   <div class="h-[calc(100vh-110px)] bg-gray-50 flex flex-col overflow-hidden">
     <!-- Header compacto (fuera del scroll) -->
     <div class="shrink-0 max-w-lg mx-auto w-full px-4 pt-3 pb-2 bg-gray-50">
-      <div class="flex items-center gap-3 px-1">
-        <button @click="subVista ? router.push('/patrulla') : router.back()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-all">
+      <div class="flex items-center gap-2 px-1">
+        <button @click="subVista ? router.push('/patrulla') : router.back()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-all shrink-0">
           <ArrowLeft class="w-5 h-5 text-gray-600" />
         </button>
-        <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{{ getTurnoLabel(turnoActual) }}</span>
-        <span class="text-xs text-gray-500 font-bold truncate">{{ userProfile?.nombre || 'Inspector' }}</span>
-        <span v-if="rondaActiva" class="ml-auto text-[10px] font-black text-gray-400 uppercase">R{{ rondaActiva.num }}</span>
+        <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded shrink-0">{{ getTurnoLabel(turnoActual) }}</span>
+        <span class="text-xs text-gray-500 font-bold truncate min-w-0">{{ userProfile?.nombre || 'Inspector' }}</span>
+        <span v-if="rondaActiva" class="shrink-0 text-[10px] font-black text-gray-400 uppercase">R{{ rondaActiva.num }}</span>
+        <!-- Botón colapsar/expandir (solo en sub-vistas con contexto de observador) -->
+        <button
+          v-if="esObservador && patrullaData && subVista"
+          @click="headerColapsado = !headerColapsado"
+          class="ml-auto shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-lg font-black text-[10px] transition-all active:scale-95 shadow-sm"
+          :class="headerColapsado
+            ? 'bg-violet-600 text-white hover:bg-violet-700'
+            : 'bg-violet-100 text-violet-700 border border-violet-300 hover:bg-violet-200'"
+          :title="headerColapsado ? 'Ver opciones' : 'Ocultar opciones'"
+        >
+          <span v-if="!headerColapsado">Ocultar</span>
+          <span v-else class="flex items-center gap-1">
+            <component :is="cubriendo ? UserCheck : EyeOff" class="w-3 h-3" />
+            <span>{{ cubriendo ? 'Cobertura' : 'Obs.' }}</span>
+          </span>
+          <ChevronUp v-if="!headerColapsado" class="w-3.5 h-3.5" />
+          <ChevronDown v-else class="w-3.5 h-3.5" />
+        </button>
+        <!-- Rótulo sin sub-vista -->
+        <span v-else-if="!subVista" class="ml-auto text-[10px] font-black text-gray-400"></span>
       </div>
     </div>
 
-    <main class="flex-1 max-w-lg mx-auto w-full px-3 pb-4 flex flex-col space-y-3 overflow-y-auto">
+<!-- Banner solo lectura / cobertura (para observadores) -->
+      <transition
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0 -translate-y-2 max-h-0"
+        enter-to-class="opacity-100 translate-y-0 max-h-40"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0 max-h-40"
+        leave-to-class="opacity-0 -translate-y-2 max-h-0"
+      >
+        <div v-if="esObservador && patrullaData && !headerColapsado" class="shrink-0 max-w-lg mx-auto w-full px-4 pt-0 pb-1 overflow-hidden">
+          <div class="rounded-xl border px-3 py-2 flex items-center justify-between gap-2"
+               :class="cubriendo ? 'bg-amber-50 border-amber-300' : 'bg-blue-50 border-blue-200'">
+            <div class="flex items-center gap-2 min-w-0">
+              <component :is="cubriendo ? UserCheck : EyeOff" class="w-4 h-4 shrink-0" :class="cubriendo ? 'text-amber-600' : 'text-blue-500'" />
+              <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-wider" :class="cubriendo ? 'text-amber-700' : 'text-blue-600'">
+                  {{ cubriendo ? 'Modo cobertura — Puedes editar' : 'Solo lectura' }}
+                </p>
+                <p v-if="patrullaData.inspectorNombre" class="text-[10px] text-gray-500 font-medium truncate">
+                  Patrulla de {{ patrullaData.inspectorNombre }}
+                </p>
+              </div>
+            </div>
+            <button
+              @click="cubriendo = !cubriendo"
+              class="shrink-0 px-3 py-1.5 rounded-lg text-[10px] font-black border transition-all active:scale-95"
+              :class="cubriendo ? 'bg-amber-100 border-amber-300 text-amber-700 hover:bg-amber-200' : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-100'"
+            >
+              {{ cubriendo ? 'Cancelar cobertura' : 'Cubrir Inspector' }}
+            </button>
+          </div>
+          <!-- Selector de patrulla si hay varias -->
+          <div v-if="todasPatrullas.length > 1" class="mt-1">
+            <select
+              :value="patrullaExternaId"
+              @change="seleccionarPatrulla($event.target.value)"
+              class="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option v-for="p in todasPatrullas" :key="p.id" :value="p.id">
+                {{ p.inspectorNombre || p.inspectorEmail || p.id }} — {{ p.turno }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </transition>
+
+      <!-- Barra compacta modo cobertura (cuando header colapsado) - ya no necesaria, la info está en el botón -->
+
+      <main class="flex-1 max-w-lg mx-auto w-full px-3 pb-4 flex flex-col space-y-3 overflow-y-auto">
 
       <!-- ═══ HUB: Timeline de 7 rondas ═══ -->
       <template v-if="!subVista">
@@ -257,37 +384,37 @@ onMounted(async () => {
 
       <!-- Ronda 1: Roturas -->
       <template v-else-if="subVista === 'roturas'">
-        <RegistroRoturas ronda-inicial="ronda_1" @completada="onRondaCompletada" />
+        <RegistroRoturas ronda-inicial="ronda_1" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 2: Paro/Defecto -->
       <template v-else-if="subVista === 'paro2'">
-        <RegistroParoDefecto ronda-key="ronda_2" ronda-label="Ronda 2 — Paros / Defectos" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_2" ronda-label="Ronda 2 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 3: Trama Negra -->
       <template v-else-if="subVista === 'trama'">
-        <PruebaTramaNegra @completada="onRondaCompletada" />
+        <PruebaTramaNegra :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 4: Paro/Defecto -->
       <template v-else-if="subVista === 'paro4'">
-        <RegistroParoDefecto ronda-key="ronda_4" ronda-label="Ronda 4 — Paros / Defectos" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_4" ronda-label="Ronda 4 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 5: Paro/Defecto -->
       <template v-else-if="subVista === 'paro5'">
-        <RegistroParoDefecto ronda-key="ronda_5" ronda-label="Ronda 5 — Paros / Defectos" @completada="onRondaCompletada" />
+        <RegistroParoDefecto ronda-key="ronda_5" ronda-label="Ronda 5 — Paros / Defectos" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 6: Roturas (misma vista, distinta ronda seleccionada) -->
       <template v-else-if="subVista === 'roturas6'">
-        <RegistroRoturas ronda-inicial="ronda_6" @completada="onRondaCompletada" />
+        <RegistroRoturas ronda-inicial="ronda_6" :solo-lectura="!puedeEditar" :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Ronda 7: Seguimiento/Evaluación -->
       <template v-else-if="subVista === 'seguimiento'">
-        <SeguimientoRoturas @completada="onRondaCompletada" />
+        <SeguimientoRoturas :patrulla-id-externo="patrullaExternaId" @completada="onRondaCompletada" />
       </template>
 
       <!-- Muestras de Anudados -->

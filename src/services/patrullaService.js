@@ -172,7 +172,7 @@ export async function guardarRondaTrama(patrullaId, datos) {
 /**
  * Guarda datos de una ronda de paro/defecto y marca completada.
  */
-export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos) {
+export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos, meta = {}) {
   const ref = doc(db, COL_PATRULLAS, patrullaId);
   await updateDoc(ref, {
     [`rondas.${rondaKey}`]: {
@@ -180,6 +180,7 @@ export async function guardarRondaParoDefecto(patrullaId, rondaKey, datos) {
       completada: true,
       hora: new Date().toISOString(),
       datos,
+      ...meta,
     },
   });
 }

@@ -5,11 +5,16 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR, DEFECTOS_TRAMA } from '../constants/organization';
-import { cargarPatrullaActiva, crearPatrulla, guardarRondaTrama } from '../services/patrullaService';
+import { cargarPatrullaActiva, crearPatrulla, guardarRondaTrama, cargarPatrullaPorId } from '../services/patrullaService';
 import Swal from 'sweetalert2';
 import { Save, Loader2, ChevronDown, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 
 const emit = defineEmits(['completada']);
+
+const props = defineProps({
+  soloLectura:       { type: Boolean, default: false },
+  patrullaIdExterno: { type: String,  default: null },
+});
 
 // ── Estado ───────────────────────────────────────────────────────
 const telares = ref([]);
@@ -79,7 +84,9 @@ onMounted(async () => {
 
     const uid = getAuth().currentUser?.uid;
     if (uid) {
-      const activa = await cargarPatrullaActiva(uid);
+      const activa = props.patrullaIdExterno
+        ? await cargarPatrullaPorId(props.patrullaIdExterno)
+        : await cargarPatrullaActiva(uid);
       if (activa) {
         patrullaId.value = activa.id;
         const rondaData = activa.rondas?.ronda_3?.datos;
@@ -93,7 +100,7 @@ onMounted(async () => {
             }
           }
         }
-      } else {
+      } else if (!props.patrullaIdExterno) {
         const nueva = await crearPatrulla({
           inspectorUid: uid,
           inspectorNombre: userProfile.value?.nombre || getAuth().currentUser?.displayName || getAuth().currentUser?.email || 'Inspector',
@@ -350,8 +357,9 @@ function defectoLabel(id) {
                 <button
                   v-for="d in DEFECTOS_TRAMA"
                   :key="d.id"
-                  @click="toggleDefecto(d.id)"
-                  class="px-3 py-2.5 rounded-lg border text-xs font-bold transition-all active:scale-[0.97]"
+                  @click="!props.soloLectura && toggleDefecto(d.id)"
+                  :disabled="props.soloLectura"
+                  class="px-3 py-2.5 rounded-lg border text-xs font-bold transition-all active:scale-[0.97] disabled:cursor-not-allowed"
                   :class="registros[telarActivo.id]?.defectos?.includes(d.id)
                     ? 'bg-red-600 border-red-600 text-white shadow-md'
                     : 'bg-white border-gray-200 text-gray-600 hover:border-red-200 hover:bg-red-50'"
@@ -363,7 +371,8 @@ function defectoLabel(id) {
 
             <!-- Sin defectos -->
             <button
-              @click="marcarSinDefectos"
+              @click="!props.soloLectura && marcarSinDefectos()"
+              :disabled="props.soloLectura"
               class="w-full px-4 py-3 rounded-xl border text-sm font-black transition-all active:scale-[0.98]"
               :class="registros[telarActivo.id]?.sinDefectos
                 ? 'bg-emerald-600 border-emerald-600 text-white shadow-md'
@@ -374,6 +383,7 @@ function defectoLabel(id) {
 
             <!-- Guardar y cerrar -->
             <button
+              v-if="!props.soloLectura"
               @click="guardarYCerrar"
               :disabled="guardando || !telarTieneDatos"
               class="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-black text-white transition-all shadow-md active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"

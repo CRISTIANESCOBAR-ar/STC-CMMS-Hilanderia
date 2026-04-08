@@ -38,6 +38,8 @@ const normalizePerfil = (data = {}) => {
     jefeDeSectores,
     nombre: data.nombre || data.displayName || null,
     email: data.email || null,
+    vistasPersonalizadas: Array.isArray(data.vistasPersonalizadas) ? data.vistasPersonalizadas : null,
+    permisosPersonalizados: (data.permisosPersonalizados && typeof data.permisosPersonalizados === 'object') ? data.permisosPersonalizados : null,
   };
 };
 

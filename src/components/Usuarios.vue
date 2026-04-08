@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import { collection, getDocs, doc, updateDoc, getDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userRole } from '../services/authService';
-import { Users, ShieldCheck, Shield, Mail, Calendar, Search, Save, Building2, UserCog, Settings, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import { Users, ShieldCheck, Shield, Mail, Calendar, Search, Save, Building2, UserCog, Settings, Plus, Trash2, ChevronDown, ChevronUp, Eye } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import { DEFAULT_SECTOR, ROLE_OPTIONS as DEFAULT_ROLES, SECTOR_OPTIONS as DEFAULT_SECTORS, isJefeRole, normalizeSectorValue, sanitizeSectorList, ROLE_PROFILES, NIVEL_CONFIG, VISTA_OPTIONS, VISTA_LABEL, PERMISO_LABELS } from '../constants/organization';
 import { profileOverrides, loadProfiles, saveProfiles, getEffectiveVistas, getEffectivePermisos } from '../services/profileService';
@@ -130,6 +130,35 @@ const saveProfileChanges = async () => {
   }
 };
 
+// ── Vistas Personalizadas por Usuario ──
+const expandedVistaUser = ref(null);
+
+const toggleVistaUserExpand = (userId) => {
+  expandedVistaUser.value = expandedVistaUser.value === userId ? null : userId;
+};
+
+const enableCustomVistas = (user) => {
+  user.vistasPersonalizadas = [...getEffectiveVistas(user.role)];
+  user.permisosPersonalizados = { ...getEffectivePermisos(user.role) };
+};
+
+const disableCustomVistas = (user) => {
+  user.vistasPersonalizadas = null;
+  user.permisosPersonalizados = null;
+};
+
+const toggleUserVista = (user, slug) => {
+  if (!Array.isArray(user.vistasPersonalizadas)) enableCustomVistas(user);
+  const idx = user.vistasPersonalizadas.indexOf(slug);
+  if (idx >= 0) user.vistasPersonalizadas.splice(idx, 1);
+  else user.vistasPersonalizadas.push(slug);
+};
+
+const toggleUserPermiso = (user, key) => {
+  if (!user.permisosPersonalizados) enableCustomVistas(user);
+  user.permisosPersonalizados[key] = !user.permisosPersonalizados[key];
+};
+
 // ── Usuarios ──
 const getRoleColor = (role) => {
   if (role === 'admin') return { bg: 'bg-amber-100', text: 'text-amber-600', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
@@ -154,7 +183,9 @@ const normalizarUsuario = (user) => {
     alcance: role === 'admin' ? (user.alcance || 'global') : 'sector',
     sectorDefault,
     sectoresAsignados,
-    jefeDeSectores
+    jefeDeSectores,
+    vistasPersonalizadas: Array.isArray(user.vistasPersonalizadas) ? user.vistasPersonalizadas : null,
+    permisosPersonalizados: (user.permisosPersonalizados && typeof user.permisosPersonalizados === 'object') ? user.permisosPersonalizados : null,
   };
 };
 
@@ -201,7 +232,9 @@ const guardarConfiguracion = async (user) => {
     alcance: user.role === 'admin' ? (user.alcance || 'global') : 'sector',
     sectorDefault: normalizeSectorValue(user.sectorDefault || DEFAULT_SECTOR),
     sectoresAsignados,
-    jefeDeSectores
+    jefeDeSectores,
+    vistasPersonalizadas: Array.isArray(user.vistasPersonalizadas) ? user.vistasPersonalizadas : null,
+    permisosPersonalizados: (user.permisosPersonalizados && typeof user.permisosPersonalizados === 'object') ? user.permisosPersonalizados : null,
   };
 
   try {
@@ -578,6 +611,97 @@ onMounted(async () => {
                 <option value="sector">Admin sectorizado</option>
               </select>
             </div>
+            <!-- Vistas y Permisos Personalizados por Usuario -->
+            <div class="rounded-lg border overflow-hidden" :class="user.vistasPersonalizadas ? 'border-indigo-200 bg-indigo-50/40' : 'border-gray-200'">
+              <!-- Header -->
+              <button
+                @click="toggleVistaUserExpand(user.id)"
+                class="w-full flex items-center justify-between px-2.5 py-2 transition-colors"
+                :class="user.vistasPersonalizadas ? 'bg-indigo-50 hover:bg-indigo-100' : 'bg-gray-50 hover:bg-gray-100'"
+              >
+                <div class="flex items-center gap-2">
+                  <Eye class="w-3.5 h-3.5" :class="user.vistasPersonalizadas ? 'text-indigo-500' : 'text-gray-400'" />
+                  <span class="text-[10px] font-black uppercase tracking-wider" :class="user.vistasPersonalizadas ? 'text-indigo-600' : 'text-gray-500'">Acceso Personalizado</span>
+                  <span v-if="user.vistasPersonalizadas" class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[9px] font-black rounded-full">Activo · {{ user.vistasPersonalizadas.length }} vistas</span>
+                </div>
+                <ChevronUp v-if="expandedVistaUser === user.id" class="w-3.5 h-3.5 text-gray-400" />
+                <ChevronDown v-else class="w-3.5 h-3.5 text-gray-400" />
+              </button>
+
+              <!-- Cuerpo expandible -->
+              <div v-if="expandedVistaUser === user.id" class="px-2.5 pb-2.5 pt-2 border-t space-y-3" :class="user.vistasPersonalizadas ? 'border-indigo-200' : 'border-gray-100'">
+                <!-- Toggle activar/desactivar personalización -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[11px] font-black text-gray-700">Personalizar acceso individualmente</p>
+                    <p class="text-[10px] text-gray-400 font-medium mt-0.5">
+                      {{ user.vistasPersonalizadas ? 'Las vistas de abajo reemplazan las del rol' : 'Usando vistas predefinidas del rol' }}
+                    </p>
+                  </div>
+                  <button
+                    @click="user.vistasPersonalizadas ? disableCustomVistas(user) : enableCustomVistas(user)"
+                    class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none"
+                    :class="user.vistasPersonalizadas ? 'bg-indigo-600' : 'bg-gray-300'"
+                  >
+                    <span
+                      class="inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform"
+                      :class="user.vistasPersonalizadas ? 'translate-x-4' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </div>
+
+                <!-- Checkboxes de Vistas (solo si personalización activa) -->
+                <template v-if="user.vistasPersonalizadas">
+                  <div>
+                    <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Vistas habilitadas</span>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+                      <label
+                        v-for="vista in VISTA_OPTIONS"
+                        :key="vista.slug"
+                        class="flex items-center gap-1.5 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="user.vistasPersonalizadas.includes(vista.slug)"
+                          @change="toggleUserVista(user, vista.slug)"
+                          class="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/30 cursor-pointer"
+                        />
+                        <span class="text-[10px] font-bold text-gray-600">{{ vista.label }}</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Permisos</span>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+                      <label
+                        v-for="(label, key) in PERMISO_LABELS"
+                        :key="key"
+                        class="flex items-center gap-1.5 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="user.permisosPersonalizados?.[key]"
+                          @change="toggleUserPermiso(user, key)"
+                          class="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500/30 cursor-pointer"
+                        />
+                        <span class="text-[10px] font-bold text-gray-600">{{ label }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Mensaje cuando desactivado: muestra vistas del rol -->
+                <div v-else class="flex flex-wrap gap-1 pt-0.5">
+                  <span
+                    v-for="v in getEffectiveVistas(user.role)"
+                    :key="v"
+                    class="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-gray-500"
+                  >{{ VISTA_LABEL[v] || v }}</span>
+                </div>
+              </div>
+            </div>
+
           </div>
 
           <!-- ③ PIE: Fecha + Guardar -->

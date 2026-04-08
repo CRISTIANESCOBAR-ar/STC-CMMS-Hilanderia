@@ -74,4 +74,40 @@ export const getDefaultRoute = (role) => {
   return first?.route || '/';
 };
 
+// ── Funciones con override por usuario individual ──────────────────────
+export const getEffectiveVistasForUser = (role, vistasPersonalizadas) => {
+  if (Array.isArray(vistasPersonalizadas)) return vistasPersonalizadas;
+  return getEffectiveVistas(role);
+};
+
+export const getEffectivePermisosForUser = (role, permisosPersonalizados) => {
+  if (permisosPersonalizados && typeof permisosPersonalizados === 'object') return permisosPersonalizados;
+  return getEffectivePermisos(role);
+};
+
+export const canAccessViewForUser = (role, vistaSlug, vistasPersonalizadas) => {
+  if (!role) return false;
+  if (role === 'admin') return true;
+  return getEffectiveVistasForUser(role, vistasPersonalizadas).includes(vistaSlug);
+};
+
+export const canAccessRouteForUser = (role, routePath, vistasPersonalizadas) => {
+  if (!role) return false;
+  if (role === 'admin') return true;
+  const segments = routePath.split('/').filter(Boolean);
+  const basePath = segments.length ? '/' + segments[0] : '/';
+  const slug = ROUTE_TO_SLUG[basePath];
+  if (!slug) return true;
+  return canAccessViewForUser(role, slug, vistasPersonalizadas);
+};
+
+export const getDefaultRouteForUser = (role, vistasPersonalizadas) => {
+  if (!role) return '/login';
+  if (role === 'admin') return '/';
+  const vistas = getEffectiveVistasForUser(role, vistasPersonalizadas);
+  if (!vistas.length) return '/';
+  const first = VISTA_OPTIONS.find(v => v.slug === vistas[0]);
+  return first?.route || '/';
+};
+
 export { profileOverrides };

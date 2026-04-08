@@ -5,13 +5,15 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userProfile } from '../services/authService';
 import { normalizeSectorValue, DEFAULT_SECTOR } from '../constants/organization';
-import { loadPatrullaConfig, cargarPatrullaActiva, crearPatrulla, guardarRondaRoturas, guardarRondaParcial, cargarRutasPatrulla } from '../services/patrullaService';
+import { loadPatrullaConfig, cargarPatrullaActiva, crearPatrulla, guardarRondaRoturas, guardarRondaParcial, cargarRutasPatrulla, cargarPatrullaPorId } from '../services/patrullaService';
 import { useRouter } from 'vue-router';
 import { Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Share2, CloudUpload, Zap, Lock } from 'lucide-vue-next';
 import { intervencionService } from '../services/intervencionService';
 
 const props = defineProps({
-  rondaInicial: { type: String, default: null },
+  rondaInicial:     { type: String,  default: null },
+  soloLectura:      { type: Boolean, default: false },
+  patrullaIdExterno: { type: String, default: null },
 });
 const emit = defineEmits(['completada']);
 
@@ -225,12 +227,14 @@ onMounted(async () => {
     // Buscar o crear patrulla activa
     const uid = getAuth().currentUser?.uid;
     if (uid) {
-      const activa = await cargarPatrullaActiva(uid);
+      const activa = props.patrullaIdExterno
+        ? await cargarPatrullaPorId(props.patrullaIdExterno)
+        : await cargarPatrullaActiva(uid);
       if (activa) {
         patrullaId.value = activa.id;
         patrullaData.value = activa;
         cargarDatosRonda(activa, rondaSeleccionada.value);
-      } else {
+      } else if (!props.patrullaIdExterno) {
         const nueva = await crearPatrulla({
           inspectorUid: uid,
           inspectorNombre: userProfile.value?.nombre || getAuth().currentUser?.displayName || getAuth().currentUser?.email || 'Inspector',
@@ -788,11 +792,12 @@ function mostrarToast(tipo, texto) {
                   <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">RO. URDIMBRE</label>
                   <input
                     :value="displayDecimal(registros[t.id].roU)"
-                    @input="onInputDecimal(t.id, 'roU', $event)"
+                    @input="!props.soloLectura && onInputDecimal(t.id, 'roU', $event)"
                     type="text" inputmode="decimal" placeholder="—"
-                    @blur="registrarHora(t.id); programarAutoSave()"
+                    @blur="!props.soloLectura && (registrarHora(t.id), programarAutoSave())"
+                    :disabled="props.soloLectura"
                     class="w-full text-center text-2xl font-black rounded-xl border px-2 py-3 focus:outline-none focus:ring-2 transition-colors"
-                    :class="superaUmbral(t.id, 'roU')
+                    :class="props.soloLectura ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : superaUmbral(t.id, 'roU')
                       ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-300'
                       : 'border-gray-200 bg-gray-50 text-gray-800 focus:ring-blue-200'"
                   />
@@ -801,11 +806,12 @@ function mostrarToast(tipo, texto) {
                   <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">RO. TRAMA</label>
                   <input
                     :value="displayDecimal(registros[t.id].roT)"
-                    @input="onInputDecimal(t.id, 'roT', $event)"
+                    @input="!props.soloLectura && onInputDecimal(t.id, 'roT', $event)"
                     type="text" inputmode="decimal" placeholder="—"
-                    @blur="registrarHora(t.id); programarAutoSave()"
+                    @blur="!props.soloLectura && (registrarHora(t.id), programarAutoSave())"
+                    :disabled="props.soloLectura"
                     class="w-full text-center text-2xl font-black rounded-xl border px-2 py-3 focus:outline-none focus:ring-2 transition-colors"
-                    :class="superaUmbral(t.id, 'roT')
+                    :class="props.soloLectura ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : superaUmbral(t.id, 'roT')
                       ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-300'
                       : 'border-gray-200 bg-gray-50 text-gray-800 focus:ring-blue-200'"
                   />
@@ -814,7 +820,7 @@ function mostrarToast(tipo, texto) {
             </div>
 
             <!-- Alerta + acciones (umbral superado, no enviado) -->
-            <div v-if="telarTieneAlerta(t.id) && !enviado[t.id]" class="mx-4 mb-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-2.5">
+            <div v-if="telarTieneAlerta(t.id) && !enviado[t.id] && !props.soloLectura" class="mx-4 mb-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-2.5">
               <p class="text-[11px] font-bold text-red-600 flex items-center gap-1.5">
                 <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
                 Supera umbral — ¿Solicitar intervención?
@@ -945,7 +951,7 @@ function mostrarToast(tipo, texto) {
       </div>
 
       <!-- Botones de acción -->
-      <div v-if="!cargando && telaresOrdenados.length" class="space-y-2 mt-3">
+      <div v-if="!cargando && telaresOrdenados.length && !props.soloLectura" class="space-y-2 mt-3">
         <div v-if="autoSaveStatus !== 'idle'" class="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition-all"
              :class="{
                'text-blue-500 bg-blue-50': autoSaveStatus === 'saving',

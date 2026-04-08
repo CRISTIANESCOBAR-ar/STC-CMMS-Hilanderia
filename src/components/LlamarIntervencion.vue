@@ -101,6 +101,7 @@ onMounted(async () => {
       await nextTick();
       maquinaSeleccionadaId.value = q.maqId;
       if (q.obs) observaciones.value = q.obs;
+      if (q.tipoInterv) tipoIntervencion.value = q.tipoInterv;
       // Precargar síntoma por nombre (ej: "Corte de trama" desde Roturas)
       if (q.sintomaName) {
         await nextTick();
@@ -490,9 +491,22 @@ const onSubmit = async () => {
       await compartirWhatsApp(shareData, shareImageFile);
     }
 
-    // Si viene de roturas, volver automáticamente
+    // Si viene de roturas o patrulla, volver automáticamente
     if (route.query.origen === 'roturas') {
       router.push('/patrulla/roturas');
+    } else if (route.query.origen === 'patrulla') {
+      // shareData ya tiene sintoma + obs capturados ANTES del reset del form
+      const existing = sessionStorage.getItem('patrol_intervention_return');
+      if (existing) {
+        try {
+          const retData = JSON.parse(existing);
+          retData.sintomaLabel = shareData.sintoma || '';
+          retData.obsRaw = shareData.obs || '';
+          retData.tipoInterv = shareData.tipo || retData.tipoInterv || '';
+          sessionStorage.setItem('patrol_intervention_return', JSON.stringify(retData));
+        } catch {}
+      }
+      router.back();
     }
   } catch (error) {
     Swal.fire({ icon: 'error', title: 'Error al registrar', text: error.message || 'Error desconocido' });
@@ -503,12 +517,12 @@ const onSubmit = async () => {
 <template>
   <div class="bg-transparent pb-40">
 
-    <!-- Botón volver a Roturas (solo si viene de ahí) -->
-    <div v-if="route.query.origen === 'roturas'" class="max-w-sm mx-auto px-4 pt-2">
-      <button type="button" @click="router.push('/patrulla/roturas')"
+    <!-- Botón volver (cuando viene de roturas o patrulla) -->
+    <div v-if="route.query.origen === 'roturas' || route.query.origen === 'patrulla'" class="max-w-sm mx-auto px-4 pt-2">
+      <button type="button" @click="route.query.origen === 'roturas' ? router.push('/patrulla/roturas') : router.back()"
         class="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 active:scale-95 transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-        Volver a Control de Roturas
+        {{ route.query.origen === 'patrulla' ? 'Volver a la Ronda' : 'Volver a Control de Roturas' }}
       </button>
     </div>
 

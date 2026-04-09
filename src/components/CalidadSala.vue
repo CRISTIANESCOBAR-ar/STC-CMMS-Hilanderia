@@ -20,6 +20,7 @@ const recargando = ref(false);
 const turnoActual = ref(getTurnoActual());
 const ultimaActualizacion = ref(null);
 const alertasExpandidas = ref(new Set());
+const filtroRoturas = ref('todos'); // 'todos' | 'urd' | 'tra'
 const nombresInspectores = ref({});
 const intervencionesActivas = ref([]);
 let _autoRefresh = null;
@@ -156,6 +157,25 @@ const patrullasConEval = computed(() => {
       }
     }
 
+    // Lista de telares para visualización monoespaciada (última ronda completada)
+    const telaresLista = [];
+    if (ultimaRonda?.datos) {
+      for (const [maqId, vals] of Object.entries(ultimaRonda.datos)) {
+        const t = telaresMap.value[maqId];
+        if (!t) continue;
+        const roU = vals.roU != null ? parseFloat(vals.roU) : null;
+        const roT = vals.roT != null ? parseFloat(vals.roT) : null;
+        const sobreUrd = roU != null && !isNaN(roU) && roU > config.value.umbralRoturaU;
+        const sobreTra = roT != null && !isNaN(roT) && roT > config.value.umbralRoturaT;
+        telaresLista.push({ telar: t, roU, roT, sobreUrd, sobreTra });
+      }
+      telaresLista.sort((a, b) => {
+        const na = parseInt(String(a.telar.maquina || a.telar.id).replace(/\D/g, '').slice(-3), 10);
+        const nb = parseInt(String(b.telar.maquina || b.telar.id).replace(/\D/g, '').slice(-3), 10);
+        return na - nb;
+      });
+    }
+
     return {
       ...p,
       tieneR1, tieneR6,
@@ -168,6 +188,7 @@ const patrullasConEval = computed(() => {
       tieneR3,
       horaR3: tieneR3 ? formatHora(r3.hora) : null,
       tramaNegra,
+      telaresLista,
     };
   });
 });
@@ -214,6 +235,14 @@ function nombreCorto(t) {
   const last3 = nums.slice(-3);
   const n = parseInt(last3, 10);
   return `Toyota ${isNaN(n) ? raw : n}`;
+}
+
+function numCorto(t) {
+  const raw = String(t.maquina || t.id || '');
+  const nums = raw.replace(/[^0-9]/g, '');
+  const last3 = nums.slice(-3);
+  const n = parseInt(last3, 10);
+  return isNaN(n) ? raw : String(n);
 }
 
 function etiquetaEstado(estado) {
@@ -470,6 +499,19 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- Filtro de roturas -->
+          <div class="flex gap-2 flex-wrap">
+            <button
+              v-for="opt in [{v:'todos',l:'Todos'},{v:'urd',l:'↑ Umbral URD'},{v:'tra',l:'↑ Umbral TRA'}]"
+              :key="opt.v"
+              @click="filtroRoturas = opt.v"
+              class="text-xs font-bold px-3 py-1.5 rounded-full border transition-all"
+              :class="filtroRoturas === opt.v ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'"
+            >
+              {{ opt.l }}
+            </button>
+          </div>
+
           <!-- Patrullas individuales -->
           <div v-for="p in patrullasConEval" :key="p.id" class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <!-- Header patrulla -->
@@ -499,22 +541,43 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Alertas -->
-            <div v-if="p.alertas.length" class="px-4 py-3 bg-red-50/50 border-b border-red-100">
-              <p class="text-sm font-black text-red-700 flex items-center gap-1.5 mb-2">
-                <AlertTriangle class="w-4 h-4" /> {{ p.alertas.length }} sobre umbral
+            <!-- Roturas -->
+            <div v-if="p.telaresLista.length" class="px-4 py-3 border-b border-gray-100"
+                 :class="p.alertas.length ? 'bg-red-50/30' : ''">
+              <!-- Encabezado -->
+              <p class="text-xs font-black text-gray-400 uppercase flex items-center gap-1.5 mb-2">
+                <AlertTriangle v-if="p.alertas.length" class="w-3.5 h-3.5 text-red-500" />
+                <span v-if="p.alertas.length" class="text-red-600">{{ p.alertas.length }} sobre umbral · </span>
+                {{ p.telaresLista.length }} telares
               </p>
-              <div class="flex flex-wrap gap-1.5">
-                <span v-for="a in (alertasExpandidas.has(p.id) ? p.alertas : p.alertas.slice(0, 8))" :key="a.telar.id + a.campo"
-                      class="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-lg">
-                  {{ nombreCorto(a.telar) }} {{ a.campo }}:{{ a.valor }}
-                </span>
-                <button v-if="p.alertas.length > 8"
-                        @click="toggleExpandAlertas(p.id)"
-                        class="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-0.5 transition-colors">
-                  <template v-if="!alertasExpandidas.has(p.id)">+{{ p.alertas.length - 8 }} más <ChevronDown class="w-4 h-4" /></template>
-                  <template v-else>Colapsar <ChevronUp class="w-4 h-4" /></template>
-                </button>
+              <!-- Lista monoespaciada: una fila por telar -->
+              <div class="font-mono text-sm leading-relaxed space-y-0.5">
+                <!-- Cabecera columnas -->
+                <div class="flex items-baseline gap-2 text-xs font-bold text-gray-400 uppercase mb-1 select-none">
+                  <span class="w-8"></span>
+                  <span class="w-28 text-center">Rot.URD</span>
+                  <span class="w-28 text-center">Rot.TRA</span>
+                </div>
+                <template v-for="item in p.telaresLista" :key="item.telar.id">
+                  <div v-if="filtroRoturas === 'todos' || (filtroRoturas === 'urd' && item.sobreUrd) || (filtroRoturas === 'tra' && item.sobreTra)"
+                       class="flex items-baseline gap-2">
+                    <!-- Número de telar -->
+                    <span class="w-8 text-right text-base font-extrabold"
+                          :class="(item.sobreUrd || item.sobreTra) ? 'text-gray-800' : 'text-gray-400'">
+                      {{ numCorto(item.telar) }}
+                    </span>
+                    <!-- Rot.URD -->
+                    <span class="w-28 tabular-nums text-center text-base"
+                          :class="item.sobreUrd ? 'text-red-600 font-extrabold' : 'text-gray-400 font-medium'">
+                      {{ item.roU != null ? item.roU.toFixed(1) : '—' }}
+                    </span>
+                    <!-- Rot.TRA -->
+                    <span class="w-28 tabular-nums text-center text-base"
+                          :class="item.sobreTra ? 'text-red-600 font-extrabold' : 'text-gray-400 font-medium'">
+                      {{ item.roT != null ? item.roT.toFixed(1) : '—' }}
+                    </span>
+                  </div>
+                </template>
               </div>
 
               <!-- Intervenciones vinculadas a máquinas con alertas -->
@@ -596,12 +659,23 @@ onUnmounted(() => {
 
               <!-- Detalle empeoramientos -->
               <div v-if="p.evaluacion.detalles.length" class="mt-2 space-y-0.5">
-                <p class="text-xs font-black text-red-600 uppercase">Empeoramientos:</p>
-                <p v-for="d in p.evaluacion.detalles" :key="d.telar.id" class="text-sm text-red-600 font-semibold">
-                  {{ nombreCorto(d.telar) }}
-                  <template v-if="d.evalU === 'peor'"> Ro.U: {{ d.r1U }}→{{ d.r6U }}</template>
-                  <template v-if="d.evalT === 'peor'"> Ro.T: {{ d.r1T }}→{{ d.r6T }}</template>
-                </p>
+                <p class="text-xs font-black text-red-600 uppercase mb-1">Empeoramientos:</p>
+                <div class="font-mono text-sm space-y-px">
+                  <template v-for="d in p.evaluacion.detalles" :key="d.telar.id">
+                    <div v-if="d.evalU === 'peor'" class="flex items-baseline gap-2 text-red-600">
+                      <span class="w-8 text-right font-bold text-gray-800">{{ numCorto(d.telar) }}</span>
+                      <span class="w-20 text-gray-400 text-xs">Rot.URD:</span>
+                      <span class="tabular-nums">{{ d.r1U?.toFixed(1) }}&nbsp;→&nbsp;{{ d.r6U?.toFixed(1) }}</span>
+                      <span class="text-xs">(+{{ (d.r6U - d.r1U).toFixed(1) }})</span>
+                    </div>
+                    <div v-if="d.evalT === 'peor'" class="flex items-baseline gap-2 text-red-600">
+                      <span class="w-8 text-right font-bold text-gray-800">{{ numCorto(d.telar) }}</span>
+                      <span class="w-20 text-gray-400 text-xs">Rot.TRA:</span>
+                      <span class="tabular-nums">{{ d.r1T?.toFixed(1) }}&nbsp;→&nbsp;{{ d.r6T?.toFixed(1) }}</span>
+                      <span class="text-xs">(+{{ (d.r6T - d.r1T).toFixed(1) }})</span>
+                    </div>
+                  </template>
+                </div>
               </div>
             </div>
 

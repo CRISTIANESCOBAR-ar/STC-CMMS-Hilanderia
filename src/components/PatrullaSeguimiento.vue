@@ -320,22 +320,22 @@ onMounted(cargar);
                          : 'border-gray-100'">
                 <div class="flex items-center justify-between gap-2">
                   <div class="min-w-0">
-                    <p class="text-sm font-black"
+                    <p class="text-base font-black"
                        :class="ronda.desbloqueada ? 'text-gray-800' : 'text-gray-400'">
                       {{ ronda.label }}
                     </p>
-                    <p class="text-[10px] font-medium mt-0.5"
+                    <p class="text-xs font-medium mt-0.5"
                        :class="ronda.desbloqueada ? 'text-gray-500' : 'text-gray-300'">
                       {{ ronda.desc }}
                     </p>
                   </div>
                   <div class="shrink-0 flex flex-col items-end gap-0.5">
                     <span v-if="ronda.estado === 'completada'"
-                          class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          class="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
                       ✓ Hecha
                     </span>
                     <span v-else-if="ronda.estado === 'en_curso'"
-                          class="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                          class="text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                       En curso
                     </span>
                     <component v-else-if="ronda.desbloqueada" :is="ronda.icon" class="w-4 h-4 text-gray-300" />
@@ -344,16 +344,16 @@ onMounted(cargar);
 
                 <!-- Hora de completado + badge Cubrió -->
                 <div v-if="ronda.hora" class="flex items-center gap-2 mt-1 flex-wrap">
-                  <span class="text-[9px] text-gray-400 font-medium">{{ horaRonda(ronda.hora) }}</span>
+                  <span class="text-xs text-gray-400 font-medium">{{ horaRonda(ronda.hora) }}</span>
                   <span v-if="ronda.cubiertoPor"
-                        class="text-[8px] font-black bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                        class="text-[10px] font-black bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">
                     👤 Cubrió: {{ ronda.cubiertoPor }}
                   </span>
                 </div>
 
                 <!-- Hint de click para turno actual -->
                 <p v-if="esSlotActual && ronda.estado !== 'pendiente' && ronda.desbloqueada"
-                   class="text-[8px] text-indigo-400 font-bold mt-1">
+                   class="text-[11px] text-indigo-400 font-bold mt-1">
                   Toca para ver detalle →
                 </p>
               </div>

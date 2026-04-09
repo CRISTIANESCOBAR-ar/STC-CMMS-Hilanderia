@@ -9,6 +9,13 @@ import Swal from 'sweetalert2';
 
 const isLoading = ref(false);
 const isSaving = ref(false);
+const toast = ref({ visible: false, message: '', timer: null });
+function showToast(message) {
+  if (toast.value.timer) clearTimeout(toast.value.timer);
+  toast.value.message = message;
+  toast.value.visible = true;
+  toast.value.timer = setTimeout(() => { toast.value.visible = false; }, 1800);
+}
 const csvMeta = ref(null);
 const csvLoaded = ref(false);
 const telaresMaquinas = ref([]);
@@ -255,11 +262,17 @@ const telaresResumen = computed(() => {
   return telaresMaquinas.value.map((m, idx) => {
     const loom = String(m.maquina);
     let tieneData = false;
+    let csvCount = 0;
+    let datosCount = 0;
     for (const turno of ['A', 'B', 'C']) {
       const r = registros.value[`${loom}_${turno}`];
-      if (r && (r.source === 'csv' || r.rpm != null || r.picks != null)) { tieneData = true; break; }
+      const tieneDatos = r && (r.picks != null || r.rpm != null || r.weftCount != null);
+      if (tieneDatos) { tieneData = true; datosCount++; }
+      if (r && r.source === 'csv') { csvCount++; }
     }
-    return { idx, loom, label: loom.slice(-2).replace(/^0/, ''), ordenPatrulla: m.orden_patrulla || idx + 1, tieneData };
+    const datosCompleto = datosCount === 3;
+    const datosParcial = datosCount > 0 && datosCount < 3;
+    return { idx, loom, label: loom.slice(-2).replace(/^0/, ''), ordenPatrulla: m.orden_patrulla || idx + 1, tieneData, csvCount, datosCount, datosCompleto, datosParcial };
   });
 });
 
@@ -351,6 +364,38 @@ function onInput(ev, loom, turno, field, maxLen) {
 async function guardarTelar() {
   if (!telarAbierto.value) return;
   const loom = telarAbierto.value.loom;
+
+  // Validar completitud antes de guardar
+  const turnosConDatos = ['A', 'B', 'C'].filter(turno => {
+    const r = registros.value[`${loom}_${turno}`];
+    return r && (r.picks != null || r.rpm != null || r.weftCount != null);
+  });
+
+  if (turnosConDatos.length === 0) {
+    const res = await Swal.fire({
+      icon: 'warning',
+      title: 'Sin datos',
+      text: 'No se ingresó ningún dato en ningún turno. ¿Guardar de todos modos?',
+      showCancelButton: true,
+      confirmButtonText: 'Guardar igual',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#d97706',
+    });
+    if (!res.isConfirmed) return;
+  } else if (turnosConDatos.length < 3) {
+    const faltantes = ['A', 'B', 'C'].filter(t => !turnosConDatos.includes(t));
+    const res = await Swal.fire({
+      icon: 'info',
+      title: 'Datos parciales',
+      html: `Solo se cargaron los turnos <b>${turnosConDatos.join(', ')}</b>.<br>Faltan: <b>${faltantes.join(', ')}</b>.<br>¿Guardar de todas formas?`,
+      showCancelButton: true,
+      confirmButtonText: 'Guardar igual',
+      cancelButtonText: 'Completar primero',
+      confirmButtonColor: '#2563eb',
+    });
+    if (!res.isConfirmed) return;
+  }
+
   isSaving.value = true;
 
   // Capturar y proteger TODOS los turnos con datos antes de cualquier await,
@@ -369,7 +414,7 @@ async function guardarTelar() {
       await guardarRegistro(fechaReporte.value, loom, turno, data);
       pendingSaves.delete(key);
     }
-    Swal.fire({ icon: 'success', title: 'Guardado', timer: 1200, showConfirmButton: false });
+    showToast('Guardado ✓');
     // Saltar al siguiente telar o cerrar si es el último
     const nextIdx = telarAbiertoIdx.value + 1;
     if (nextIdx < telaresMaquinas.value.length) {
@@ -496,6 +541,12 @@ function descargarTXT(records) {
 
 <template>
   <div class="min-h-[calc(100vh-110px)] bg-gray-50 flex flex-col">
+    <!-- Toast de guardado -->
+    <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 translate-y-2" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 translate-y-2">
+      <div v-if="toast.visible" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-gray-800 text-white text-sm font-semibold rounded-full shadow-lg pointer-events-none">
+        {{ toast.message }}
+      </div>
+    </Transition>
     <main class="flex-1 max-w-4xl mx-auto w-full px-3 pt-3 pb-6 flex flex-col space-y-3 overflow-y-auto">
 
       <!-- Header compacto -->
@@ -555,13 +606,16 @@ function descargarTXT(records) {
             class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98]"
             :class="telarAbiertoIdx === t.idx
               ? 'bg-blue-600 text-white shadow-md'
-              : t.tieneData
+              : t.datosCompleto
                 ? 'bg-emerald-50 border border-emerald-200 text-gray-800'
-                : 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50'"
+                : t.datosParcial
+                  ? 'bg-amber-50 border border-amber-300 text-gray-800'
+                  : 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50'"
           >
             <div class="flex items-center gap-3">
               <span class="text-lg font-black" :class="telarAbiertoIdx === t.idx ? 'text-white' : ''">Toyota {{ t.label }}</span>
-              <span v-if="t.tieneData && telarAbiertoIdx !== t.idx" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span v-if="t.datosCompleto && telarAbiertoIdx !== t.idx" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span v-if="t.datosParcial && telarAbiertoIdx !== t.idx" class="w-2 h-2 rounded-full bg-amber-400"></span>
             </div>
             <span class="text-xs font-bold" :class="telarAbiertoIdx === t.idx ? 'text-blue-200' : 'text-gray-400'">#{{ t.ordenPatrulla }}</span>
           </button>

@@ -167,50 +167,33 @@ onMounted(cargar);
 </script>
 
 <template>
+  <!-- Navbar portal: back + turno nav + refresh -->
+  <Teleport to="#navbar-header-portal">
+    <div class="flex items-center gap-1.5 min-w-0">
+      <button @click="router.back()" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-all shrink-0 active:scale-90">
+        <ArrowLeft class="w-5 h-5" />
+      </button>
+      <button @click="navAnterior" class="p-1 rounded-lg hover:bg-gray-100 text-gray-500 transition-all active:scale-90 shrink-0">
+        <ChevronLeft class="w-4 h-4" />
+      </button>
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded shrink-0">{{ getTurnoLabel(turnoVer) }}</span>
+        <span class="text-xs font-bold text-gray-600 shrink-0">{{ formatFecha(fechaVer) }}</span>
+        <span v-if="esSlotActual" class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 shrink-0">ACTUAL</span>
+      </div>
+      <button @click="navSiguiente" :disabled="!puedeNavSig" class="p-1 rounded-lg transition-all active:scale-90 shrink-0" :class="puedeNavSig ? 'hover:bg-gray-100 text-gray-500' : 'text-gray-200 cursor-not-allowed'">
+        <ChevronRight class="w-4 h-4" />
+      </button>
+      <button @click="cargar" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-all shrink-0" title="Actualizar">
+        <RefreshCw class="w-4 h-4" :class="cargando ? 'animate-spin' : ''" />
+      </button>
+    </div>
+  </Teleport>
+
   <div class="h-[calc(100vh-110px)] bg-gray-50 flex flex-col overflow-hidden">
 
-    <!-- Header fijo -->
-    <div class="shrink-0 max-w-lg mx-auto w-full px-4 pt-3 pb-2 bg-gray-50">
-      <div class="flex items-center gap-2 px-1">
-        <button @click="router.back()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-all shrink-0">
-          <ArrowLeft class="w-5 h-5 text-gray-600" />
-        </button>
-        <span class="text-sm font-black text-gray-700 flex-1 truncate">Patrulla de Calidad</span>
-        <button @click="cargar" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-200 transition-all" title="Actualizar">
-          <RefreshCw class="w-4 h-4" :class="cargando ? 'animate-spin' : ''" />
-        </button>
-      </div>
-
-      <!-- Navegación de turno -->
-      <div class="flex items-center gap-2 mt-2">
-        <button @click="navAnterior"
-                class="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all active:scale-95 shrink-0">
-          <ChevronLeft class="w-4 h-4" />
-        </button>
-
-        <div class="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2">
-          <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-            {{ getTurnoLabel(turnoVer) }}
-          </span>
-          <span class="text-xs font-bold text-gray-600">{{ formatFecha(fechaVer) }}</span>
-          <span v-if="esSlotActual" class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
-            ACTUAL
-          </span>
-        </div>
-
-        <button @click="navSiguiente"
-                :disabled="!puedeNavSig"
-                class="p-1.5 rounded-lg border transition-all active:scale-95 shrink-0"
-                :class="puedeNavSig
-                  ? 'bg-white border-gray-200 text-gray-500 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600'
-                  : 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed'">
-          <ChevronRight class="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-
     <!-- Body desplazable -->
-    <main class="flex-1 max-w-lg mx-auto w-full px-3 pb-4 flex flex-col space-y-3 overflow-y-auto">
+    <main class="flex-1 max-w-lg mx-auto w-full px-3 pt-2 pb-4 flex flex-col space-y-3 overflow-y-auto">
 
       <!-- Cargando -->
       <div v-if="cargando" class="flex items-center justify-center py-16">

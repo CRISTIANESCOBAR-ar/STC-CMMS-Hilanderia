@@ -239,40 +239,32 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-[calc(100vh-110px)] bg-gray-50 flex flex-col overflow-hidden">
-    <!-- Header compacto (fuera del scroll) -->
-    <div class="shrink-0 max-w-lg mx-auto w-full px-4 pt-3 pb-2 bg-gray-50">
-      <div class="flex items-center gap-2 px-1">
-        <button @click="subVista ? router.push('/patrulla') : router.back()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-all shrink-0">
-          <ArrowLeft class="w-5 h-5 text-gray-600" />
-        </button>
-        <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded shrink-0">{{ getTurnoLabel(turnoActual) }}</span>
-        <span class="text-xs text-gray-500 font-bold truncate min-w-0">{{ userProfile?.nombre || 'Inspector' }}</span>
-        <span v-if="rondaActiva" class="shrink-0 text-[10px] font-black text-gray-400 uppercase">R{{ rondaActiva.num }}</span>
-        <!-- Botón colapsar/expandir (solo en sub-vistas con contexto de observador) -->
-        <button
-          v-if="esObservador && patrullaData && subVista"
-          @click="headerColapsado = !headerColapsado"
-          class="ml-auto shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-lg font-black text-[10px] transition-all active:scale-95 shadow-sm"
-          :class="headerColapsado
-            ? 'bg-violet-600 text-white hover:bg-violet-700'
-            : 'bg-violet-100 text-violet-700 border border-violet-300 hover:bg-violet-200'"
-          :title="headerColapsado ? 'Ver opciones' : 'Ocultar opciones'"
-        >
-          <span v-if="!headerColapsado">Ocultar</span>
-          <span v-else class="flex items-center gap-1">
-            <component :is="cubriendo ? UserCheck : EyeOff" class="w-3 h-3" />
-            <span>{{ cubriendo ? 'Cobertura' : 'Obs.' }}</span>
-          </span>
-          <ChevronUp v-if="!headerColapsado" class="w-3.5 h-3.5" />
-          <ChevronDown v-else class="w-3.5 h-3.5" />
-        </button>
-        <!-- Rótulo sin sub-vista -->
-        <span v-else-if="!subVista" class="ml-auto text-[10px] font-black text-gray-400"></span>
-      </div>
+  <!-- Navbar portal: back + turno + nombre + ronda + obs btn -->
+  <Teleport to="#navbar-header-portal">
+    <div class="flex items-center gap-1.5 min-w-0">
+      <button @click="subVista ? router.push('/patrulla') : router.back()" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-all shrink-0 active:scale-90">
+        <ArrowLeft class="w-5 h-5" />
+      </button>
+      <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded shrink-0">{{ getTurnoLabel(turnoActual) }}</span>
+      <span class="text-xs text-gray-600 font-bold truncate min-w-0">{{ userProfile?.nombre || 'Inspector' }}</span>
+      <span v-if="rondaActiva" class="shrink-0 text-[10px] font-black text-gray-400 uppercase">R{{ rondaActiva.num }}</span>
+      <button
+        v-if="esObservador && patrullaData && subVista"
+        @click="headerColapsado = !headerColapsado"
+        class="ml-1 shrink-0 flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-lg font-black text-[10px] transition-all active:scale-95"
+        :class="headerColapsado ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-700 border border-violet-300'"
+      >
+        <component :is="cubriendo ? UserCheck : EyeOff" class="w-3 h-3" />
+        <span>{{ cubriendo ? 'Cob.' : 'Obs.' }}</span>
+        <ChevronUp v-if="!headerColapsado" class="w-3 h-3" />
+        <ChevronDown v-else class="w-3 h-3" />
+      </button>
     </div>
+  </Teleport>
 
-<!-- Banner solo lectura / cobertura (para observadores) -->
+  <div class="h-[calc(100vh-110px)] bg-gray-50 flex flex-col overflow-hidden">
+
+    <!-- Banner solo lectura / cobertura (para observadores) -->
       <transition
         enter-active-class="transition-all duration-300 ease-out"
         enter-from-class="opacity-0 -translate-y-2 max-h-0"

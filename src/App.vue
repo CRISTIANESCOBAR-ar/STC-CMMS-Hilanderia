@@ -204,6 +204,7 @@ const pageTitle = computed(() => {
 
 const showNavTitle = computed(() => {
   const p = router.currentRoute.value.path;
+  if (p.startsWith('/patrulla') || p === '/patrulla-seguimiento') return false;
   return !['/maquinas', '/historico', '/usuarios', '/jefe'].includes(p)
     && !/^\/intervenciones\/.+/.test(p);
 });
@@ -275,7 +276,7 @@ const navigateTab = (action) => {
     <nav v-if="user" class="bg-white text-gray-900 shadow-md border-b border-gray-100 sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 h-[54px] flex justify-between items-center">
         <!-- Logo y Nombre -->
-        <div class="flex items-center space-x-3 shrink-0 overflow-hidden">
+        <div class="flex items-center space-x-3 flex-1 min-w-0 overflow-hidden">
           <div class="bg-white p-px rounded-xs border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
             <img src="/LogoSantana.jpg" class="h-7 w-auto object-contain" alt="Logo" />
           </div>
@@ -368,6 +369,16 @@ const navigateTab = (action) => {
             >
               <ScanSearch class="w-6 h-6 mr-4" />
               Patrulla de Calidad
+            </router-link>
+
+            <router-link
+              to="/patrulla-seguimiento"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+            >
+              <Eye class="w-6 h-6 mr-4" />
+              Patrulla (Vista)
             </router-link>
 
             <router-link

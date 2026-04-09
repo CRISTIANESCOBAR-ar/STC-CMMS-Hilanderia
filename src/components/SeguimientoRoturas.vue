@@ -428,7 +428,7 @@ onMounted(async () => {
           <span class="text-xs font-black text-red-700 uppercase tracking-wide">Empeoramientos</span>
           <span class="ml-auto text-xs font-bold text-red-400">{{ secEmpeoro.length }}</span>
         </div>
-        <pre class="bg-red-50 text-red-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secEmpeoro.join('\n') }}</pre>
+        <pre class="bg-red-50 text-red-900 font-mono text-[14px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secEmpeoro.join('\n') }}</pre>
       </div>
 
       <!-- Leves -->
@@ -438,7 +438,7 @@ onMounted(async () => {
           <span class="text-xs font-black text-amber-700 uppercase tracking-wide">Leves</span>
           <span class="ml-auto text-xs font-bold text-amber-400">{{ secLeves.length }}</span>
         </div>
-        <pre class="bg-amber-50 text-amber-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secLeves.join('\n') }}</pre>
+        <pre class="bg-amber-50 text-amber-900 font-mono text-[14px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secLeves.join('\n') }}</pre>
       </div>
 
       <!-- Mejoras -->
@@ -448,7 +448,7 @@ onMounted(async () => {
           <span class="text-xs font-black text-emerald-700 uppercase tracking-wide">Mejoras</span>
           <span class="ml-auto text-xs font-bold text-emerald-400">{{ secMejoras.length }}</span>
         </div>
-        <pre class="bg-emerald-50 text-emerald-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secMejoras.join('\n') }}</pre>
+        <pre class="bg-emerald-50 text-emerald-900 font-mono text-[14px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secMejoras.join('\n') }}</pre>
       </div>
 
       <!-- Sin cambio (colapsable) -->
@@ -458,7 +458,7 @@ onMounted(async () => {
           <span class="text-xs font-black text-gray-500 uppercase tracking-wide">Sin cambio</span>
           <span class="ml-auto text-xs font-bold text-gray-400">{{ secIguales.length }}</span>
         </summary>
-        <pre class="bg-white text-gray-500 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secIguales.join('\n') }}</pre>
+        <pre class="bg-white text-gray-500 font-mono text-[14px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secIguales.join('\n') }}</pre>
       </details>
 
       <!-- Sin datos -->
@@ -478,3 +478,4 @@ onMounted(async () => {
     </template>
   </div>
 </template>
+

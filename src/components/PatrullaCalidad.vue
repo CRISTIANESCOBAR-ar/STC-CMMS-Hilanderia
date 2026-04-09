@@ -182,6 +182,17 @@ async function cargarPatrulla() {
     const uid = getAuth().currentUser?.uid;
     if (!uid) return;
 
+    // Si viene ?pid=xxx desde la vista de historial de seguimiento, cargar esa patrulla directamente
+    const pidQuery = route.query?.pid;
+    if (pidQuery && ROLES_OBSERVADOR.includes(userRole.value)) {
+      const p = await cargarPatrullaPorId(pidQuery);
+      if (p) {
+        patrullaData.value = p;
+        patrullaExternaId.value = p.id;
+      }
+      return;
+    }
+
     if (userRole.value === 'inspector' || !ROLES_OBSERVADOR.includes(userRole.value)) {
       // Inspector: carga su propia patrulla
       const activa = await cargarPatrullaActiva(uid);

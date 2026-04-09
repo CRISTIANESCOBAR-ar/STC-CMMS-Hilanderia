@@ -143,10 +143,17 @@ function navSiguiente() {
   turnoVer.value = turno;
 }
 
-// Navegar al detalle de una ronda en modo observador (solo turno actual)
+// Navegar al detalle de una ronda (turno actual o histórico con pid)
 function irARonda(ronda) {
-  if (!esSlotActual.value) return; // En históricos no hay navegación a sub-vistas
   if (ronda.estado === 'pendiente') return;
+  if (!esSlotActual.value) {
+    // Histórico: solo rondas completadas, navega con el ID de la patrulla
+    if (ronda.estado !== 'completada') return;
+    const pid = patrullaData.value?.id;
+    if (!pid) return;
+    router.push({ path: '/patrulla/' + ronda.sub, query: { pid } });
+    return;
+  }
   router.push('/patrulla/' + ronda.sub);
 }
 
@@ -287,11 +294,9 @@ onMounted(cargar);
 
             <div v-for="(ronda, idx) in rondasConEstado" :key="ronda.key"
                  class="relative z-10 flex items-start gap-3 py-2 transition-all"
-                 :class="esSlotActual && ronda.estado !== 'pendiente'
+                 :class="ronda.estado !== 'pendiente'
                    ? 'cursor-pointer active:scale-[0.99]'
-                   : !esSlotActual && ronda.estado !== 'pendiente'
-                     ? 'opacity-90'
-                     : 'opacity-50 cursor-default'"
+                   : 'opacity-50 cursor-default'"
                  @click="irARonda(ronda)"
             >
               <!-- Círculo estado -->
@@ -351,8 +356,8 @@ onMounted(cargar);
                   </span>
                 </div>
 
-                <!-- Hint de click para turno actual -->
-                <p v-if="esSlotActual && ronda.estado !== 'pendiente' && ronda.desbloqueada"
+                <!-- Hint de click: turno actual o histórico completado -->
+                <p v-if="ronda.estado === 'completada' || (esSlotActual && ronda.estado !== 'pendiente' && ronda.desbloqueada)"
                    class="text-[11px] text-indigo-400 font-bold mt-1">
                   Toca para ver detalle →
                 </p>

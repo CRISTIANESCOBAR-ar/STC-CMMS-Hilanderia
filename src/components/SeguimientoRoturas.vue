@@ -117,6 +117,45 @@ const resumen = computed(() => {
   return { mejoras, empeoramientos, leves, iguales, sinDatos };
 });
 
+// ── Filtro tipo (Todos / Urdido / Trama) ─────────────────────────
+const filtroTipo = ref('todos');
+
+function getNumTelar(t) {
+  const raw = String(t.nombre || t.maquina || t.id || '');
+  const n = parseInt(raw.replace(/[^0-9]/g, '').slice(-3), 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatLinea(num, tipo, r1, r6) {
+  const r1s = r1 != null ? r1.toFixed(1).padStart(5) : '    —';
+  const r6s = r6 != null ? r6.toFixed(1).padStart(5) : '    —';
+  let dif = '';
+  if (r1 != null && r6 != null) {
+    const d = r6 - r1;
+    dif = ' ' + ('(' + (d >= 0 ? '+' : '') + d.toFixed(1) + ')').padStart(7);
+  }
+  return `${String(num).padStart(3)} ${tipo}: ${r1s} → ${r6s}${dif}`;
+}
+
+function buildLineasSeccion(tiposEval) {
+  const lines = [];
+  const inclU = filtroTipo.value !== 'trama';
+  const inclT = filtroTipo.value !== 'urdido';
+  for (const c of comparacion.value) {
+    const num = getNumTelar(c.telar);
+    if (inclU && tiposEval.includes(c.evalU) && (c.r1U != null || c.r6U != null))
+      lines.push(formatLinea(num, 'Rot.URD', c.r1U, c.r6U));
+    if (inclT && tiposEval.includes(c.evalT) && (c.r1T != null || c.r6T != null))
+      lines.push(formatLinea(num, 'Rot.TRA', c.r1T, c.r6T));
+  }
+  return lines;
+}
+
+const secEmpeoro  = computed(() => buildLineasSeccion(['peor']));
+const secLeves    = computed(() => buildLineasSeccion(['leve']));
+const secMejoras  = computed(() => buildLineasSeccion(['mejor']));
+const secIguales  = computed(() => buildLineasSeccion(['igual']));
+
 // ── Lógica de evaluación inteligente ─────────────────────────────
 function evaluarCambio(valR1, valR6) {
   if (valR1 == null || valR6 == null) return null;
@@ -369,55 +408,58 @@ onMounted(async () => {
       </div>
 
       <!-- Info de tolerancia -->
-      <p class="text-[9px] text-gray-400 font-medium mb-2 px-1">
+      <p class="text-[9px] text-gray-400 font-medium mb-3 px-1">
         Tolerancia: ±{{ TOLERANCIA_ABS }} absoluto / ±{{ TOLERANCIA_PCT }}% relativo. Cambios dentro de tolerancia = "igual". Cambios con bajo % = "leve".
       </p>
 
-      <!-- Encabezado sticky -->
-      <div class="sticky top-0 z-30 bg-gray-50 -mx-3 px-3">
-        <div class="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1 border-b border-gray-200 px-2 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider">
-          <span>Telar</span>
-          <span class="text-center">R1</span>
-          <span class="text-center">R6</span>
-          <span class="text-center">Dif</span>
-          <span class="text-center">Estado</span>
-        </div>
+      <!-- Tabs filtro Todos / Urdido / Trama -->
+      <div class="flex bg-gray-100 rounded-xl p-1 mb-4 gap-1">
+        <button v-for="tab in [{k:'todos',l:'Todos'},{k:'urdido',l:'Urdido'},{k:'trama',l:'Trama'}]" :key="tab.k"
+          @click="filtroTipo = tab.k"
+          class="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+          :class="filtroTipo === tab.k ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400 hover:text-gray-600'"
+        >{{ tab.l }}</button>
       </div>
 
-      <!-- Filas: Ro.U -->
-      <template v-for="item in comparacion" :key="item.telar.id">
-        <!-- Fila Ro.U -->
-        <div v-if="item.r1U != null || item.r6U != null"
-             class="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1 items-center px-2 py-1.5 border-b border-gray-50"
-             :class="item.evalU === 'peor' ? 'bg-red-50/50' : item.evalU === 'mejor' ? 'bg-emerald-50/30' : ''">
-          <div class="min-w-0">
-            <p class="text-xs font-black text-gray-800 truncate">{{ nombreCorto(item.telar) }}</p>
-            <span class="text-[9px] text-blue-500 font-bold">Rot. Urdido</span>
-          </div>
-          <span class="text-center text-xs font-medium text-gray-500">{{ item.r1U ?? '—' }}</span>
-          <span class="text-center text-xs font-bold" :class="colorCambio(item.evalU)">{{ item.r6U ?? '—' }}</span>
-          <span class="text-center text-[10px] font-bold" :class="colorCambio(item.evalU)">{{ diffTexto(item.r1U, item.r6U) || '—' }}</span>
-          <span class="text-center text-[9px] font-bold px-1 py-0.5 rounded-full border" :class="badgeCambio(item.evalU).cls">
-            {{ badgeCambio(item.evalU).text }}
-          </span>
+      <!-- Empeoramientos -->
+      <div v-if="secEmpeoro.length" class="mb-3 rounded-xl overflow-hidden border border-red-200">
+        <div class="bg-red-100 px-3 py-1.5 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+          <span class="text-xs font-black text-red-700 uppercase tracking-wide">Empeoramientos</span>
+          <span class="ml-auto text-xs font-bold text-red-400">{{ secEmpeoro.length }}</span>
         </div>
+        <pre class="bg-red-50 text-red-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secEmpeoro.join('\n') }}</pre>
+      </div>
 
-        <!-- Fila Ro.T -->
-        <div v-if="item.r1T != null || item.r6T != null"
-             class="grid grid-cols-[1fr_52px_52px_52px_52px] gap-1 items-center px-2 py-1.5 border-b border-gray-100"
-             :class="item.evalT === 'peor' ? 'bg-red-50/50' : item.evalT === 'mejor' ? 'bg-emerald-50/30' : ''">
-          <div class="min-w-0">
-            <p class="text-xs font-black text-gray-800 truncate">{{ nombreCorto(item.telar) }}</p>
-            <span class="text-[9px] text-purple-500 font-bold">Rot. Trama</span>
-          </div>
-          <span class="text-center text-xs font-medium text-gray-500">{{ item.r1T ?? '—' }}</span>
-          <span class="text-center text-xs font-bold" :class="colorCambio(item.evalT)">{{ item.r6T ?? '—' }}</span>
-          <span class="text-center text-[10px] font-bold" :class="colorCambio(item.evalT)">{{ diffTexto(item.r1T, item.r6T) || '—' }}</span>
-          <span class="text-center text-[9px] font-bold px-1 py-0.5 rounded-full border" :class="badgeCambio(item.evalT).cls">
-            {{ badgeCambio(item.evalT).text }}
-          </span>
+      <!-- Leves -->
+      <div v-if="secLeves.length" class="mb-3 rounded-xl overflow-hidden border border-amber-200">
+        <div class="bg-amber-100 px-3 py-1.5 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+          <span class="text-xs font-black text-amber-700 uppercase tracking-wide">Leves</span>
+          <span class="ml-auto text-xs font-bold text-amber-400">{{ secLeves.length }}</span>
         </div>
-      </template>
+        <pre class="bg-amber-50 text-amber-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secLeves.join('\n') }}</pre>
+      </div>
+
+      <!-- Mejoras -->
+      <div v-if="secMejoras.length" class="mb-3 rounded-xl overflow-hidden border border-emerald-200">
+        <div class="bg-emerald-100 px-3 py-1.5 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+          <span class="text-xs font-black text-emerald-700 uppercase tracking-wide">Mejoras</span>
+          <span class="ml-auto text-xs font-bold text-emerald-400">{{ secMejoras.length }}</span>
+        </div>
+        <pre class="bg-emerald-50 text-emerald-900 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secMejoras.join('\n') }}</pre>
+      </div>
+
+      <!-- Sin cambio (colapsable) -->
+      <details v-if="secIguales.length" class="mb-3 rounded-xl border border-gray-200 overflow-hidden group">
+        <summary class="bg-gray-100 px-3 py-1.5 flex items-center gap-1.5 cursor-pointer list-none select-none">
+          <span class="w-2 h-2 rounded-full bg-gray-400 shrink-0"></span>
+          <span class="text-xs font-black text-gray-500 uppercase tracking-wide">Sin cambio</span>
+          <span class="ml-auto text-xs font-bold text-gray-400">{{ secIguales.length }}</span>
+        </summary>
+        <pre class="bg-white text-gray-500 font-mono text-[11.5px] leading-[1.6] px-3 py-2.5 overflow-x-auto whitespace-pre">{{ secIguales.join('\n') }}</pre>
+      </details>
 
       <!-- Sin datos -->
       <div v-if="!comparacion.length" class="text-center py-8 text-sm text-gray-400 font-medium">

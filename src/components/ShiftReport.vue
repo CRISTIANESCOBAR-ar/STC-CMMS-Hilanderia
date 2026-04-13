@@ -537,6 +537,179 @@ function descargarTXT(records) {
   a.href = url; a.download = nombre; a.click();
   URL.revokeObjectURL(url);
 }
+
+const isExporting = ref(false);
+
+async function exportarXLSX() {
+  if (isExporting.value) return;
+  isExporting.value = true;
+  try {
+    const { default: ExcelJS } = await import('exceljs');
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Resumen');
+
+    // Anchos de columna (A–Q = 17 cols)
+    ws.columns = [
+      { width: 6.3 },  // A - vacía
+      { width: 5.4 },  // B - Telar
+      { width: 6.7 },  // C - A Pts
+      { width: 6.7 },  // D - A Rot T
+      { width: 6.7 },  // E - A Rot U
+      { width: 6.7 },  // F - A Rot O
+      { width: 6.7 },  // G - A RPM
+      { width: 6.7 },  // H - B Pts
+      { width: 6.7 },  // I - B Rot T
+      { width: 6.7 },  // J - B Rot U
+      { width: 6.7 },  // K - B Rot O
+      { width: 6.7 },  // L - B RPM
+      { width: 6.7 },  // M - C Pts
+      { width: 6.7 },  // N - C Rot T
+      { width: 6.7 },  // O - C Rot U
+      { width: 6.7 },  // P - C Rot O
+      { width: 6.7 },  // Q - C RPM
+    ];
+
+    // Fecha del reporte
+    const [yyyy, mm, dd] = (fechaReporte.value || '').split('/');
+    const fechaDate = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+
+    // Estilos reutilizables
+    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
+    const turnoFills = {
+      A: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDD7EE' } },
+      B: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } },
+      C: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } },
+    };
+    const boldWhite = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    const boldDark = { bold: true, size: 11 };
+    const centerAlign = { horizontal: 'center', vertical: 'middle' };
+    const thinBorder = {
+      top: { style: 'thin' }, left: { style: 'thin' },
+      bottom: { style: 'thin' }, right: { style: 'thin' },
+    };
+
+    // --- Fila 2: Empresa + Fecha ---
+    ws.mergeCells('B2:C3');
+    ws.mergeCells('D2:M2');
+    ws.mergeCells('N2:Q3');
+
+    const cEmpresa = ws.getCell('D2');
+    cEmpresa.value = 'SANTANA TEXTIL CHACO S.A. - UNIDAD V';
+    cEmpresa.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cEmpresa.fill = headerFill;
+    cEmpresa.alignment = centerAlign;
+
+    const cFecha = ws.getCell('N2');
+    cFecha.value = fechaDate;
+    cFecha.numFmt = 'DD/MM/YYYY';
+    cFecha.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    cFecha.fill = headerFill;
+    cFecha.alignment = centerAlign;
+
+    // --- Fila 3: Título ---
+    ws.mergeCells('D3:M3');
+    const cTitulo = ws.getCell('D3');
+    cTitulo.value = '"PUNTOS Y ROTURAS"';
+    cTitulo.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+    cTitulo.fill = headerFill;
+    cTitulo.alignment = centerAlign;
+
+    // Row heights
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 18;
+
+    // --- Fila 5: Encabezados de turno ---
+    ws.mergeCells('C5:G5');
+    ws.mergeCells('H5:L5');
+    ws.mergeCells('M5:Q5');
+    [['C5', 'Turno "A"', 'FFBDD7EE'], ['H5', 'Turno "B"', 'FFFFE699'], ['M5', 'Turno "C"', 'FFC6EFCE']].forEach(([addr, val, argb]) => {
+      const c = ws.getCell(addr);
+      c.value = val;
+      c.font = boldDark;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+      c.alignment = centerAlign;
+      c.border = thinBorder;
+    });
+    ws.getRow(5).height = 16;
+
+    // --- Fila 6: Encabezados de columna ---
+    const headers6 = [
+      [2, 'Telar'], [3, 'Pts'], [4, 'Rot T'], [5, 'Rot U'], [6, 'Rot O'], [7, 'RPM'],
+      [8, 'Pts'], [9, 'Rot T'], [10, 'Rot U'], [11, 'Rot O'], [12, 'RPM'],
+      [13, 'Pts'], [14, 'Rot T'], [15, 'Rot U'], [16, 'Rot O'], [17, 'RPM'],
+    ];
+    const colTurnoFill = (cn) => {
+      if (cn >= 3 && cn <= 7) return turnoFills.A;
+      if (cn >= 8 && cn <= 12) return turnoFills.B;
+      return turnoFills.C;
+    };
+    headers6.forEach(([cn, label]) => {
+      const c = ws.getRow(6).getCell(cn);
+      c.value = label;
+      c.font = boldDark;
+      c.fill = colTurnoFill(cn);
+      c.alignment = centerAlign;
+      c.border = thinBorder;
+    });
+    ws.getRow(6).height = 15;
+
+    // --- Filas de datos (desde fila 7) ---
+    telaresMaquinas.value.forEach((m, idx) => {
+      const rowNum = 7 + idx;
+      const loom = String(m.maquina);
+      const label = parseInt(loom.slice(-2), 10) || (idx + 1);
+
+      const ra = registros.value[`${loom}_A`] || {};
+      const rb = registros.value[`${loom}_B`] || {};
+      const rc = registros.value[`${loom}_C`] || {};
+
+      const rowData = [
+        [2, label],
+        [3, ra.picks ?? null],    [4, ra.weftCount ?? null], [5, ra.warpCount ?? null],
+        [6, ra.otherCount ?? null], [7, ra.rpm ?? null],
+        [8, rb.picks ?? null],    [9, rb.weftCount ?? null], [10, rb.warpCount ?? null],
+        [11, rb.otherCount ?? null], [12, rb.rpm ?? null],
+        [13, rc.picks ?? null],   [14, rc.weftCount ?? null], [15, rc.warpCount ?? null],
+        [16, rc.otherCount ?? null], [17, rc.rpm ?? null],
+      ];
+
+      const row = ws.getRow(rowNum);
+      rowData.forEach(([cn, val]) => {
+        const c = row.getCell(cn);
+        c.value = val;
+        c.alignment = centerAlign;
+        c.border = thinBorder;
+        if (cn === 2) c.font = boldDark;
+        // Resaltar valores altos de roturas
+        if ((cn === 4 || cn === 9 || cn === 14) && val > 10) {
+          c.font = { bold: true, color: { argb: 'FF9C0006' } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+        } else if ((cn === 5 || cn === 10 || cn === 15) && val > 5) {
+          c.font = { bold: true, color: { argb: 'FF9C0006' } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } };
+        }
+      });
+      row.height = 14;
+      row.commit();
+    });
+
+    // Generar y descargar
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const parts2 = (fechaReporte.value || '').split('/');
+    const nombre = parts2.length === 3 ? `SR${parts2[2]}${parts2[1]}${parts2[0].slice(2)}.xlsx` : 'ShiftReport.xlsx';
+    a.href = url; a.download = nombre; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Error exportando xlsx:', e);
+    Swal.fire('Error', 'No se pudo generar el Excel', 'error');
+  } finally {
+    isExporting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -694,10 +867,15 @@ function descargarTXT(records) {
         </div>
       </div>
 
-      <!-- Botón exportar -->
-      <div class="pb-4 pt-2">
+      <!-- Botones exportar -->
+      <div class="pb-4 pt-2 flex flex-col gap-2">
         <button @click="exportarPRD" class="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-base font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-md active:scale-[0.98]">
           <Download class="w-5 h-5" /> Exportar TXT para PRD
+        </button>
+        <button @click="exportarXLSX" :disabled="isExporting" class="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-base font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-md active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+          <Download class="w-5 h-5" />
+          <span v-if="isExporting">Generando Excel…</span>
+          <span v-else>Exportar Excel (Puntos y Roturas)</span>
         </button>
       </div>
 

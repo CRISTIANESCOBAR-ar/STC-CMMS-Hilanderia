@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
 import { db, storage } from '../firebase/config';
-import { collection, getDocs, query, doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { catalogoService } from '../services/catalogoService';
 import { compressImage } from '../utils/imageCompressor';
@@ -13,12 +13,30 @@ import { saveAs } from 'file-saver';
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light-border.css';
-import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue } from '../constants/organization';
+import { DEFAULT_SECTOR, SECTOR_OPTIONS } from '../constants/organization';
 import { maquinaService } from '../services/maquinaService';
+import { useMaquinasList } from '../composables/useMaquinasList';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
 
-
-const maquinas = ref([]);
+const {
+  maquinas,
+  isLoading,
+  searchQuery,
+  activoFilter,
+  tipoFilter,
+  currentPage,
+  itemsPerPage,
+  filteredMaquinas,
+  tipoFilterOptions,
+  totalPages,
+  paginatedMaquinas,
+  goToFirst,
+  goToPrev,
+  goToNext,
+  goToLast,
+  loadMaquinas,
+  normalizeMachineRecord,
+} = useMaquinasList();
 const catalogoData = ref(catalogDataR60);
 const showCatalogModal = ref(false);
 const catalogoSearchQuery = ref('');
@@ -29,7 +47,6 @@ const catalogoModelosDisponibles = ref(['R-60']);
 const catalogoCargando = ref(false);
 const editingCatalogRowId = ref(null);
 const editingCatalogRow = ref({});
-const isLoading = ref(true);
 
 // Procedimiento editor
 const showProcedimientoModal = ref(false);
@@ -37,131 +54,53 @@ const procedimientoItem = ref(null);
 const procedimientoPasos = ref([]);
 const isSavingProcedimiento = ref(false);
 const uploadingPasoIndex = ref(null);
-const searchQuery = ref('');
 const showModal = ref(false);
 const isEditing = ref(false);
 const viewMode = ref('cards');
 
-// 'all' | 'activas' | 'inactivas'
-const activoFilter = ref('all');
-// '' = todos los tipos, o el nombre del tipo seleccionado
-const tipoFilter = ref('');
-
 const editingRowId = ref(null);
 const editingRow = ref({});
 
-const normalizeMachineRecord = (maquina = {}) => ({
-  ...maquina,
-  sector: normalizeSectorValue(maquina.sector || DEFAULT_SECTOR),
-  activo: maquina.activo ?? true,
-  grp_tear: maquina.grp_tear ?? '',
-  g_cmest: maquina.g_cmest ?? '',
-  orden_patrulla: maquina.orden_patrulla ?? null
-});
-
 const initialForm = { id: null, unidad: 5, maquina: '', local_fisico: '', nro_tipo: '', tipo: 'CARDA', nombre_maquina: '', lado: 'U', modelo: '', nro_serie: '', sector: DEFAULT_SECTOR, activo: true, grp_tear: '', g_cmest: '', orden_patrulla: null };
 const form = ref({ ...initialForm });
-
-// Paginación
-const currentPage = ref(1);
-const itemsPerPage = ref(25);
-
-const totalPages = computed(() => Math.ceil(filteredMaquinas.value.length / itemsPerPage.value) || 1);
-
-const paginatedMaquinas = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value;
-  return filteredMaquinas.value.slice(start, start + itemsPerPage.value);
-});
-
-const goToFirst = () => { currentPage.value = 1; };
-const goToPrev = () => { if (currentPage.value > 1) currentPage.value--; };
-const goToNext = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
-const goToLast = () => { currentPage.value = totalPages.value; };
-
-// Resetear página al buscar o cambiar filtros
-watch([searchQuery, activoFilter, tipoFilter], () => { currentPage.value = 1; });
 
 // Resetear filtros del catálogo cuando cambia la sección
 watch(catalogoSectionFilter, () => { catalogoGroupFilter.value = ''; });
 
 onMounted(async () => {
-  const timeoutId = setTimeout(() => {
-    if (isLoading.value) {
-      isLoading.value = false;
-      Swal.fire({ 
-        icon: 'warning', 
-        title: 'Tiempo excedido', 
-        text: 'La base de datos tarda demasiado en responder. Intenta recargar la página.' 
-      });
-    }
-  }, 10000);
-
   try {
-    const q = query(collection(db, 'maquinas'));
-    const snapshot = await getDocs(q);
-    clearTimeout(timeoutId);
-
-    const data = snapshot.docs.map(doc => normalizeMachineRecord({ id: doc.id, ...doc.data() }));
-    
-    // Ordenar manualmente para asegurar consistencia
-    maquinas.value = data.sort((a, b) => {
-      if ((a.nro_tipo || 0) !== (b.nro_tipo || 0)) return (a.nro_tipo || 0) - (b.nro_tipo || 0);
-      return (a.local_fisico || 0) - (b.local_fisico || 0);
+    await loadMaquinas({
+      onTimeout: () => {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Tiempo excedido',
+          text: 'La base de datos tarda demasiado en responder. Intenta recargar la página.',
+        });
+      },
+      onError: () => {
+        Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el catálogo de máquinas.' });
+      },
     });
 
-    isLoading.value = false;
-
-    // Detectar modelos disponibles en Firestore en segundo plano
     catalogoService.obtenerTodo().then(allData => {
       if (allData.length > 0) {
         const modelos = [...new Set(allData.map(d => d.modelo).filter(Boolean))].sort();
         catalogoModelosDisponibles.value = modelos.length ? modelos : ['R-60'];
-        // Precargar R-60 si existe
         const r60 = allData.filter(d => d.modelo === 'R-60');
         if (r60.length > 0) catalogoData.value = r60;
       }
     }).catch(err => {
       console.warn('No se pudo detectar modelos en Firestore:', err);
     });
-  } catch (error) {
-    clearTimeout(timeoutId);
-    console.error("Error cargando máquinas:", error);
-    isLoading.value = false;
-    Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo cargar el catálogo de máquinas.' });
+  } catch {
+    // onError ya mostró Swal
   }
-  // Inicializar tooltips con un pequeño delay
   setTimeout(() => {
     tippy('[data-tippy-content]', {
       theme: 'light-border',
       duration: [120, 100]
     });
   }, 500);
-});
-
-const filteredMaquinas = computed(() => {
-  const q = searchQuery.value.toLowerCase();
-  return maquinas.value.filter(m => {
-    const estaActivo = m.activo ?? true;
-    if (activoFilter.value === 'activas' && !estaActivo) return false;
-    if (activoFilter.value === 'inactivas' && estaActivo) return false;
-    if (tipoFilter.value && m.tipo !== tipoFilter.value) return false;
-    return (
-      String(m.maquina).toLowerCase().includes(q) ||
-      m.tipo.toLowerCase().includes(q) ||
-      m.nombre_maquina?.toLowerCase().includes(q) ||
-      String(m.sector || '').toLowerCase().includes(q) ||
-      String(m.grp_tear || '').toLowerCase().includes(q) ||
-      String(m.g_cmest || '').toLowerCase().includes(q)
-    );
-  });
-});
-
-const tipoFilterOptions = computed(() => {
-  const tipos = new Set();
-  maquinas.value.forEach((m) => {
-    if (m.tipo) tipos.add(m.tipo);
-  });
-  return Array.from(tipos).sort((a, b) => a.localeCompare(b));
 });
 
 const openAddModal = () => { isEditing.value = false; form.value = { ...initialForm }; showModal.value = true; };

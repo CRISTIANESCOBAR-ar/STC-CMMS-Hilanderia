@@ -31,7 +31,7 @@ const startPreview = () => {
   userRole.value = role;
   previewSector.value = sector || SECTOR_OPTIONS[0];
   closeMenu();
-  router.push(getDefaultRoute(role));
+  router.push(getDefaultRouteForUser(role, userProfile.value?.vistasPersonalizadas));
 };
 
 const applyPreview = () => {
@@ -41,7 +41,7 @@ const applyPreview = () => {
   const roleChanged = userRole.value !== newRole;
   userRole.value = newRole;
   previewSector.value = newSector || SECTOR_OPTIONS[0];
-  if (roleChanged) router.push(getDefaultRoute(newRole));
+  if (roleChanged) router.push(getDefaultRouteForUser(newRole, userProfile.value?.vistasPersonalizadas));
 };
 
 const exitPreview = () => {

@@ -86,6 +86,9 @@ Checklist post-deploy:
 - [ ] Subida de foto en novedad/intervención
 - [ ] Patrulla: crear y actualizar `patrullas`
 
+**Checklist extendido patrulla + toma de puntos (redeploy junio):**  
+→ `docs/CHECKLIST_PATRULLA_JUNIO_2026.md`
+
 ### Fase C — Hosting con fallback IA
 
 ```powershell

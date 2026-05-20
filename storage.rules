@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// CMMS STC — Storage Fase 1
+// Rollback: restaurar desde git main si existía, o reglas permisivas previas.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function under10MB() {
+      return request.resource == null
+        || request.resource.size < 10 * 1024 * 1024;
+    }
+
+    match /novedades/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImage() && under10MB();
+    }
+
+    match /intervenciones/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImage() && under10MB();
+    }
+
+    match /maquinas/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImage() && under10MB();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

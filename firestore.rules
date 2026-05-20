@@ -1,8 +1,180 @@
 rules_version = '2';
+
+// CMMS STC — Reglas Fase 1 (mayo 2026)
+// Objetivo: exigir autenticación y proteger datos sensibles (roles, config admin)
+// sin restringir operación diaria (novedades, intervenciones, patrullas).
+// Rollback: git checkout main -- firestore.rules && firebase deploy --only firestore:rules
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/usuarios/$(uid());
+    }
+
+    function userDoc() {
+      return get(userPath());
+    }
+
+    function userExists() {
+      return exists(userPath());
+    }
+
+    function userRole() {
+      return userExists() ? userDoc().data.role : 'mecanico';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'cristiantescobar@gmail.com';
+    }
+
+    function isJefe() {
+      return isSignedIn() && userRole() in [
+        'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'
+      ];
+    }
+
+    function isStaff() {
+      return isAdmin() || isJefe();
+    }
+
+    function roleUnchanged() {
+      return !('role' in request.resource.data)
+        || request.resource.data.role == resource.data.role;
+    }
+
+    function noPrivilegeEscalation() {
+      return roleUnchanged()
+        && (
+          !('permisosPersonalizados' in request.resource.data)
+          || request.resource.data.permisosPersonalizados == resource.data.permisosPersonalizados
+        )
+        && (
+          !('vistasPersonalizadas' in request.resource.data)
+          || request.resource.data.vistasPersonalizadas == resource.data.vistasPersonalizadas
+        );
+    }
+
+    function validNewUserRole() {
+      return request.resource.data.role == 'mecanico'
+        || (isBootstrapAdmin() && request.resource.data.role == 'admin');
+    }
+
+    // ── Usuarios ─────────────────────────────────────────────────
+    match /usuarios/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && uid() == userId
+        && validNewUserRole();
+      allow update: if isSignedIn() && (
+        (uid() == userId && (isBootstrapAdmin() || noPrivilegeEscalation()))
+        || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ── Configuración ───────────────────────────────────────────
+    match /config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Catálogos y administración ──────────────────────────────
+    match /maquinas/{docId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isStaff();
+    }
+
+    match /catalogo_puestos_control/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /codigos_defectos/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /codigos_paradas/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /sintomas/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /motivos_tipo/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /rutas_patrulla/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── Operación (mantener flujo actual para usuarios autenticados) ──
+    match /novedades/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /intervenciones/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /patrullas/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /notas_turno/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /muestras_anudados/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /shift_reports/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /operarios_horarios/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /paros_telares/{fecha}/registros/{registroId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /ai_summaries/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /fcm_tokens/{userId} {
+      allow read: if isSignedIn() && (uid() == userId || isStaff());
+      allow create, update: if isSignedIn() && uid() == userId;
+      allow delete: if isSignedIn() && (uid() == userId || isAdmin());
+    }
+
+    // Denegar todo lo no declarado explícitamente
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

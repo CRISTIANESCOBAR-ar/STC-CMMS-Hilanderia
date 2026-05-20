@@ -1,5 +1,5 @@
 {
-  "name": "temp-app",
+  "name": "cmms-stc",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -19,7 +19,10 @@
     "sync:maquinas:dry": "node scripts/sync-maquinas-catalogo.mjs",
     "sync:maquinas:apply": "node scripts/sync-maquinas-catalogo.mjs --apply",
     "reset:maquinas:dry": "node scripts/reset-maquinas-catalogo.mjs",
-    "reset:maquinas:apply": "node scripts/reset-maquinas-catalogo.mjs --apply"
+    "reset:maquinas:apply": "node scripts/reset-maquinas-catalogo.mjs --apply",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage",
+    "deploy:functions": "firebase deploy --only functions:geminiGenerate",
+    "deploy:security": "firebase deploy --only firestore:rules,storage,functions:geminiGenerate"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
@@ -38,6 +41,6 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
     "firebase-admin": "^13.7.0",
-    "vite": "^8.0.0"
+    "vite": "^7.0.0"
   }
 }

@@ -59,6 +59,7 @@ export default defineConfig({
   server: {
     // Para desarrollo mobile
     host: true,
+    port: 5200,
   },
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toLocaleString('es-AR', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }))

@@ -1,6 +1,7 @@
-import { collection, query, where, getDocs, Timestamp, doc, getDoc, setDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { normalizeSectorValue } from '../constants/organization';
+import { generateGeminiText, GEMINI_SETUP_MSG } from './geminiClient';
 
 // Filtra un array por sectores visibles
 const filtrarPorSector = (items, sectores) => {
@@ -87,15 +88,6 @@ export const aiService = {
       const fechaAyerFormateada = inicioDia.toLocaleDateString('es-ES', opcionesFecha);
       const fechaHoyFormateada = new Date().toLocaleString('es-ES');
 
-      // 4. Llamada a Gemini (requiere API KEY en import.meta.env.VITE_GEMINI_API_KEY)
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        return {
-          fromCache: false,
-          text: `⚠️ Por favor configura 'VITE_GEMINI_API_KEY' en tu archivo .env para habilitar el análisis de Inteligencia Artificial.\n\nDatos recuperados de (${datosParaIA.length} novedades):\n${JSON.stringify(datosParaIA, null, 2)}`
-        };
-      }
-
       const prompt = `
         Eres un experto Planificador de Mantenimiento Industrial. Analiza el siguiente log de fallas ocurridas en la planta.
         
@@ -118,20 +110,19 @@ export const aiService = {
         ${JSON.stringify(datosParaIA)}
       `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al contactar con la IA');
+      let resumenGenerado;
+      try {
+        const { text } = await generateGeminiText({ prompt });
+        resumenGenerado = text;
+      } catch (e) {
+        if (e.message === 'GEMINI_UNAVAILABLE') {
+          return {
+            fromCache: false,
+            text: `⚠️ ${GEMINI_SETUP_MSG}\n\nDatos recuperados (${datosParaIA.length} novedades):\n${JSON.stringify(datosParaIA, null, 2)}`
+          };
+        }
+        throw e;
       }
-
-      const data = await response.json();
-      const resumenGenerado = data.candidates[0].content.parts[0].text;
 
       // 5. Guardar en caché (Firestore)
       try {
@@ -295,14 +286,6 @@ export const aiService = {
         sector: i.sector || 'N/A',
       }));
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        return {
-          fromCache: false,
-          text: `⚠️ Configura 'VITE_GEMINI_API_KEY' en .env para habilitar el análisis ejecutivo.\n\n${stats.totalNovedades} novedades y ${stats.totalIntervenciones} intervenciones en los últimos ${diasLabel} días.`
-        };
-      }
-
       const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       const desdeStr = desde.toLocaleDateString('es-ES', opcionesFecha);
       const hastaStr = ahora.toLocaleDateString('es-ES', opcionesFecha);
@@ -346,18 +329,19 @@ ESTRUCTURA DEL INFORME (OBLIGATORIA):
 TONO: Profesional y directo. Orientado a la acción. El jefe debe saber exactamente qué hacer hoy.
       `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        })
-      });
-
-      if (!response.ok) throw new Error('Error al contactar con la IA');
-
-      const data = await response.json();
-      const resumenGenerado = data.candidates[0].content.parts[0].text;
+      let resumenGenerado;
+      try {
+        const { text } = await generateGeminiText({ prompt });
+        resumenGenerado = text;
+      } catch (e) {
+        if (e.message === 'GEMINI_UNAVAILABLE') {
+          return {
+            fromCache: false,
+            text: `⚠️ ${GEMINI_SETUP_MSG}\n\n${stats.totalNovedades} novedades y ${stats.totalIntervenciones} intervenciones en los últimos ${diasLabel} días.`
+          };
+        }
+        throw e;
+      }
 
       try {
         await setDoc(cacheRef, {

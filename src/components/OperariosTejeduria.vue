@@ -5,6 +5,7 @@ import { db } from '../firebase/config';
 import { Search, Users, Filter, Camera, Loader2, XCircle, Calendar, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X, LayoutGrid, Table2 } from 'lucide-vue-next';
 import CameraCapture from './CameraCapture.vue';
 import Swal from 'sweetalert2';
+import { generateGeminiText, GEMINI_SETUP_MSG } from '../services/geminiClient';
 
 // ── Estado general ──
 const searchQuery = ref('');
@@ -214,12 +215,6 @@ const handleCapture = async (blob) => {
   isProcessing.value = true;
 
   try {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      Swal.fire('Error', 'Configura VITE_GEMINI_API_KEY en .env para habilitar OCR con IA.', 'error');
-      return;
-    }
-
     const base64 = await blobToBase64(blob);
 
     // Lista COMPLETA de todos los operarios conocidos (todos los turnos) para mejorar matching
@@ -261,26 +256,22 @@ REGLAS:
 - Incluye el nombre tal como lo leas de la planilla.
 - Si no puedes leer nada, responde: { "fecha": "", "turno": "", "operarios": [] }`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: 'image/jpeg', data: base64 } }
-            ]
-          }]
-        })
+    let rawText;
+    try {
+      const { text } = await generateGeminiText({
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+        ],
+      });
+      rawText = text || '{}';
+    } catch (e) {
+      if (e.message === 'GEMINI_UNAVAILABLE') {
+        Swal.fire('IA no disponible', GEMINI_SETUP_MSG, 'warning');
+        return;
       }
-    );
-
-    if (!response.ok) throw new Error(`Error API: ${response.status}`);
-
-    const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      throw e;
+    }
     const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned);
 

@@ -3,9 +3,16 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
-import { getTurnoActual, getTurnoLabel } from '../constants/organization';
+import {
+  getTurnoActual,
+  getTurnoLabel,
+  isPatrullaOperador,
+  isAuxiliarRole,
+  RONDAS_TOMA_PUNTOS_KEYS,
+  RONDAS_TOMA_PUNTOS_SUBS,
+} from '../constants/organization';
 import { cargarPatrullaActiva, cargarPatrullasTurnoActual, cargarPatrullaPorId, reabrirRonda, autoCompletarRondaEvaluacion } from '../services/patrullaService';
-import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors, UserCheck, EyeOff, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors, UserCheck, EyeOff, ChevronDown, ChevronUp, FileText } from 'lucide-vue-next';
 import RegistroRoturas from './RegistroRoturas.vue';
 import RegistroMuestrasAnudados from './RegistroMuestrasAnudados.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
@@ -25,6 +32,17 @@ const headerColapsado = ref(true); // colapsado por defecto al entrar a una rond
 // Auto-colapsar cuando se entra a una sub-vista
 watch(subVista, (val) => { if (val) headerColapsado.value = true; }, { immediate: true });
 
+// Auxiliar: solo sub-rutas de toma de puntos
+watch(
+  subVista,
+  (sub) => {
+    if (esAuxiliar.value && sub && !RONDAS_TOMA_PUNTOS_SUBS.includes(sub)) {
+      router.replace('/patrulla');
+    }
+  },
+  { immediate: true }
+);
+
 // ── Roles que pueden VER patrullas de otros inspectores (solo lectura) ──
 const ROLES_OBSERVADOR = ['supervisor', 'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion', 'admin'];
 
@@ -33,16 +51,17 @@ const cubriendo = ref(false);
 const todasPatrullas = ref([]);           // patrullas activas del turno
 const patrullaExternaId = ref(null);      // ID de la patrulla vista (no propia)
 
-const esInspectorPropio = computed(() => {
-  if (!patrullaData.value) return false;
+const esAuxiliar = computed(() => isAuxiliarRole(userRole.value));
+
+const esOperadorPropio = computed(() => {
+  if (!patrullaData.value) return isPatrullaOperador(userRole.value) && !patrullaExternaId.value;
   const uid = patrullaData.value.inspectorUid;
-  const miUid = userProfile.value?.uid || null;
-  // Si la patrulla pertenece al usuario actual o el usuario es inspector
-  return uid === miUid || (userRole.value === 'inspector' && patrullaExternaId.value === null);
+  const miUid = getAuth().currentUser?.uid || userProfile.value?.uid || null;
+  return uid === miUid || (isPatrullaOperador(userRole.value) && patrullaExternaId.value === null);
 });
 
 const puedeEditar = computed(() => {
-  if (esInspectorPropio.value) return true;
+  if (esOperadorPropio.value) return true;
   if (cubriendo.value) return true;
   // Admin siempre puede editar (incluso en modo Vista Previa donde userRole puede ser distinto)
   if (userProfile.value?.role === 'admin') return true;
@@ -50,7 +69,13 @@ const puedeEditar = computed(() => {
 });
 
 const esObservador = computed(() =>
-  ROLES_OBSERVADOR.includes(userRole.value) && !esInspectorPropio.value
+  ROLES_OBSERVADOR.includes(userRole.value) && !esOperadorPropio.value
+);
+
+const rondasVisibles = computed(() =>
+  esAuxiliar.value
+    ? RONDAS.filter((r) => RONDAS_TOMA_PUNTOS_KEYS.includes(r.key))
+    : RONDAS
 );
 
 // Definición de las 7 rondas
@@ -82,13 +107,21 @@ function estaDesbloqueada(rondaDef, idx) {
   return estadoRonda(RONDAS[idx - 1]) === 'completada';
 }
 
-const rondasConEstado = computed(() =>
-  RONDAS.map((r, i) => ({
+function estaDesbloqueadaTomaPuntos(rondaDef, idx, lista) {
+  if (idx === 0) return true;
+  return estadoRonda(lista[idx - 1]) === 'completada';
+}
+
+const rondasConEstado = computed(() => {
+  const lista = rondasVisibles.value;
+  return lista.map((r, i) => ({
     ...r,
     estado: estadoRonda(r),
-    desbloqueada: estaDesbloqueada(r, i),
-  }))
-);
+    desbloqueada: esAuxiliar.value
+      ? estaDesbloqueadaTomaPuntos(r, i, lista)
+      : estaDesbloqueada(r, RONDAS.indexOf(r)),
+  }));
+});
 
 const rondaActiva = computed(() => RONDAS.find(r => r.sub === subVista.value));
 
@@ -126,7 +159,7 @@ function irARonda(ronda) {
 
 async function onRondaCompletada() {
   await cargarPatrulla();
-  await autoEvaluarR7();
+  if (!esAuxiliar.value) await autoEvaluarR7();
   router.push('/patrulla');
 }
 
@@ -193,8 +226,8 @@ async function cargarPatrulla() {
       return;
     }
 
-    if (userRole.value === 'inspector' || !ROLES_OBSERVADOR.includes(userRole.value)) {
-      // Inspector: carga su propia patrulla
+    if (isPatrullaOperador(userRole.value) || !ROLES_OBSERVADOR.includes(userRole.value)) {
+      // Inspector / Auxiliar: carga su propia patrulla
       const activa = await cargarPatrullaActiva(uid);
       if (activa) {
         patrullaData.value = activa;
@@ -233,8 +266,7 @@ async function seleccionarPatrulla(id) {
 onMounted(async () => {
   await cargarPatrulla();
   cargandoPatrulla.value = false;
-  // Si al cargar ya están R1 y R6 completadas y R7 no, auto-completar
-  await autoEvaluarR7();
+  if (!esAuxiliar.value) await autoEvaluarR7();
 });
 </script>
 
@@ -246,7 +278,7 @@ onMounted(async () => {
         <ArrowLeft class="w-5 h-5" />
       </button>
       <span class="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded shrink-0">{{ getTurnoLabel(turnoActual) }}</span>
-      <span class="text-xs text-gray-600 font-bold truncate min-w-0">{{ userProfile?.nombre || 'Inspector' }}</span>
+      <span class="text-xs text-gray-600 font-bold truncate min-w-0">{{ userProfile?.nombre || (esAuxiliar ? 'Auxiliar' : 'Inspector') }}</span>
       <span v-if="rondaActiva" class="shrink-0 text-[10px] font-black text-gray-400 uppercase">R{{ rondaActiva.num }}</span>
       <button
         v-if="esObservador && patrullaData && subVista"
@@ -321,8 +353,22 @@ onMounted(async () => {
         </div>
 
         <template v-else>
+          <!-- Shift Report (auxiliar) -->
+          <div v-if="esAuxiliar"
+               @click="router.push('/shiftreport')"
+               class="flex items-center gap-3 bg-cyan-50 border border-cyan-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
+            <div class="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center shrink-0">
+              <FileText class="w-4 h-4 text-cyan-600" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-black text-cyan-800">Shift Report</p>
+              <p class="text-[10px] text-cyan-500 font-medium">Reporte de turno</p>
+            </div>
+            <span class="text-[10px] text-cyan-400 font-bold">→</span>
+          </div>
+
           <!-- Muestras de Anudados -->
-          <div @click="router.push('/patrulla/anudados')"
+          <div v-if="!esAuxiliar" @click="router.push('/patrulla/anudados')"
                class="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
             <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
               <Scissors class="w-4 h-4 text-rose-600" />
@@ -335,7 +381,7 @@ onMounted(async () => {
           </div>
 
           <!-- Historial de patrullas -->
-          <div @click="router.push('/patrulla-historial')"
+          <div v-if="!esAuxiliar" @click="router.push('/patrulla-historial')"
                class="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm mb-1">
             <div class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
               <History class="w-4 h-4 text-gray-500" />

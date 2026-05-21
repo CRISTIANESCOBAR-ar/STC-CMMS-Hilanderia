@@ -9,6 +9,7 @@ export const ROLE_OPTIONS = [
   { value: 'mecanico', label: 'Mecánico' },
   { value: 'tejedor', label: 'Tejedor' },
   { value: 'inspector', label: 'Inspector' },
+  { value: 'auxiliar', label: 'Auxiliar' },
   { value: 'supervisor', label: 'Supervisor Producción' },
   { value: 'supervisor_mecanico', label: 'Supervisor Mecánico' },
   { value: 'supervisor_electrico', label: 'Supervisor Eléctrico' },
@@ -59,8 +60,19 @@ export const canDespacharIntervencion = (role) =>
 // Sector por defecto según rol (override del DEFAULT_SECTOR genérico)
 export const ROLE_SECTOR_DEFAULT = {
   inspector: 'TEJEDURIA',
+  auxiliar:  'TEJEDURIA',
   tejedor:   'TEJEDURIA',
 };
+
+/** Roles que operan su propia patrulla (crean/editan rondas) */
+export const isPatrullaOperador = (role) =>
+  ['inspector', 'auxiliar'].includes(role);
+
+export const isAuxiliarRole = (role) => role === 'auxiliar';
+
+/** Rondas de toma de puntos (Paros/Defectos) — únicas habilitadas para auxiliar */
+export const RONDAS_TOMA_PUNTOS_KEYS = ['ronda_2', 'ronda_4', 'ronda_5'];
+export const RONDAS_TOMA_PUNTOS_SUBS = ['paro2', 'paro4', 'paro5'];
 
 export const normalizeSectorValue = (value) => {
   if (!value || typeof value !== 'string') return DEFAULT_SECTOR;
@@ -93,8 +105,14 @@ export const ROLE_PROFILES = {
   inspector: {
     nivel: 'operativo',
     descripcion: 'Recorre planta, detecta anomalías y registra novedades de calidad.',
-    vistas: ['llamar', 'intervenciones', 'carga_novedad', 'patrulla', 'shiftreport'],
+    vistas: ['llamar', 'intervenciones', 'carga_novedad', 'patrulla'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: false, configSistema: false },
+  },
+  auxiliar: {
+    nivel: 'operativo',
+    descripcion: 'Toma de puntos en telares (rondas Paros/Defectos) y Shift Report en Tejeduría.',
+    vistas: ['patrulla', 'shiftreport'],
+    permisos: { verCalidad: true, crearFalla: false, cerrarOrden: false, configSistema: false },
   },
   mecanico: {
     nivel: 'operativo',
@@ -200,6 +218,13 @@ export const ROLE_QUICK_ACTIONS = {
     { id: 'trama_negra',  icon: 'Eye',            label: 'Trama Negra',       route: '/patrulla/trama' },
     { id: 'seguimiento',  icon: 'ClipboardCheck', label: 'Seguimiento',       route: '/patrulla/seguimiento' },
     { id: 'mi_patrulla',  icon: 'Route',          label: 'Mi Patrulla',       route: '/patrulla' },
+  ],
+  auxiliar: [
+    { id: 'toma_puntos',  icon: 'AlertTriangle',  label: 'Toma Puntos',       route: '/patrulla/paro2' },
+    { id: 'paro4',        icon: 'AlertTriangle',  label: 'R4 Paros',          route: '/patrulla/paro4' },
+    { id: 'paro5',        icon: 'AlertTriangle',  label: 'R5 Paros',          route: '/patrulla/paro5' },
+    { id: 'mi_patrulla',  icon: 'Route',          label: 'Inicio',            route: '/patrulla' },
+    { id: 'shiftreport',  icon: 'FileText',       label: 'Shift Report',      route: '/shiftreport' },
   ],
   mecanico: [
     { id: 'intervenciones', icon: 'ClipboardList', label: 'Intervenciones', route: '/intervenciones' },

@@ -186,7 +186,7 @@ const pageTitle = computed(() => {
   if (path === '/sintomas')  return 'Síntomas de Tejeduría';
   if (path === '/rondas')    return 'Rutas de Ronda';
   if (path === '/login') return 'Ingreso al Sistema';
-  if (path === '/patrulla') return 'Patrulla de Calidad';
+  if (path === '/patrulla') return userRole.value === 'auxiliar' ? 'Toma de Puntos' : 'Patrulla de Calidad';
   if (path.startsWith('/patrulla/roturas')) return 'R1 — ROTURAS';
   if (path.startsWith('/patrulla/paro2')) return 'R2 — PAROS / DEFECTOS';
   if (path.startsWith('/patrulla/trama')) return 'R3 — TRAMA NEGRA';
@@ -220,7 +220,7 @@ const userRoleLabelClass = computed(() => {
 const tabIconMap = {
   AlertTriangle, BellRing, ScanSearch, Eye, ClipboardList,
   History, ShieldCheck, Settings2, Users, Stethoscope,
-  ScanLine, ClipboardCheck, Route, Gauge,
+  ScanLine, ClipboardCheck, Route, Gauge, FileText,
 };
 
 const tabActions = computed(() => {
@@ -368,7 +368,7 @@ const navigateTab = (action) => {
               active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
             >
               <ScanSearch class="w-6 h-6 mr-4" />
-              Patrulla de Calidad
+              {{ userRole === 'auxiliar' ? 'Toma de Puntos' : 'Patrulla de Calidad' }}
             </router-link>
 
             <router-link

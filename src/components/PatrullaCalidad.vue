@@ -29,27 +29,24 @@ const patrullaData = ref(null);
 const cargandoPatrulla = ref(true);
 const headerColapsado = ref(true); // colapsado por defecto al entrar a una ronda
 
-// Auto-colapsar cuando se entra a una sub-vista
-watch(subVista, (val) => { if (val) headerColapsado.value = true; }, { immediate: true });
-
-// Auxiliar: solo sub-rutas de toma de puntos
-watch(
-  subVista,
-  (sub) => {
-    if (esAuxiliar.value && sub && !RONDAS_TOMA_PUNTOS_SUBS.includes(sub)) {
-      router.replace('/patrulla');
-    }
-  },
-  { immediate: true }
-);
-
 // ── Roles que pueden VER patrullas de otros inspectores (solo lectura) ──
 const ROLES_OBSERVADOR = ['supervisor', 'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion', 'admin'];
 
+// Definición de las 7 rondas
+const RONDAS = [
+  { key: 'ronda_1', num: 1, tipo: 'roturas',       sub: 'roturas',   label: 'Roturas',           desc: 'Rot. Urdido y Rot. Trama', icon: ScanLine,       color: 'blue' },
+  { key: 'ronda_2', num: 2, tipo: 'paro_defecto',   sub: 'paro2',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
+  { key: 'ronda_3', num: 3, tipo: 'trama_negra',    sub: 'trama',     label: 'Trama Negra',       desc: 'Inspección trama blanca',   icon: Eye,            color: 'amber' },
+  { key: 'ronda_4', num: 4, tipo: 'paro_defecto',   sub: 'paro4',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
+  { key: 'ronda_5', num: 5, tipo: 'paro_defecto',   sub: 'paro5',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
+  { key: 'ronda_6', num: 6, tipo: 'roturas',        sub: 'roturas6',  label: 'Roturas',           desc: 'Rot. Urdido y Rot. Trama', icon: ScanLine,       color: 'blue' },
+  { key: 'ronda_7', num: 7, tipo: 'evaluacion',     sub: 'seguimiento', label: 'Evaluación',      desc: 'Mejoró / Empeoró / Igual', icon: ClipboardCheck, color: 'emerald' },
+];
+
 // ── Solo lectura / cobertura ─────────────────────────────────────
 const cubriendo = ref(false);
-const todasPatrullas = ref([]);           // patrullas activas del turno
-const patrullaExternaId = ref(null);      // ID de la patrulla vista (no propia)
+const todasPatrullas = ref([]);
+const patrullaExternaId = ref(null);
 
 const esAuxiliar = computed(() => isAuxiliarRole(userRole.value));
 
@@ -63,7 +60,6 @@ const esOperadorPropio = computed(() => {
 const puedeEditar = computed(() => {
   if (esOperadorPropio.value) return true;
   if (cubriendo.value) return true;
-  // Admin siempre puede editar (incluso en modo Vista Previa donde userRole puede ser distinto)
   if (userProfile.value?.role === 'admin') return true;
   return false;
 });
@@ -78,16 +74,17 @@ const rondasVisibles = computed(() =>
     : RONDAS
 );
 
-// Definición de las 7 rondas
-const RONDAS = [
-  { key: 'ronda_1', num: 1, tipo: 'roturas',       sub: 'roturas',   label: 'Roturas',           desc: 'Rot. Urdido y Rot. Trama', icon: ScanLine,       color: 'blue' },
-  { key: 'ronda_2', num: 2, tipo: 'paro_defecto',   sub: 'paro2',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
-  { key: 'ronda_3', num: 3, tipo: 'trama_negra',    sub: 'trama',     label: 'Trama Negra',       desc: 'Inspección trama blanca',   icon: Eye,            color: 'amber' },
-  { key: 'ronda_4', num: 4, tipo: 'paro_defecto',   sub: 'paro4',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
-  { key: 'ronda_5', num: 5, tipo: 'paro_defecto',   sub: 'paro5',     label: 'Paros / Defectos',  desc: 'Recorrida de observación',  icon: AlertIcon,      color: 'orange' },
-  { key: 'ronda_6', num: 6, tipo: 'roturas',        sub: 'roturas6',  label: 'Roturas',           desc: 'Rot. Urdido y Rot. Trama', icon: ScanLine,       color: 'blue' },
-  { key: 'ronda_7', num: 7, tipo: 'evaluacion',     sub: 'seguimiento', label: 'Evaluación',      desc: 'Mejoró / Empeoró / Igual', icon: ClipboardCheck, color: 'emerald' },
-];
+watch(subVista, (val) => { if (val) headerColapsado.value = true; }, { immediate: true });
+
+watch(
+  subVista,
+  (sub) => {
+    if (esAuxiliar.value && sub && !RONDAS_TOMA_PUNTOS_SUBS.includes(sub)) {
+      router.replace('/patrulla');
+    }
+  },
+  { immediate: true }
+);
 
 // Estado de cada ronda
 function estadoRonda(rondaDef) {

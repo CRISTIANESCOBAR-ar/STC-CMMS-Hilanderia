@@ -37,7 +37,9 @@ export const VISTA_OPTIONS = [
   { slug: 'sintomas',       label: 'Síntomas',               route: '/sintomas' },
   { slug: 'rondas',         label: 'Rutas de Ronda',         route: '/rondas' },
   { slug: 'patrulla',       label: 'Patrulla Calidad',       route: '/patrulla' },
+  { slug: 'patrulla_seguimiento', label: 'Patrulla (Vista)', route: '/patrulla-seguimiento' },
   { slug: 'shiftreport',    label: 'Shift Report',            route: '/shiftreport' },
+  { slug: 'operarios',      label: 'Operarios Tejeduría',    route: '/operarios' },
   { slug: 'eficiencia',       label: 'Registro Eficiencia',      route: '/eficiencia' },
   { slug: 'paros-anudado',   label: 'Paros / Anudados',        route: '/paros-anudado' },
 ];
@@ -65,14 +67,9 @@ export const ROLE_SECTOR_DEFAULT = {
 };
 
 /** Roles que operan su propia patrulla (crean/editan rondas) */
-export const isPatrullaOperador = (role) =>
-  ['inspector', 'auxiliar'].includes(role);
+export const isPatrullaOperador = (role) => role === 'inspector';
 
 export const isAuxiliarRole = (role) => role === 'auxiliar';
-
-/** Rondas de toma de puntos (Paros/Defectos) — únicas habilitadas para auxiliar */
-export const RONDAS_TOMA_PUNTOS_KEYS = ['ronda_2', 'ronda_4', 'ronda_5'];
-export const RONDAS_TOMA_PUNTOS_SUBS = ['paro2', 'paro4', 'paro5'];
 
 export const normalizeSectorValue = (value) => {
   if (!value || typeof value !== 'string') return DEFAULT_SECTOR;
@@ -110,8 +107,8 @@ export const ROLE_PROFILES = {
   },
   auxiliar: {
     nivel: 'operativo',
-    descripcion: 'Toma de puntos en telares (rondas Paros/Defectos) y Shift Report en Tejeduría.',
-    vistas: ['patrulla', 'shiftreport'],
+    descripcion: 'Shift Report, seguimiento de patrulla (solo lectura) y operarios en Tejeduría.',
+    vistas: ['shiftreport', 'patrulla_seguimiento', 'operarios'],
     permisos: { verCalidad: true, crearFalla: false, cerrarOrden: false, configSistema: false },
   },
   mecanico: {
@@ -123,43 +120,43 @@ export const ROLE_PROFILES = {
   supervisor: {
     nivel: 'mandos',
     descripcion: 'Supervisa producción del turno; despacha y prioriza intervenciones.',
-    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar', 'eficiencia'],
+    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar', 'eficiencia', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: false, configSistema: false },
   },
   supervisor_mecanico: {
     nivel: 'mandos',
     descripcion: 'Coordina mecánicos del turno; asigna y supervisa órdenes de trabajo.',
-    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar', 'eficiencia'],
+    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar', 'eficiencia', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   supervisor_electrico: {
     nivel: 'mandos',
     descripcion: 'Coordina electricistas del turno; gestiona fallas eléctricas.',
-    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar'],
+    vistas: ['carga_novedad', 'intervenciones', 'historico', 'llamar', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   jefe_sector: {
     nivel: 'mandos',
     descripcion: 'Lidera equipo mecánico del sector; controla indicadores y recursos.',
-    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas'],
+    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   jefe_electricos: {
     nivel: 'mandos',
     descripcion: 'Lidera equipo eléctrico del sector; gestiona mantenimiento eléctrico.',
-    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas'],
+    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   jefe_produccion: {
     nivel: 'estrategico',
     descripcion: 'Dirige producción del sector; define prioridades y objetivos de planta.',
-    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas'],
+    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   gerente_produccion: {
     nivel: 'estrategico',
     descripcion: 'Visión global de producción; analiza KPIs y toma decisiones estratégicas.',
-    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas', 'usuarios'],
+    vistas: ['jefe', 'intervenciones', 'historico', 'llamar', 'maquinas', 'usuarios', 'patrulla_seguimiento'],
     permisos: { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: false },
   },
   admin: {
@@ -220,11 +217,9 @@ export const ROLE_QUICK_ACTIONS = {
     { id: 'mi_patrulla',  icon: 'Route',          label: 'Mi Patrulla',       route: '/patrulla' },
   ],
   auxiliar: [
-    { id: 'toma_puntos',  icon: 'AlertTriangle',  label: 'Toma Puntos',       route: '/patrulla/paro2' },
-    { id: 'paro4',        icon: 'AlertTriangle',  label: 'R4 Paros',          route: '/patrulla/paro4' },
-    { id: 'paro5',        icon: 'AlertTriangle',  label: 'R5 Paros',          route: '/patrulla/paro5' },
-    { id: 'mi_patrulla',  icon: 'Route',          label: 'Inicio',            route: '/patrulla' },
     { id: 'shiftreport',  icon: 'FileText',       label: 'Shift Report',      route: '/shiftreport' },
+    { id: 'patrulla',     icon: 'Eye',            label: 'Patrulla',          route: '/patrulla-seguimiento' },
+    { id: 'operarios',    icon: 'Users',          label: 'Operarios',         route: '/operarios' },
   ],
   mecanico: [
     { id: 'intervenciones', icon: 'ClipboardList', label: 'Intervenciones', route: '/intervenciones' },

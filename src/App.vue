@@ -186,7 +186,8 @@ const pageTitle = computed(() => {
   if (path === '/sintomas')  return 'Síntomas de Tejeduría';
   if (path === '/rondas')    return 'Rutas de Ronda';
   if (path === '/login') return 'Ingreso al Sistema';
-  if (path === '/patrulla') return userRole.value === 'auxiliar' ? 'Toma de Puntos' : 'Patrulla de Calidad';
+  if (path === '/patrulla') return 'Patrulla de Calidad';
+  if (path === '/patrulla-seguimiento') return 'Patrulla (Vista)';
   if (path.startsWith('/patrulla/roturas')) return 'R1 — ROTURAS';
   if (path.startsWith('/patrulla/paro2')) return 'R2 — PAROS / DEFECTOS';
   if (path.startsWith('/patrulla/trama')) return 'R3 — TRAMA NEGRA';
@@ -328,6 +329,17 @@ const navigateTab = (action) => {
         >
           <div class="px-3 pt-2 space-y-2" :class="showTabBar ? 'pb-20' : 'pb-6'">
             <router-link
+              v-if="canAccessView(userRole, 'shiftreport')"
+              to="/shiftreport"
+              @click="closeMenu"
+              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
+              active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+            >
+              <FileText class="w-6 h-6 mr-4" />
+              Shift Report
+            </router-link>
+
+            <router-link
               v-if="canAccessView(userRole, 'carga_novedad')"
               to="/"
               @click="closeMenu"
@@ -368,10 +380,11 @@ const navigateTab = (action) => {
               active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
             >
               <ScanSearch class="w-6 h-6 mr-4" />
-              {{ userRole === 'auxiliar' ? 'Toma de Puntos' : 'Patrulla de Calidad' }}
+              Patrulla de Calidad
             </router-link>
 
             <router-link
+              v-if="canAccessView(userRole, 'patrulla_seguimiento')"
               to="/patrulla-seguimiento"
               @click="closeMenu"
               class="flex items-center px-4 py-4 rounded-xs text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
@@ -492,17 +505,7 @@ const navigateTab = (action) => {
             </router-link>
 
             <router-link
-              v-if="canAccessView(userRole, 'shiftreport')"
-              to="/shiftreport"
-              @click="closeMenu"
-              class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"
-              active-class="bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
-            >
-              <FileText class="w-6 h-6 mr-4" />
-              Shift Report
-            </router-link>
-
-            <router-link
+              v-if="canAccessView(userRole, 'operarios')"
               to="/operarios"
               @click="closeMenu"
               class="flex items-center px-4 py-4 rounded-2xl text-lg font-bold transition-all hover:bg-gray-200 active:bg-gray-300"

@@ -97,7 +97,11 @@ export const canAccessRouteForUser = (role, routePath, vistasPersonalizadas) => 
   const segments = routePath.split('/').filter(Boolean);
   const basePath = segments.length ? '/' + segments[0] : '/';
   const slug = ROUTE_TO_SLUG[basePath];
-  if (!slug) return true;
+  if (!slug) {
+    // Auxiliar: solo rutas declaradas en su perfil (sin acceso libre a rutas legacy)
+    if (role === 'auxiliar') return false;
+    return true;
+  }
   return canAccessViewForUser(role, slug, vistasPersonalizadas);
 };
 

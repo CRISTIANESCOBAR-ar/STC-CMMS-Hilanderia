@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { ROLE_PROFILES, VISTA_OPTIONS } from '../constants/organization';
+import { ROLE_PROFILES, VISTA_OPTIONS, ROLE_SECTOR_DEFAULT, DEFAULT_SECTOR } from '../constants/organization';
 
 // ── State reactivo ──
 const profileOverrides = ref({});
@@ -32,6 +32,30 @@ export const saveProfiles = async (profiles) => {
 };
 
 // ── Getters efectivos (Firestore override > default) ──
+export const getEffectiveDescripcion = (role) => {
+  if (!role) return '';
+  if (role === 'admin') return ROLE_PROFILES[role]?.descripcion || 'Acceso total al sistema';
+  const override = profileOverrides.value[role];
+  if (override?.descripcion !== undefined) return override.descripcion;
+  return ROLE_PROFILES[role]?.descripcion || '';
+};
+
+export const getEffectiveNivel = (role) => {
+  if (!role) return 'operativo';
+  if (role === 'admin') return 'global';
+  const override = profileOverrides.value[role];
+  if (override?.nivel !== undefined) return override.nivel;
+  return ROLE_PROFILES[role]?.nivel || 'operativo';
+};
+
+export const getEffectiveSectorDefault = (role) => {
+  if (!role) return DEFAULT_SECTOR;
+  if (role === 'admin') return DEFAULT_SECTOR;
+  const override = profileOverrides.value[role];
+  if (override?.sectorDefault !== undefined) return override.sectorDefault;
+  return ROLE_SECTOR_DEFAULT[role] || DEFAULT_SECTOR;
+};
+
 export const getEffectiveVistas = (role) => {
   if (!role) return [];
   if (role === 'admin') return VISTA_OPTIONS.map(v => v.slug);

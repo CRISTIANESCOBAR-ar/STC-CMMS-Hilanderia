@@ -169,10 +169,10 @@ export const ROLE_PROFILES = {
 
 // Niveles jerárquicos con metadata visual (colores para UI)
 export const NIVEL_CONFIG = {
-  operativo:   { label: 'Operativo',   color: 'blue' },
-  mandos:      { label: 'Mandos Medios', color: 'violet' },
-  estrategico: { label: 'Estratégico', color: 'emerald' },
-  global:      { label: 'Global',      color: 'amber' },
+  operativo:   { label: 'Operativo',   color: 'blue',    emoji: '🔧' },
+  mandos:      { label: 'Mandos Medios', color: 'violet',  emoji: '📋' },
+  estrategico: { label: 'Estratégico',  color: 'emerald', emoji: '🎯' },
+  global:      { label: 'Global',       color: 'amber',   emoji: '👑' },
 };
 
 // ── Helpers de permisos granulares ───────────────────────────────

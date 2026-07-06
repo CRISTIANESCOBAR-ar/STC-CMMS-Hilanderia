@@ -1,4 +1,69 @@
 <script setup>
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+
+const VISTA_DESCRIPTIONS = {
+  carga_novedad: 'Reporte rápido de fallas o paros en máquinas.',
+  jefe: 'Acceso a métricas de eficiencia, personal e intervenciones.',
+  llamar: 'Generación de solicitudes de asistencia de mantenimiento.',
+  intervenciones: 'Gestión y estado de las órdenes de trabajo del turno.',
+  historico: 'Registro histórico de novedades, fallas y eventos de mantenimiento.',
+  maquinas: 'Gestión, asignación y catalogación de maquinaria física.',
+  usuarios: 'Configuración de credenciales, roles y accesos.',
+  traducciones: 'Modificación del diccionario y nomenclatura técnica.',
+  codigos: 'Administración de códigos de falla y categorías de paro.',
+  catalogo: 'Manuales, procedimientos de solución e instructivos técnicos.',
+  sintomas: 'Gestión de síntomas recurrentes reportados por tejedores.',
+  rondas: 'Diseño y programación de rondas de patrulla.',
+  patrulla: 'Registro en tiempo real de la patrulla de calidad.',
+  patrulla_seguimiento: 'Visualización y seguimiento de hallazgos del día.',
+  shiftreport: 'Cierre consolidado e informe del relevo de turno.',
+  operarios: 'Control de asistencia e historial del personal operativo.',
+  eficiencia: 'Monitoreo e ingreso manual de rendimientos de telares.',
+  'paros-anudado': 'Control de paros por roturas de hilos y anudados.',
+};
+
+const vNavTippy = {
+  mounted(el, binding) {
+    const { slug, title } = binding.value || {};
+    const description = VISTA_DESCRIPTIONS[slug] || binding.value?.description || '';
+    let descTimeout = null;
+
+    const instance = tippy(el, {
+      content: title,
+      placement: 'right',
+      delay: [100, 100],
+      allowHTML: true,
+      onShow(instance) {
+        descTimeout = setTimeout(() => {
+          if (description) {
+            instance.setContent(`
+              <div class="flex flex-col gap-0.5 text-left text-xs max-w-[200px] pointer-events-none">
+                <span class="font-black text-white">${title}</span>
+                <span class="text-gray-300 text-[10px] leading-normal whitespace-normal border-t border-gray-700/60 pt-1 mt-0.5">${description}</span>
+              </div>
+            `);
+          }
+        }, 1000);
+      },
+      onHide(instance) {
+        if (descTimeout) {
+          clearTimeout(descTimeout);
+          descTimeout = null;
+        }
+        instance.setContent(title);
+      }
+    });
+
+    el._tippyInstance = instance;
+  },
+  unmounted(el) {
+    if (el._tippyInstance) {
+      el._tippyInstance.destroy();
+    }
+  }
+};
+
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, userRole, userProfile, previewSector } from './services/authService';
@@ -274,181 +339,181 @@ const navigateTab = (action) => {
         <router-link
           v-if="canAccessView(userRole, 'shiftreport')"
           to="/shiftreport"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'shiftreport', title: 'Shift Report' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/shiftreport' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <FileText class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Shift Report</span>
         </router-link>
         
         <router-link
           v-if="canAccessView(userRole, 'carga_novedad')"
           to="/"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'carga_novedad', title: 'Reportar Falla' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Wrench class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Reportar Falla</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'jefe')"
           to="/jefe"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'jefe', title: 'Panel de Control' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/jefe' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <ShieldCheck class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Panel de Control</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'llamar')"
           to="/llamar"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'llamar', title: 'Solicitar Intervención' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/llamar' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <BellRing class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Solicitar Intervención</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'patrulla')"
           to="/patrulla"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'patrulla', title: 'Patrulla de Calidad' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/patrulla' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <ScanSearch class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Patrulla de Calidad</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'patrulla_seguimiento')"
           to="/patrulla-seguimiento"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'patrulla_seguimiento', title: 'Patrulla (Vista)' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/patrulla-seguimiento' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Eye class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Patrulla (Vista)</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'eficiencia')"
           to="/eficiencia"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'eficiencia', title: 'Registro de Eficiencia' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/eficiencia' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Gauge class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Registro de Eficiencia</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'intervenciones')"
           to="/intervenciones"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'intervenciones', title: 'Intervenciones' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/intervenciones' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <ClipboardList class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Intervenciones</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'historico')"
           to="/historico"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'historico', title: 'Historial de Novedades' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/historico' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <History class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Historial de Novedades</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'maquinas')"
           to="/maquinas"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'maquinas', title: 'Gestión de Máquinas' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/maquinas' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Settings2 class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Gestión de Máquinas</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'usuarios')"
           to="/usuarios"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'usuarios', title: 'Gestión de Usuarios' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/usuarios' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Users class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Gestión de Usuarios</span>
         </router-link>
         
         <router-link
           v-if="canAccessView(userRole, 'traducciones')"
           to="/traducciones"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'traducciones', title: 'Traducciones' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/traducciones' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Languages class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Traducciones</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'codigos')"
           to="/codigos"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'codigos', title: 'Códigos y Falla' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/codigos' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <ListFilter class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Códigos y Falla</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'catalogo')"
           to="/catalogo"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'catalogo', title: 'Catálogo Máquinas' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/catalogo' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <BookMarked class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Catálogo Máquinas</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'sintomas')"
           to="/sintomas"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'sintomas', title: 'Síntomas' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/sintomas' ? 'bg-teal-100 text-teal-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Stethoscope class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Síntomas</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'rondas')"
           to="/rondas"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'rondas', title: 'Rutas de Ronda' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/rondas' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Route class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Rutas de Ronda</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'operarios')"
           to="/operarios"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'operarios', title: 'Operarios Tejeduría' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/operarios' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Users class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Operarios Tejeduría</span>
         </router-link>
 
         <router-link
           v-if="canAccessView(userRole, 'paros-anudado')"
           to="/paros-anudado"
-          class="group relative w-full flex items-center justify-center h-12 rounded-xl transition-all"
+          v-nav-tippy="{ slug: 'paros-anudado', title: 'Paros / Anudados' }"
+          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
           :class="$route.path === '/paros-anudado' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
         >
           <Scissors class="w-5 h-5" />
-          <span class="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-50">Paros / Anudados</span>
         </router-link>
       </nav>
 
@@ -489,29 +554,23 @@ const navigateTab = (action) => {
 
       <!-- User & Logout -->
       <div class="w-full px-2 flex flex-col items-center gap-2 relative shrink-0">
-        <div class="group/user w-full relative">
-          <button class="w-full flex justify-center items-center h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all border border-gray-200/50">
+        <div class="w-full relative">
+          <button
+            v-nav-tippy="{ title: 'Perfil de Usuario', description: 'Muestra información detallada de tu sesión de usuario actual y roles asignados.' }"
+            class="w-full flex justify-center items-center h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all border border-gray-200/50"
+          >
             <User class="w-4 h-4" />
           </button>
-          <div class="pointer-events-none absolute left-full ml-3 bottom-0 whitespace-nowrap rounded-lg bg-gray-800 text-white shadow-lg p-3 text-xs opacity-0 group-hover/user:opacity-100 transition-opacity z-50 flex flex-col gap-1">
-            <span class="font-bold text-gray-400 uppercase tracking-widest text-[10px]">Usuario</span>
-            <span class="text-sm font-black">{{ user ? (user.isAnonymous ? 'Invitado' : user.email) : '' }}</span>
-            <div v-if="userRole" class="mt-1">
-              <span :class="userRoleLabelClass" class="px-2 py-0.5 rounded-md border text-[10px] uppercase font-bold bg-transparent">
-                {{ ROLE_LABEL[userRole] || userRole }}
-              </span>
-            </div>
-          </div>
         </div>
 
-        <div class="group/logout w-full relative pb-2">
+        <div class="w-full relative pb-2">
           <button 
             @click="handleLogout"
+            v-nav-tippy="{ title: 'Cerrar Sesión', description: 'Finaliza de forma segura la sesión actual en este dispositivo.' }"
             class="w-full flex items-center justify-center h-10 rounded-xl text-red-500 bg-red-50 hover:bg-red-100 transition-all border border-red-100"
           >
             <LogOut class="w-4 h-4" />
           </button>
-          <span class="pointer-events-none absolute left-full ml-3 bottom-2 whitespace-nowrap rounded-lg bg-red-600 text-white shadow-lg px-2.5 py-1.5 text-xs font-bold opacity-0 group-hover/logout:opacity-100 transition-opacity z-50">Cerrar Sesión</span>
         </div>
       </div>
 

@@ -129,5 +129,21 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
   emuladores Firestore/Storage, sintaxis Functions y build sin secretos reales.
 - El pipeline tiene permisos de lectura y no despliega.
 - Monitoreo, alertas, backups/restauración, entorno piloto y pruebas de carga siguen pendientes.
-- El estado remoto del pipeline se registra después del primer push.
+- Primer pipeline remoto correcto (SHA b9abf88): [ejecución 38087403013](https://github.com/CRISTIANESCOBAR-ar/STC-CMMS-Hilanderia/actions/runs/38087403013). Acciones actualizadas a versiones oficiales vigentes y runner Ubuntu 24.04 para evitar cambios implícitos del entorno.
 - Rollback: revertir commit del workflow; no modifica aplicaciones ni datos de Firebase.
+
+## Checkpoints publicados
+
+| Commit | Entrega | Verificación |
+| --- | --- | --- |
+| 4cfefdd | P0: plan y rollback | Documentación |
+| 544ccd8 | S1: IA en servidor y resúmenes seguros | 10 unitarias y build |
+| bf4361a | S2: perfiles y sesión | 15 unitarias, 9 emulador y build |
+| ed33ef3 | R1: configuración | 15 unitarias, 10 emulador y build |
+| ca6503b | D1: actualizaciones compatibles | Mismas pruebas; avisos restantes registrados |
+| b9abf88 | O1: CI inicial | Instalación limpia, 25 pruebas y build en GitHub |
+
+Los commits están publicados en `origin/codex/preparacion-produccion`. Ninguna de
+estas entregas modifica Firebase remoto. Antes del despliegue de Functions revisar
+además el runtime declarado (actualmente Node 20) y migrarlo a uno soportado, con
+pruebas del servicio en entorno piloto.

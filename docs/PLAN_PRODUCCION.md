@@ -16,7 +16,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | S1 | IA solo en servidor y contenido seguro | Verificado localmente | Sin clave Gemini en frontend; errores controlados; HTML externo escapado; pruebas y build |
 | S2 | Protección de perfiles | Verificado localmente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
 | S3 | Permisos operativos y Storage | Pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
-| R1 | Sesión y configuración | En curso | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
+| R1 | Sesión y configuración | Verificado localmente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
 | R2 | Fechas y turnos de planta | Pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
@@ -99,3 +99,14 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
   deben coordinarse para no restaurar un login incompatible con las reglas activas.
 - R1 parcial: resuelta sesión; aún falta carga de configuración y recuperación de perfiles
   organizacionales sin almacenar como éxito una lectura fallida.
+
+### R1 — Configuración y recuperación
+
+- Cargar umbrales de patrulla es lectura pura: usa defaults para campos ausentes,
+  conserva valores configurados y no intenta migrar como inspector.
+- Lecturas fallidas de perfiles organizacionales se propagan y permiten reintento;
+  la sesión no se habilita hasta cargarlos. Guardar cambios publica estado local
+  solo después de confirmación de Firestore.
+- Validación acumulada: 15 pruebas unitarias y 10 de reglas, build correcto.
+- Pendiente: ensayo manual de corte de red y recuperación en puesto de planta.
+- Rollback: revertir commit R1; no hubo cambios ni migraciones de datos remotos.

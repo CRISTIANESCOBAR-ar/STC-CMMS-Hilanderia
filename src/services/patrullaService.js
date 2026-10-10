@@ -13,23 +13,8 @@ const DEFAULTS_CONFIG = {
 
 export async function loadPatrullaConfig() {
   const snap = await getDoc(doc(db, DOC_CONFIG));
-  if (snap.exists()) {
-    const stored = snap.data();
-    // Detectar si los defaults cambiaron y actualizar
-    let needsUpdate = false;
-    for (const [k, v] of Object.entries(DEFAULTS_CONFIG)) {
-      if (stored[k] === undefined) needsUpdate = true;
-    }
-    // Migración: si stored tiene valores viejos, sobrescribir con nuevos defaults
-    if (stored.umbralRoturaU === 5 && stored.umbralRoturaT === 5) needsUpdate = true;
-    if (needsUpdate) {
-      await setDoc(doc(db, DOC_CONFIG), DEFAULTS_CONFIG, { merge: true });
-      return { ...stored, ...DEFAULTS_CONFIG };
-    }
-    return { ...DEFAULTS_CONFIG, ...stored };
-  }
-  await setDoc(doc(db, DOC_CONFIG), DEFAULTS_CONFIG);
-  return { ...DEFAULTS_CONFIG };
+  // A read by an inspector never migrates or creates admin-only configuration.
+  return { ...DEFAULTS_CONFIG, ...(snap.exists() ? snap.data() : {}) };
 }
 
 export async function savePatrullaConfig(cfg) {

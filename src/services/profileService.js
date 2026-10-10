@@ -6,6 +6,7 @@ import { ROLE_PROFILES, VISTA_OPTIONS, ROLE_SECTOR_DEFAULT, DEFAULT_SECTOR } fro
 // ── State reactivo ──
 const profileOverrides = ref({});
 let _loaded = false;
+let _loading = null;
 
 // Route → slug lookup
 const ROUTE_TO_SLUG = Object.fromEntries(
@@ -15,20 +16,18 @@ const ROUTE_TO_SLUG = Object.fromEntries(
 // ── Load / Save ──
 export const loadProfiles = async () => {
   if (_loaded) return;
-  try {
-    const snap = await getDoc(doc(db, 'config', 'organization'));
-    if (snap.exists() && snap.data().profiles) {
-      profileOverrides.value = snap.data().profiles;
-    }
-  } catch (e) {
-    console.error('Error loading profiles:', e);
+  if (!_loading) {
+    _loading = getDoc(doc(db, 'config', 'organization')).then(snap => {
+      profileOverrides.value = snap.exists() ? (snap.data().profiles || {}) : {};
+      _loaded = true; // Failed reads must be retryable, not silently accepted.
+    }).finally(() => { _loading = null; });
   }
-  _loaded = true;
+  await _loading;
 };
 
 export const saveProfiles = async (profiles) => {
-  profileOverrides.value = { ...profiles };
   await setDoc(doc(db, 'config', 'organization'), { profiles }, { merge: true });
+  profileOverrides.value = { ...profiles };
 };
 
 // ── Getters efectivos (Firestore override > default) ──

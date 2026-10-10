@@ -4,6 +4,7 @@ import { auth, db } from '../firebase/config';
 import { ref } from 'vue';
 import { DEFAULT_SECTOR, ROLE_OPTIONS, ROLE_SECTOR_DEFAULT, sanitizeSectorList, normalizeSectorValue, isJefeRole } from '../constants/organization';
 import { createSessionLoader, withTimeout } from './sessionLoader';
+import { loadProfiles } from './profileService';
 
 const googleProvider = new GoogleAuthProvider();
 const knownRoles = new Set(ROLE_OPTIONS.map(role => role.value));
@@ -94,7 +95,9 @@ export const authService = {
 
 const loadSession = createSessionLoader(async user => {
   await authService.asegurarUsuarioEnFirestore(user);
-  return authService.getUsuarioPerfil(user.uid);
+  const profile = await authService.getUsuarioPerfil(user.uid);
+  await loadProfiles();
+  return profile;
 }, state => {
   sessionLoading.value = state.loading;
   sessionUser.value = state.user;

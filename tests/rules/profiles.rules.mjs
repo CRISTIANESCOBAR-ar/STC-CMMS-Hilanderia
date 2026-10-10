@@ -114,3 +114,16 @@ test('Storage rejects anonymous uploads while accepting identified image capture
   await assertSucceeds(uploadBytes(ref(identity('operator').storage(), 'novedades/operator.jpg'), image, { contentType: 'image/jpeg' }));
   await assertFails(uploadBytes(ref(identity('operator').storage(), 'novedades/file.txt'), image, { contentType: 'text/plain' }));
 });
+
+test('inspector may read missing/configured thresholds but only admin may save them', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'usuarios/admin'), { role: 'admin' });
+    await setDoc(doc(context.firestore(), 'usuarios/inspector'), { role: 'inspector' });
+  });
+  const inspectorConfig = doc(identity('inspector').firestore(), 'config/patrulla');
+  await assertSucceeds(getDoc(inspectorConfig));
+  await assertFails(setDoc(inspectorConfig, { umbralRoturaU: 2, umbralRoturaT: 3 }));
+  await assertSucceeds(setDoc(doc(identity('admin').firestore(), 'config/patrulla'), { umbralRoturaU: 5, umbralRoturaT: 5 }));
+  const config = await assertSucceeds(getDoc(inspectorConfig));
+  assert.equal(config.data().umbralRoturaU, 5);
+});

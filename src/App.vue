@@ -81,6 +81,7 @@ const user = ref(null);
 const isMenuOpen = ref(false);
 const hasUpdate = ref(false);
 let updateCheckInterval = null;
+let unsubscribeAuth = null;
 
 // ── Vista Previa de Rol (solo admin) ──
 const realAdminRole = ref(null);
@@ -210,9 +211,13 @@ watch(isMenuOpen, (val) => {
 });
 
 onMounted(() => {
-  authService.observarEstado((currentUser) => {
+  unsubscribeAuth = authService.observarEstado((currentUser) => {
     user.value = currentUser;
     isAuthReady.value = true;
+    if (!currentUser) {
+      realAdminRole.value = null;
+      pendingPreviewRole.value = '';
+    }
     
     if (!currentUser && router.currentRoute.value.meta.requiresAuth) {
       router.push('/login');
@@ -225,6 +230,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  unsubscribeAuth?.();
   window.removeEventListener('keydown', handleKeydown);
   if (updateCheckInterval) {
     clearInterval(updateCheckInterval);

@@ -14,9 +14,9 @@ reglas y diseño visual en distintas entregas y despliegues.
 | --- | --- | --- | --- |
 | P0 | Plan y procedimiento reversible | Verificado localmente | Rama aislada, guía y commit publicado |
 | S1 | IA solo en servidor y contenido seguro | Verificado localmente | Sin clave Gemini en frontend; errores controlados; HTML externo escapado; pruebas y build |
-| S2 | Protección de perfiles | Pendiente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
+| S2 | Protección de perfiles | Verificado localmente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
 | S3 | Permisos operativos y Storage | Pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
-| R1 | Sesión y configuración | Pendiente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
+| R1 | Sesión y configuración | En curso | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
 | R2 | Fechas y turnos de planta | Pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
@@ -31,7 +31,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 - Moderno y minimalista, con prioridades y estados legibles sin depender solo del color.
 - Mantener visibles sector, turno, filtros activos, problemas críticos y pendientes.
 - Aprovechar el ancho con paneles/tablas adaptables, sin agrandar espacios vacíos.
-- Matriz inicial: 1280×720, 1366×768, 1600×900 y 1920×1080; agregar resoluciones reales.
+- Matriz de planta confirmada: 1024×768 como referencia principal, PC antiguas y algunas resoluciones menores. Probar 800×600 como caso reducido por confirmar, y 1366×768/1920×1080 para expansión.
 - Verificar zoom 125%/150% y conservar captura móvil.
 - Orden: panel de control, intervenciones, reporte de falla, patrulla/seguimiento;
   luego informes, operarios, eficiencia y administración. Una entrega por vista.
@@ -42,7 +42,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 2. Login, reporte con foto, asignación/cierre, patrulla y relevo funcionan en piloto.
 3. Desconexión, recarga, operadores simultáneos y turno nocturno probados.
 4. Medir carga/guardado, errores y consumo con usuarios y datos representativos.
-5. Definir concurrencia esperada y objetivos de disponibilidad, recuperación y pérdida de datos.
+5. Carga informada: unos 10 usuarios por turno, ampliable a 30. Validar 30 sesiones concurrentes con roles mezclados y operaciones representativas; disponibilidad, recuperación y pérdida de datos aún por definir.
 6. Backups, restauración, monitoreo, responsables y rollback verificados.
 7. Ampliar usuarios por grupos; detener expansión ante pérdida de captura, conflictos,
    errores de permisos o degradación sostenida.
@@ -73,3 +73,29 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
   iniciales sujetos a medición de carga. No se desplegó ni se probó el servicio remoto.
 - Rollback: revertir commit S1; mantener backend compatible mientras se restaura Hosting.
   No reactivar el fallback con una clave privada como procedimiento de recuperación.
+
+### Dimensionamiento confirmado
+
+- 10 usuarios por turno como operación habitual; crecimiento previsto a 30.
+- Se adopta 30 concurrentes como escenario de prueba, sin afirmar que ya esté validado.
+- Hardware antiguo, resolución habitual 1024×768 e incluso menor.
+- Priorizar render liviano, carga diferida, tablas compactas y detalles desplegables;
+  mantener problemas críticos y acciones visibles. Medir en una PC real de planta.
+
+### S2 — Perfiles y sesión
+
+- Acceso anónimo eliminado de login y rechazado en Firestore/Storage.
+- Nuevos perfiles solo con valores iniciales sin privilegios; no se obtiene admin por correo fijo.
+- Usuarios solo pueden modificar su nombre; roles, sectores, permisos, identidad y fechas
+  los administra un admin existente. Se comprueba compatibilidad con documentos legacy.
+- Login no reescribe sectores/roles; carga de sesión única, con timeout y sin rol de fallback.
+- Respuestas de perfiles anteriores no restauran privilegios tras logout/cambio de cuenta.
+- Validación: 15 pruebas unitarias y 9 pruebas de Firestore/Storage en emuladores pasaron;
+  build correcto. Emuladores requieren Java 21 HotSpot; Java OpenJ9 local es incompatible.
+- Pendiente antes del piloto: comprobar cuentas Google por rol, admin existente y conexión
+  del puesto; usuarios beta anónimos deben usar cuentas identificadas.
+- S3 sigue pendiente: usuarios identificados aún conservan permisos operativos amplios.
+- Rollback: revertir commit S2 y desplegar versión aprobada por capa; frontend y reglas
+  deben coordinarse para no restaurar un login incompatible con las reglas activas.
+- R1 parcial: resuelta sesión; aún falta carga de configuración y recuperación de perfiles
+  organizacionales sin almacenar como éxito una lectura fallida.

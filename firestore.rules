@@ -1,15 +1,14 @@
 rules_version = '2';
 
-// CMMS STC — Reglas Fase 1 (mayo 2026)
-// Objetivo: exigir autenticación y proteger datos sensibles (roles, config admin)
-// sin restringir operación diaria (novedades, intervenciones, patrullas).
-// Rollback: git checkout main -- firestore.rules && firebase deploy --only firestore:rules
+// Producción S2: cuentas identificadas y perfiles protegidos.
+// Los permisos operativos por sector/acción se incorporan en la entrega S3.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     function uid() {
@@ -29,16 +28,11 @@ service cloud.firestore {
     }
 
     function userRole() {
-      return userExists() ? userDoc().data.role : 'mecanico';
+      return userExists() ? userDoc().data.get('role', '') : '';
     }
 
     function isAdmin() {
       return isSignedIn() && userRole() == 'admin';
-    }
-
-    function isBootstrapAdmin() {
-      return isSignedIn()
-        && request.auth.token.email == 'cristiantescobar@gmail.com';
     }
 
     function isJefe() {
@@ -51,26 +45,25 @@ service cloud.firestore {
       return isAdmin() || isJefe();
     }
 
-    function roleUnchanged() {
-      return !('role' in request.resource.data)
-        || request.resource.data.role == resource.data.role;
-    }
-
     function noPrivilegeEscalation() {
-      return roleUnchanged()
-        && (
-          !('permisosPersonalizados' in request.resource.data)
-          || request.resource.data.permisosPersonalizados == resource.data.permisosPersonalizados
-        )
-        && (
-          !('vistasPersonalizadas' in request.resource.data)
-          || request.resource.data.vistasPersonalizadas == resource.data.vistasPersonalizadas
-        );
+      // Allowlist also protects future permission fields, deletion and legacy docs.
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['displayName', 'nombre']);
     }
 
-    function validNewUserRole() {
-      return request.resource.data.role == 'mecanico'
-        || (isBootstrapAdmin() && request.resource.data.role == 'admin');
+    function validNewUser() {
+      return request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'role', 'sectorDefault',
+          'sectoresAsignados', 'alcance', 'jefeDeSectores', 'createdAt'
+        ])
+        && request.resource.data.role == 'mecanico'
+        && request.resource.data.sectorDefault == 'HILANDERIA'
+        && request.resource.data.sectoresAsignados == ['HILANDERIA']
+        && request.resource.data.alcance == 'sector'
+        && request.resource.data.jefeDeSectores == []
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.displayName is string
+        && request.resource.data.createdAt == request.time;
     }
 
     // ── Usuarios ─────────────────────────────────────────────────
@@ -78,9 +71,9 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && uid() == userId
-        && validNewUserRole();
+        && validNewUser();
       allow update: if isSignedIn() && (
-        (uid() == userId && (isBootstrapAdmin() || noPrivilegeEscalation()))
+        (uid() == userId && noPrivilegeEscalation())
         || isAdmin()
       );
       allow delete: if isAdmin();

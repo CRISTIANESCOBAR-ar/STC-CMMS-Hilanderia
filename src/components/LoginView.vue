@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { authService } from '../services/authService';
-import { UserCircle, Loader2, RefreshCw, Wrench } from 'lucide-vue-next';
+import { authService, sessionError } from '../services/authService';
+import { Loader2, RefreshCw, Wrench } from 'lucide-vue-next';
 
 // Hora del build incrustada por Vite
 const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Desconocido';
@@ -10,6 +10,8 @@ const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Des
 const router = useRouter();
 const isLoading = ref('');
 const errorMsg = ref('');
+const visibleError = computed(() => errorMsg.value || (sessionError.value
+  ? 'No se pudo validar tu acceso. Ingresá con Google nuevamente o contactá al administrador.' : ''));
 const hasUpdate = ref(false);
 
 onMounted(async () => {
@@ -50,19 +52,6 @@ const handleGoogleLogin = async () => {
     } else {
       errorMsg.value = 'Error al ingresar con Google. Verifica tu conexión.';
     }
-  } finally {
-    isLoading.value = '';
-  }
-};
-
-const handleAnonLogin = async () => {
-  isLoading.value = 'anon';
-  errorMsg.value = '';
-  try {
-    await authService.loginAnonimo();
-    router.push('/'); 
-  } catch (error) {
-    errorMsg.value = 'No se pudo ingresar como invitado.';
   } finally {
     isLoading.value = '';
   }
@@ -127,8 +116,8 @@ const limpiarCacheYActualizar = async () => {
         <!-- Banner de Novedad (Aparece si hay actualización y decora la caja) -->
         <div v-if="hasUpdate" class="absolute top-0 inset-x-0 h-1 bg-green-500 animate-pulse"></div>
 
-        <div v-if="errorMsg" class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm text-center font-medium">
-          {{ errorMsg }}
+        <div v-if="visibleError" class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm text-center font-medium">
+          {{ visibleError }}
         </div>
 
         <div class="space-y-4">
@@ -148,22 +137,6 @@ const limpiarCacheYActualizar = async () => {
             <span>Continuar con Google</span>
           </button>
 
-          <div class="py-2 flex items-center justify-between">
-            <span class="w-1/4 border-b border-gray-100"></span>
-            <span class="text-[10px] text-center text-gray-400 tracking-widest font-bold px-2">Invitado</span>
-            <span class="w-1/4 border-b border-gray-100"></span>
-          </div>
-
-          <!-- Anonymous Auth -->
-          <button
-            @click="handleAnonLogin"
-            :disabled="isLoading !== ''"
-            class="w-full flex justify-center items-center py-4 px-4 border border-transparent rounded-xl shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] text-base font-bold text-white bg-blue-600 hover:bg-blue-700 hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all active:scale-[0.98] duration-150 disabled:opacity-50 disabled:shadow-none"
-          >
-            <Loader2 v-if="isLoading === 'anon'" class="w-5 h-5 mr-3 animate-spin text-white" />
-            <UserCircle v-else class="w-6 h-6 mr-3 text-white opacity-90" />
-            Entrar al Panel
-          </button>
         </div>
       </div>
     </div>

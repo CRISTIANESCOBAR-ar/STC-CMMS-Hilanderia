@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { authService, userRole, userProfile, authReady } from './services/authService'
-import { auth } from './firebase/config'
+import { userRole, userProfile, authReady, waitForSession, sessionUser } from './services/authService'
 import { loadProfiles, canAccessRouteForUser, getDefaultRouteForUser } from './services/profileService'
 
 // Login se carga inmediato (primera pantalla), el resto lazy
@@ -42,18 +41,16 @@ router.beforeEach(async (to, from) => {
   // Esperar a que Firebase Auth restaure la sesión desde IndexedDB
   // sin esto, auth.currentUser es null al recargar y redirige a /login
   await authReady;
+  await waitForSession();
 
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const currentUser = auth.currentUser;
+  const currentUser = sessionUser.value;
 
   if (requiresAuth && !currentUser) {
     return '/login';
   }
 
   if (currentUser) {
-    if (!userRole.value) {
-      userRole.value = await authService.getUsuarioRole(currentUser.uid);
-    }
     await loadProfiles();
 
     const vistasUser = userProfile.value?.vistasPersonalizadas ?? null;

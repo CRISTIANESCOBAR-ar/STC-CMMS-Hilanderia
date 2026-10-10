@@ -1,4 +1,5 @@
 <script setup>
+import { shiftStart, PLANT_TIME_ZONE } from '../utils/plantTime';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -46,18 +47,7 @@ const telaresMap = computed(() => {
 
 // Inicio del turno actual en milisegundos
 function getInicioTurnoMs() {
-  const ahora = new Date();
-  const h = ahora.getHours();
-  const inicio = new Date(ahora);
-  inicio.setMinutes(0, 0, 0);
-  if (h >= 6 && h < 14) inicio.setHours(6);
-  else if (h >= 14 && h < 22) inicio.setHours(14);
-  else {
-    inicio.setHours(22);
-    // Si es después de medianoche, el turno C empezó el día anterior
-    if (h < 6) inicio.setDate(inicio.getDate() - 1);
-  }
-  return inicio.getTime();
+  return shiftStart().getTime();
 }
 
 // Intervenciones de roturas indexadas por maquinaId (solo del turno actual)
@@ -226,7 +216,7 @@ function evaluarCambio(valR1, valR6) {
 
 function formatHora(iso) {
   if (!iso) return null;
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(iso).toLocaleTimeString('es-AR', { timeZone: PLANT_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function nombreCorto(t) {
@@ -255,7 +245,7 @@ function etiquetaEstado(estado) {
 function horaIntervencion(iv) {
   const ts = iv.createdAt?.seconds;
   if (!ts) return '—';
-  return new Date(ts * 1000).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(ts * 1000).toLocaleTimeString('es-AR', { timeZone: PLANT_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function calcularDelay(iv) {
@@ -351,6 +341,7 @@ async function cargarNombresInspectores(pts) {
 }
 
 async function cargarDatos(showSpinner = true) {
+  turnoActual.value = getTurnoActual();
   if (showSpinner) recargando.value = true;
   try {
     const [cfg, snap, pts] = await Promise.all([
@@ -364,7 +355,7 @@ async function cargarDatos(showSpinner = true) {
     );
     patrullas.value = pts;
     await cargarNombresInspectores(pts);
-    ultimaActualizacion.value = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    ultimaActualizacion.value = new Date().toLocaleTimeString('es-AR', { timeZone: PLANT_TIME_ZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   } catch (e) {
     console.error('Error cargando calidad:', e);
   } finally {
@@ -376,7 +367,7 @@ async function cargarDatos(showSpinner = true) {
 function compartirWhatsApp() {
   const r = resumenGlobal.value;
   let msg = `📊 *CALIDAD DE SALA — ${getTurnoLabel(turnoActual.value)}*\n`;
-  msg += `📅 ${new Date().toLocaleDateString('es-AR')} · ${ultimaActualizacion.value}\n\n`;
+  msg += `📅 ${new Date().toLocaleDateString('es-AR', { timeZone: PLANT_TIME_ZONE })} · ${ultimaActualizacion.value}\n\n`;
   msg += `👮 Inspectores activos: ${r.patrullas}\n`;
   msg += `⚠️ Alertas sobre umbral: ${r.totalAlertas}\n`;
   if (r.totalTramaNegra) msg += `🞣 Trama negra con defectos: ${r.totalTramaNegra}\n`;

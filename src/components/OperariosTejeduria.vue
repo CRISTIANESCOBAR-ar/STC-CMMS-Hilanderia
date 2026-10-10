@@ -1,4 +1,5 @@
 <script setup>
+import { plantDate, plantShift, addDays } from '../utils/plantTime';
 import { ref, computed, watch, onMounted } from 'vue';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -16,14 +17,9 @@ const showGestion = ref(false);
 
 const turnos = ['A', 'B', 'C'];
 
-// Determina el turno activo según la hora local:
+// Determina el turno activo según la hora de planta:
 // A: 06:00–13:59 | B: 14:00–21:59 | C: 22:00–05:59
-const turnoDeHora = () => {
-  const h = new Date().getHours();
-  if (h >= 6 && h < 14) return 'A';
-  if (h >= 14 && h < 22) return 'B';
-  return 'C';
-};
+const turnoDeHora = plantShift;
 const turnoActivo = ref(turnoDeHora());
 const vistaCards = ref(typeof window !== 'undefined' && window.innerWidth < 640);
 
@@ -109,18 +105,10 @@ const tieneHorarios = computed(() =>
 );
 
 // ── Fecha ──
-const fechaHoy = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-};
+const fechaHoy = plantDate;
 const fechaSeleccionada = ref(fechaHoy());
 const esHoy = computed(() => fechaSeleccionada.value === fechaHoy());
-const cambiarFecha = (delta) => {
-  const [y, m, d] = fechaSeleccionada.value.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + delta);
-  fechaSeleccionada.value = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-};
+const cambiarFecha = (delta) => { fechaSeleccionada.value = addDays(fechaSeleccionada.value, delta); };
 const docId = (turno) => `${fechaSeleccionada.value}_${turno}`;
 
 // ── Firestore: guardar/cargar horarios del día ──

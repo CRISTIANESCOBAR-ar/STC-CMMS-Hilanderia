@@ -1,3 +1,5 @@
+import { plantShift } from '../utils/plantTime';
+
 export const DEFAULT_SECTOR = 'HILANDERIA';
 
 export const SECTOR_OPTIONS = [
@@ -193,12 +195,7 @@ export const TURNOS = [
   { id: 'C', label: 'Turno C', horaInicio: 22, horaFin: 6  },
 ];
 
-export const getTurnoActual = (fecha = new Date()) => {
-  const h = fecha.getHours();
-  if (h >= 6 && h < 14) return 'A';
-  if (h >= 14 && h < 22) return 'B';
-  return 'C';
-};
+export const getTurnoActual = plantShift;
 
 export const getTurnoLabel = (id) => TURNOS.find(t => t.id === id)?.label || id;
 

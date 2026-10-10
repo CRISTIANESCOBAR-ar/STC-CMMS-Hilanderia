@@ -1,3 +1,4 @@
+import { plantDate } from '../utils/plantTime';
 import { sectorConstraints } from './accessScope';
 import { collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -30,7 +31,7 @@ export async function savePatrullaConfig(cfg) {
  */
 export async function cargarPatrullaActiva(inspectorUid) {
   const hoy = new Date();
-  const fechaStr = hoy.toISOString().slice(0, 10); // YYYY-MM-DD
+  const fechaStr = plantDate(hoy); // YYYY-MM-DD
   const turno = getTurnoActual(hoy);
 
   const q = query(
@@ -52,7 +53,7 @@ export async function cargarPatrullaActiva(inspectorUid) {
  */
 export async function cargarPatrullasTurnoActual() {
   const hoy = new Date();
-  const fechaStr = hoy.toISOString().slice(0, 10);
+  const fechaStr = plantDate(hoy);
   const turno = getTurnoActual(hoy);
 
   const q = query(
@@ -76,7 +77,7 @@ export async function crearPatrulla({ inspectorUid, inspectorNombre, inspectorEm
     inspectorEmail: inspectorEmail || null,
     sector,
     turno: getTurnoActual(hoy),
-    fecha: hoy.toISOString().slice(0, 10),
+    fecha: plantDate(hoy),
     estado: 'en_curso',
     rondas: {},
     createdAt: serverTimestamp(),

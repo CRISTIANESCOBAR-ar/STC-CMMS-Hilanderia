@@ -1,3 +1,4 @@
+import { plantDate, plantInstant, addDays, plantShift, PLANT_TIME_ZONE } from '../utils/plantTime';
 import { sectorConstraints } from './accessScope';
 import { collection, query, where, getDocs, Timestamp, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -33,26 +34,11 @@ export const aiService = {
   async generarResumenDiario(force = false, targetDate = null, sectores = null) {
     sectores = resolveSummarySectors(sectores);
     try {
-      const fechaObjetivo = targetDate ? new Date(targetDate + 'T00:00:00') : new Date();
-      if (!targetDate) {
-        fechaObjetivo.setDate(fechaObjetivo.getDate() - 1);
-      }
-      
-      const inicioDia = new Date(fechaObjetivo);
-      inicioDia.setHours(0, 0, 0, 0);
-      
-      const finDia = new Date(fechaObjetivo);
-      finDia.setDate(finDia.getDate() + 1);
-      finDia.setHours(0, 0, 0, 0);
-
-      // Usamos la fecha como ID del documento de caché (ej: "2026-03-17")
-      // Extraemos YYYY-MM-DD respetando zona horaria local
-      const yyyy = inicioDia.getFullYear();
-      const mm = String(inicioDia.getMonth() + 1).padStart(2, '0');
-      const dd = String(inicioDia.getDate()).padStart(2, '0');
-      const fechaStr = `${yyyy}-${mm}-${dd}`;
+      const fechaStr = targetDate || addDays(plantDate(), -1);
+      const inicioDia = plantInstant(fechaStr);
+      const finDia = plantInstant(addDays(fechaStr, 1));
       const sectorSuffix = sectores ? `_${sectores.sort().join('-')}` : '';
-      const cacheRef = doc(db, 'ai_summaries', 'v2_' + fechaStr + sectorSuffix);
+      const cacheRef = doc(db, 'ai_summaries', 'v3_time_' + fechaStr + sectorSuffix);
 
       // 1. Verificar caché si no estamos forzando regeneración
       if (!force) {
@@ -97,8 +83,8 @@ export const aiService = {
       }));
 
       const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      const fechaAyerFormateada = inicioDia.toLocaleDateString('es-ES', opcionesFecha);
-      const fechaHoyFormateada = new Date().toLocaleString('es-ES');
+      const fechaAyerFormateada = inicioDia.toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
+      const fechaHoyFormateada = new Date().toLocaleString('es-ES', { timeZone: PLANT_TIME_ZONE });
 
       const prompt = `
         Eres un experto Planificador de Mantenimiento Industrial. Analiza el siguiente log de fallas ocurridas en la planta.
@@ -169,27 +155,19 @@ export const aiService = {
     sectores = resolveSummarySectors(sectores);
     try {
       const ahora = new Date();
-      let desde, hasta;
-
-      if (fechaDesde && fechaHasta) {
-        desde = new Date(fechaDesde + 'T00:00:00');
-        hasta = new Date(fechaHasta + 'T23:59:59.999');
-      } else {
-        desde = new Date(ahora);
-        desde.setDate(desde.getDate() - dias);
-        desde.setHours(0, 0, 0, 0);
-        hasta = new Date(ahora);
-        hasta.setHours(23, 59, 59, 999);
-      }
-
-      const yyyy = ahora.getFullYear();
-      const mm = String(ahora.getMonth() + 1).padStart(2, '0');
-      const dd = String(ahora.getDate()).padStart(2, '0');
+      const hoy = plantDate(ahora);
+      if (!Number.isInteger(dias) || dias < 1) throw new RangeError('Cantidad de días inválida.');
+      if (Boolean(fechaDesde) !== Boolean(fechaHasta)) throw new RangeError('Completar ambas fechas del período.');
+      const inicio = fechaDesde || addDays(hoy, 1 - dias);
+      const fin = fechaHasta || hoy;
+      if (inicio > fin) throw new RangeError('El inicio del período supera el final.');
+      const desde = plantInstant(inicio);
+      const hasta = new Date(plantInstant(addDays(fin, 1)).getTime() - 1);
       const sectorSuffix = sectores ? `_${sectores.sort().join('-')}` : '';
       const turnoSuffix = turno ? `_t${turno}` : '';
       const periodoKey = fechaDesde ? `${fechaDesde}_${fechaHasta}` : `${dias}d`;
-      const cacheId = `exec_${yyyy}-${mm}-${dd}_${periodoKey}${sectorSuffix}${turnoSuffix}`;
-      const cacheRef = doc(db, 'ai_summaries', 'v2_' + cacheId);
+      const cacheId = `exec_${hoy}_${periodoKey}${sectorSuffix}${turnoSuffix}`;
+      const cacheRef = doc(db, 'ai_summaries', 'v3_time_' + cacheId);
 
       if (!force) {
         const cacheSnap = await getDoc(cacheRef);
@@ -218,14 +196,10 @@ export const aiService = {
 
       // Filtro por turno si se especifica
       if (turno) {
-        const turnoHoras = { A: [6, 14], B: [14, 22], C: [22, 6] };
-        const [hi, hf] = turnoHoras[turno] || [];
+        if (!['A', 'B', 'C'].includes(turno)) throw new RangeError('Turno inválido');
         const enTurno = (ts) => {
           if (!ts) return false;
-          const d = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
-          const h = d.getHours();
-          if (turno === 'C') return h >= 22 || h < 6;
-          return h >= hi && h < hf;
+          return plantShift(typeof ts.toDate === 'function' ? ts.toDate() : ts) === turno;
         };
         novedades = novedades.filter(n => enTurno(n.createdAt));
         intervenciones = intervenciones.filter(i => enTurno(i.createdAt));
@@ -301,8 +275,8 @@ export const aiService = {
       }));
 
       const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      const desdeStr = desde.toLocaleDateString('es-ES', opcionesFecha);
-      const hastaStr = ahora.toLocaleDateString('es-ES', opcionesFecha);
+      const desdeStr = desde.toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
+      const hastaStr = hasta.toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
 
       const prompt = `
 Eres un experto Planificador de Mantenimiento Industrial en una planta textil (Santana Textiles).

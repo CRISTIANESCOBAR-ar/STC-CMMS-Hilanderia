@@ -1,4 +1,5 @@
 <script setup>
+import { plantDate } from '../utils/plantTime';
 import { ref, computed, onMounted, watch } from 'vue';
 import {
   collection, addDoc, getDocs, getDoc, query,
@@ -29,10 +30,7 @@ import Swal from 'sweetalert2';
 
 // ── Constantes de sesión ──────────────────────────────────────────────────────
 const TURNO = getTurnoActual();
-const FECHA = (() => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-})();
+const FECHA = plantDate();
 
 // ── Máscara Partida: 7 dígitos "1542301" → "1-5423.01" ────────────────────────
 const maskPartida = (raw) => {

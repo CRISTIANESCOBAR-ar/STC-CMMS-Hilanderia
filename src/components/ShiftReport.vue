@@ -1,4 +1,5 @@
 <script setup>
+import { plantDate, addDays } from '../utils/plantTime';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { collection, getDocs, query, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -23,11 +24,7 @@ const telarAbiertoIdx = ref(null); // null = ninguno abierto
 
 const registros = ref({});
 
-const fechaAyer = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-};
+const fechaAyer = () => addDays(plantDate(), -1).replaceAll('-', '/');
 const fechaReporte = ref(fechaAyer());
 
 const fechaInput = computed({

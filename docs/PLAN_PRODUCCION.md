@@ -17,7 +17,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | S2 | Protección de perfiles | Verificado localmente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
 | S3 | Permisos operativos y Storage | Verificado localmente; piloto pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
 | R1 | Sesión y configuración | Verificado localmente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
-| R2 | Fechas y turnos de planta | Pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
+| R2 | Fechas y turnos de planta | En curso; zona y límites verificados, criterio nocturno pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
 | D1 | Dependencias y avisos de seguridad | En curso | Actualizaciones compatibles verificadas; clasificar/resolver avisos restantes antes de producción |

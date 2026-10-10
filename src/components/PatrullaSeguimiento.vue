@@ -1,4 +1,5 @@
 <script setup>
+import { plantDate, moveShift, PLANT_TIME_ZONE } from '../utils/plantTime';
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { userProfile, userRole } from '../services/authService';
@@ -15,27 +16,13 @@ const router = useRouter();
 // ── Helpers de navegación de turnos ──────────────────────────────
 const TURNO_ORD = { A: 0, B: 1, C: 2 };
 
-function turnoAnterior(fecha, turno) {
-  if (turno === 'B') return { fecha, turno: 'A' };
-  if (turno === 'C') return { fecha, turno: 'B' };
-  // A → día anterior Turno C
-  const d = new Date(fecha + 'T12:00:00');
-  d.setDate(d.getDate() - 1);
-  return { fecha: d.toISOString().slice(0, 10), turno: 'C' };
-}
+function turnoAnterior(fecha, turno) { return moveShift(fecha, turno, -1); }
 
-function turnoSiguiente(fecha, turno) {
-  if (turno === 'A') return { fecha, turno: 'B' };
-  if (turno === 'B') return { fecha, turno: 'C' };
-  // C → día siguiente Turno A
-  const d = new Date(fecha + 'T12:00:00');
-  d.setDate(d.getDate() + 1);
-  return { fecha: d.toISOString().slice(0, 10), turno: 'A' };
-}
+function turnoSiguiente(fecha, turno) { return moveShift(fecha, turno, 1); }
 
 function esFuturo(fecha, turno) {
   const ahora = new Date();
-  const hoy = ahora.toISOString().slice(0, 10);
+  const hoy = plantDate(ahora);
   const tHoy = getTurnoActual(ahora);
   if (fecha > hoy) return true;
   if (fecha === hoy && TURNO_ORD[turno] > TURNO_ORD[tHoy]) return true;
@@ -50,12 +37,12 @@ function formatFecha(fechaStr) {
 
 function horaRonda(isoStr) {
   if (!isoStr) return null;
-  return new Date(isoStr).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(isoStr).toLocaleTimeString('es-AR', { timeZone: PLANT_TIME_ZONE, hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Estado ────────────────────────────────────────────────────────
 const _now = new Date();
-const fechaVer = ref(_now.toISOString().slice(0, 10));
+const fechaVer = ref(plantDate(_now));
 const turnoVer = ref(getTurnoActual(_now));
 const patrullas = ref([]);
 const patrullaIdx = ref(0);
@@ -64,7 +51,7 @@ const cargando = ref(true);
 const patrullaData = computed(() => patrullas.value[patrullaIdx.value] ?? null);
 
 const esSlotActual = computed(() => {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = plantDate();
   return fechaVer.value === hoy && turnoVer.value === getTurnoActual();
 });
 

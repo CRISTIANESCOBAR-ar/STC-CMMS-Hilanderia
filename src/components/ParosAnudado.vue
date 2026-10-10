@@ -1,4 +1,5 @@
 <script setup>
+import { plantDate } from '../utils/plantTime';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { collection, getDocs, query } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
@@ -17,10 +18,7 @@ const mostrarForm = ref(false);
 const editandoId = ref(null);
 
 // ── Fecha y turno ──
-const fechaHoy = () => {
-  const d = new Date();
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-};
+const fechaHoy = () => plantDate().replaceAll('-', '/');
 const fechaReporte = ref(fechaHoy());
 const fechaInput = computed({
   get: () => fechaReporte.value.replace(/\//g, '-'),

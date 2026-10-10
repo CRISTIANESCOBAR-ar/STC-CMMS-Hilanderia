@@ -1,7 +1,10 @@
+import { sectorConstraints } from './accessScope';
 import { collection, query, where, getDocs, Timestamp, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { normalizeSectorValue } from '../constants/organization';
 import { generateGeminiText, GEMINI_SETUP_MSG } from './geminiClient';
+import { getSectorScope } from '../utils/sectorScope';
+import { userProfile } from './authService';
 
 // Filtra un array por sectores visibles
 const filtrarPorSector = (items, sectores) => {
@@ -12,6 +15,14 @@ const filtrarPorSector = (items, sectores) => {
   });
 };
 
+
+function resolveSummarySectors(requested) {
+  const allowed = getSectorScope(userProfile.value) || ['HILANDERIA', 'TEJEDURIA'];
+  const sectors = requested === null ? allowed : [...new Set(requested)].filter(s => allowed.includes(s));
+  if (!sectors.length) throw new Error('No hay sectores autorizados para este informe.');
+  return sectors;
+}
+
 export const aiService = {
   /**
    * Obtiene las novedades creadas en un día específico y las envía a Gemini para generar un resumen ejecutivo.
@@ -20,6 +31,7 @@ export const aiService = {
    * @param {string[]|null} sectores - Sectores a incluir (null = todos).
    */
   async generarResumenDiario(force = false, targetDate = null, sectores = null) {
+    sectores = resolveSummarySectors(sectores);
     try {
       const fechaObjetivo = targetDate ? new Date(targetDate + 'T00:00:00') : new Date();
       if (!targetDate) {
@@ -40,7 +52,7 @@ export const aiService = {
       const dd = String(inicioDia.getDate()).padStart(2, '0');
       const fechaStr = `${yyyy}-${mm}-${dd}`;
       const sectorSuffix = sectores ? `_${sectores.sort().join('-')}` : '';
-      const cacheRef = doc(db, 'ai_summaries', fechaStr + sectorSuffix);
+      const cacheRef = doc(db, 'ai_summaries', 'v2_' + fechaStr + sectorSuffix);
 
       // 1. Verificar caché si no estamos forzando regeneración
       if (!force) {
@@ -55,7 +67,7 @@ export const aiService = {
 
       // 2. Obtener novedades del día objetivo
       const q = query(
-        collection(db, 'novedades'),
+        collection(db, 'novedades'), ...sectorConstraints(),
         where('createdAt', '>=', Timestamp.fromDate(inicioDia)),
         where('createdAt', '<', Timestamp.fromDate(finDia))
       );
@@ -128,6 +140,7 @@ export const aiService = {
       try {
         await setDoc(cacheRef, { 
           resumen: resumenGenerado,
+          sectores,
           generadoEn: Timestamp.now()
         });
       } catch (err) {
@@ -153,6 +166,7 @@ export const aiService = {
    * @param {string[]|null} sectores - Sectores a incluir (null = todos).
    */
   async generarResumenEjecutivo(force = false, dias = 7, sectores = null, { fechaDesde, fechaHasta, turno } = {}) {
+    sectores = resolveSummarySectors(sectores);
     try {
       const ahora = new Date();
       let desde, hasta;
@@ -175,7 +189,7 @@ export const aiService = {
       const turnoSuffix = turno ? `_t${turno}` : '';
       const periodoKey = fechaDesde ? `${fechaDesde}_${fechaHasta}` : `${dias}d`;
       const cacheId = `exec_${yyyy}-${mm}-${dd}_${periodoKey}${sectorSuffix}${turnoSuffix}`;
-      const cacheRef = doc(db, 'ai_summaries', cacheId);
+      const cacheRef = doc(db, 'ai_summaries', 'v2_' + cacheId);
 
       if (!force) {
         const cacheSnap = await getDoc(cacheRef);
@@ -186,7 +200,7 @@ export const aiService = {
 
       // Novedades del período
       const qNovedades = query(
-        collection(db, 'novedades'),
+        collection(db, 'novedades'), ...sectorConstraints(),
         where('createdAt', '>=', Timestamp.fromDate(desde)),
         where('createdAt', '<=', Timestamp.fromDate(hasta))
       );
@@ -195,7 +209,7 @@ export const aiService = {
 
       // Intervenciones del período
       const qIntervenciones = query(
-        collection(db, 'intervenciones'),
+        collection(db, 'intervenciones'), ...sectorConstraints(),
         where('createdAt', '>=', Timestamp.fromDate(desde)),
         where('createdAt', '<=', Timestamp.fromDate(hasta))
       );
@@ -346,6 +360,7 @@ TONO: Profesional y directo. Orientado a la acción. El jefe debe saber exactame
       try {
         await setDoc(cacheRef, {
           resumen: resumenGenerado,
+          sectores,
           generadoEn: Timestamp.now(),
           periodo: diasLabel,
           stats

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import {
   collection, addDoc, getDocs, getDoc, query,
-  where, orderBy, deleteDoc, doc,
+  where, orderBy, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -221,7 +221,7 @@ const guardar = async (keepOpen = false) => {
       inspectorNombre: f.inspectorNombre || null,
       observaciones:   f.observaciones.trim() || null,
       creadoPor:       getAuth().currentUser?.uid,
-      createdAt:       new Date(),
+      createdAt:       serverTimestamp(),
     });
     await cargarMuestras();
     if (keepOpen) {

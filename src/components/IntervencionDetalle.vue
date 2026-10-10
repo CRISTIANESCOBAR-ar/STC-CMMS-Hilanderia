@@ -5,6 +5,10 @@ import { getAuth } from 'firebase/auth';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
+import OperationalImage from './OperationalImage.vue';
+import { userProfile, userRole } from '../services/authService';
+import { getEffectivePermisosForUser } from '../services/profileService';
+import { canExecuteIntervention } from '../utils/interventionAccess';
 import { catalogoService }     from '../services/catalogoService';
 import {
   ArrowLeft, Wrench, Zap, ShieldAlert, AlertTriangle, OctagonX,
@@ -228,11 +232,14 @@ const esElMecanico = computed(() => {
 });
 
 const puedeEditar = computed(() =>
-  intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value
+  intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value && puedeEjecutar.value
 );
 
+const puedeEjecutar = computed(() => canExecuteIntervention(userRole.value,
+  getEffectivePermisosForUser(userRole.value, userProfile.value?.permisosPersonalizados), intervencion.value));
+
 const puedeTomarIntervencion = computed(() =>
-  intervencion.value?.estado === 'PENDIENTE'
+  intervencion.value?.estado === 'PENDIENTE' && puedeEjecutar.value
 );
 
 const tomando = ref(false);
@@ -399,7 +406,7 @@ const completar = async () => {
 
             <!-- Foto -->
             <div v-if="intervencion.fotoUrl" class="mt-2 rounded-xl overflow-hidden border border-gray-200 max-h-48 bg-gray-900">
-              <img :src="intervencion.fotoUrl" class="w-full h-full object-contain" />
+              <OperationalImage :src="intervencion.fotoUrl" class="w-full h-full object-contain" />
             </div>
           </div>
 

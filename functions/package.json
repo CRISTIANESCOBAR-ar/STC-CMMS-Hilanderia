@@ -5,10 +5,10 @@
   "type": "module",
   "main": "index.js",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
+    "serve": "firebase emulators:start --project demo-cmms-production --config ../firebase.test.json --only functions,firestore,storage",
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {

@@ -3,7 +3,10 @@ import { ref, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { intervencionService } from '../services/intervencionService';
+import OperationalImage from './OperationalImage.vue';
 import { userProfile, userRole } from '../services/authService';
+import { getEffectivePermisosForUser } from '../services/profileService';
+import { canExecuteIntervention } from '../utils/interventionAccess';
 import { sanitizeSectorList, normalizeSectorValue, DEFAULT_SECTOR, canDespacharIntervencion } from '../constants/organization';
 import { Wrench, Zap, Clock, ChevronRight, AlertTriangle, BellOff, Plus, OctagonX, CirclePlay, ChevronDown, ChevronUp, Package, Stethoscope, User, Flame, ArrowUp, Minus, Layers } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
@@ -161,8 +164,8 @@ const isAssignedToMe = (item) => item.asignadoA === currentUid();
 
 // Inspector solo puede tomar intervenciones de CALIDAD
 const canTomarItem = (item) => {
-  if (userRole.value === 'inspector') return item.tipoIntervencion === 'CALIDAD';
-  return true;
+  return canExecuteIntervention(userRole.value,
+    getEffectivePermisosForUser(userRole.value, userProfile.value?.permisosPersonalizados), item);
 };
 
 // ── Acciones individuales ──────────────────────────────────────────────────────
@@ -441,7 +444,7 @@ const onTomarGrupo = async (grupo) => {
 
             <!-- Foto -->
             <div v-if="g.items[0].fotoUrl" class="mt-2 rounded-xl overflow-hidden border border-gray-200 h-24 bg-gray-900">
-              <img :src="g.items[0].fotoUrl" class="w-full h-full object-cover" />
+              <OperationalImage :src="g.items[0].fotoUrl" class="w-full h-full object-cover" />
             </div>
           </div>
 

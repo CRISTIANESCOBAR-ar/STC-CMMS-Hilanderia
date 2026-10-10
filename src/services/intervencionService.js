@@ -1,8 +1,10 @@
 import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy, writeBatch } from 'firebase/firestore';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
 import { DEFAULT_SECTOR, normalizeSectorValue } from '../constants/organization';
+import { sectorConstraints } from './accessScope';
+import { finalizeOperationalUpload } from './operationalImageService';
 
 const COLLECTION_NAME = 'intervenciones';
 
@@ -37,7 +39,7 @@ export const intervencionService = {
     return new Promise((resolve, reject) => {
       const safeName = (foto.name || 'foto.jpg').replace(/\s+/g, '_');
       const fileName = `${Date.now()}_${safeName}`;
-      const fileRef = storageRef(storage, `intervenciones/${fileName}`);
+      const fileRef = storageRef(storage, `intervenciones/${base.sector}/${currentUser.uid}/${fileName}`);
       const uploadTask = uploadBytesResumable(fileRef, foto);
 
       const timeoutId = setTimeout(() => {
@@ -53,9 +55,11 @@ export const intervencionService = {
         (error) => { clearTimeout(timeoutId); reject(error); },
         async () => {
           clearTimeout(timeoutId);
-          const fotoUrl = await getDownloadURL(uploadTask.snapshot.ref);
-          const ref = await addDoc(collection(db, COLLECTION_NAME), { ...base, fotoUrl });
-          resolve(ref.id);
+          try {
+            const fotoUrl = await finalizeOperationalUpload(uploadTask.snapshot.ref);
+            const ref = await addDoc(collection(db, COLLECTION_NAME), { ...base, fotoUrl });
+            resolve(ref.id);
+          } catch (error) { reject(error); }
         }
       );
     });
@@ -177,6 +181,7 @@ export const intervencionService = {
    */
   async obtenerHistorial({ sector, estado, limite = 50 } = {}) {
     const filters = [orderBy('createdAt', 'desc')];
+    if (!sector) filters.unshift(...sectorConstraints());
     if (sector) filters.unshift(where('sector', '==', normalizeSectorValue(sector)));
     if (estado) filters.unshift(where('estado', '==', estado));
     const q = query(collection(db, COLLECTION_NAME), ...filters);

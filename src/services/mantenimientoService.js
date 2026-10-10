@@ -1,5 +1,7 @@
+import { sectorConstraints } from './accessScope';
+import { finalizeOperationalUpload } from './operationalImageService';
 import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
+import { ref, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
 import { DEFAULT_SECTOR, normalizeSectorValue } from '../constants/organization';
@@ -26,7 +28,7 @@ export const mantenimientoService = {
         // Generar un nombre único para la imagen
         const safeName = (foto.name || 'foto.jpg').replace(/\s+/g, '_');
         const fileName = `${Date.now()}_${safeName}`;
-        const storageRef = ref(storage, `novedades/${fileName}`);
+        const storageRef = ref(storage, `novedades/${normalizarNovedad(datos).sector}/${getAuth().currentUser.uid}/${fileName}`);
         
         try {
           // Subir a Storage con seguimiento de progreso y timeout
@@ -49,22 +51,23 @@ export const mantenimientoService = {
                 reject(error);
               }, 
               async () => {
-                clearTimeout(timeoutId);
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                fotoUrl = downloadURL;
+                try {
+                  clearTimeout(timeoutId);
+                  fotoUrl = await finalizeOperationalUpload(uploadTask.snapshot.ref);
                 
-                // Una vez obtenida la URL, procedemos a guardar el documento
-                const currentAuthUser = getAuth().currentUser;
-                const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-                  ...normalizarNovedad(datos),
-                  fotoUrl,
-                  estado: 'pendiente', 
-                  createdAt: serverTimestamp(),
-                  creadoPorUid: currentAuthUser ? currentAuthUser.uid : null,
-                  creadoPorNombre: currentAuthUser?.displayName || 'Mecánico Anónimo',
-                  creadoPorEmail: currentAuthUser?.email || null
-                });
-                resolve(docRef.id);
+                  // Una vez obtenida la URL, procedemos a guardar el documento
+                  const currentAuthUser = getAuth().currentUser;
+                  const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+                    ...normalizarNovedad(datos),
+                    fotoUrl,
+                    estado: 'pendiente',
+                    createdAt: serverTimestamp(),
+                    creadoPorUid: currentAuthUser ? currentAuthUser.uid : null,
+                    creadoPorNombre: currentAuthUser?.displayName || 'Mecánico Anónimo',
+                    creadoPorEmail: currentAuthUser?.email || null
+                  });
+                  resolve(docRef.id);
+                } catch (error) { reject(error); }
               }
             );
           });
@@ -79,7 +82,7 @@ export const mantenimientoService = {
       const docRef = await addDoc(collection(db, COLLECTION_NAME), {
         ...normalizarNovedad(datos),
         fotoUrl,
-        estado: 'pendiente', 
+        estado: 'pendiente',
         createdAt: serverTimestamp(),
         creadoPorUid: currentAuthUser ? currentAuthUser.uid : null,
         creadoPorNombre: currentAuthUser?.displayName || 'Mecánico Anónimo',
@@ -103,6 +106,7 @@ export const mantenimientoService = {
     // Firestore indexa automáticamente campos simples, no requiere índice compuesto.
     const q = query(
       collection(db, COLLECTION_NAME),
+      ...sectorConstraints(),
       where('estado', 'in', ['pendiente', 'en proceso'])
     );
 
@@ -140,7 +144,7 @@ export const mantenimientoService = {
    */
   obtenerHistorico(callback, onError = null) {
     const q = query(
-      collection(db, COLLECTION_NAME)
+      collection(db, COLLECTION_NAME), ...sectorConstraints()
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -197,6 +201,7 @@ export const mantenimientoService = {
   async obtenerNovedadesPendientesOnce() {
     const q = query(
       collection(db, COLLECTION_NAME),
+      ...sectorConstraints(),
       where('estado', 'in', ['pendiente', 'en proceso'])
     );
     const snapshot = await getDocs(q);
@@ -220,7 +225,7 @@ export const mantenimientoService = {
    */
   async obtenerHistoricoOnce() {
     const q = query(
-      collection(db, COLLECTION_NAME)
+      collection(db, COLLECTION_NAME), ...sectorConstraints()
     );
     const snapshot = await getDocs(q);
     const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

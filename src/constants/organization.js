@@ -20,7 +20,7 @@ export const ROLE_OPTIONS = [
   { value: 'admin', label: 'Administrador Global' },
 ];
 
-export const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS.map(r => [r.value, r.label]));
+export const ROLE_LABEL = { ...Object.fromEntries(ROLE_OPTIONS.map(r => [r.value, r.label])), pendiente: 'Pendiente de aprobación' };
 
 // ── Vistas de la aplicación ──────────────────────────────────────
 export const VISTA_OPTIONS = [

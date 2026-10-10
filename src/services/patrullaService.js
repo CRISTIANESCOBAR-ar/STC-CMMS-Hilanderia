@@ -1,3 +1,4 @@
+import { sectorConstraints } from './accessScope';
 import { collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getTurnoActual } from '../constants/organization';
@@ -33,7 +34,7 @@ export async function cargarPatrullaActiva(inspectorUid) {
   const turno = getTurnoActual(hoy);
 
   const q = query(
-    collection(db, COL_PATRULLAS),
+    collection(db, COL_PATRULLAS), ...sectorConstraints(),
     where('inspectorUid', '==', inspectorUid),
     where('fecha', '==', fechaStr),
     where('turno', '==', turno),
@@ -55,7 +56,7 @@ export async function cargarPatrullasTurnoActual() {
   const turno = getTurnoActual(hoy);
 
   const q = query(
-    collection(db, COL_PATRULLAS),
+    collection(db, COL_PATRULLAS), ...sectorConstraints(),
     where('fecha', '==', fechaStr),
     where('turno', '==', turno),
     where('estado', '==', 'en_curso'),
@@ -214,7 +215,7 @@ export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos)
  */
 export async function cargarPatrullasPorFechaTurno(fecha, turno) {
   const q = query(
-    collection(db, COL_PATRULLAS),
+    collection(db, COL_PATRULLAS), ...sectorConstraints(),
     where('fecha', '==', fecha),
     where('turno', '==', turno),
   );
@@ -227,7 +228,7 @@ export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30)
   // El ordenado secundario por turno se hace en cliente.
   const constraints = [orderBy('fecha', 'desc'), limit(limite)];
   if (inspectorUid) constraints.unshift(where('inspectorUid', '==', inspectorUid));
-  const q = query(collection(db, COL_PATRULLAS), ...constraints);
+  const q = query(collection(db, COL_PATRULLAS), ...sectorConstraints(), ...constraints);
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }

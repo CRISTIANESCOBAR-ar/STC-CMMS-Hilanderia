@@ -1,43 +1,73 @@
 rules_version = '2';
-
-// CMMS STC — Storage Fase 1
-// Rollback: restaurar desde git main si existía, o reglas permisivas previas.
-
+// S3: identified approved accounts; scoped immutable operational captures.
 service firebase.storage {
   match /b/{bucket}/o {
-
-    function isSignedIn() {
-      return request.auth != null
-        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    function signedIn() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
-
-    function isImage() {
-      return request.resource != null
-        && request.resource.contentType.matches('image/.*');
+    function profile() {
+      return firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data;
     }
-
-    function under10MB() {
-      return request.resource == null
-        || request.resource.size < 10 * 1024 * 1024;
+    function member() {
+      return signedIn() && profile().role in ['admin', 'mecanico', 'tejedor', 'inspector',
+        'auxiliar', 'supervisor', 'supervisor_mecanico', 'supervisor_electrico',
+        'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'];
     }
-
-    match /novedades/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isImage() && under10MB();
+    function admin() { return member() && profile().role == 'admin'; }
+    function sectorAccess(sector) {
+      return member() && sector in ['HILANDERIA', 'TEJEDURIA'] && (admin()
+        || sector in profile().get('sectoresAsignados', [profile().get('sectorDefault', 'HILANDERIA')])
+        || (profile().role in ['jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion']
+          && sector in profile().get('jefeDeSectores', [])));
     }
-
-    match /intervenciones/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isImage() && under10MB();
+    function overrides() {
+      let path = /databases/(default)/documents/config/organization;
+      return firestore.exists(path) ? firestore.get(path).data.get('profiles', {}).get(profile().role, {}) : {};
     }
-
-    match /maquinas/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isImage() && under10MB();
+    function reportPermission() {
+      let personal = profile().get('permisosPersonalizados', null);
+      let configured = overrides().get('permisos', null);
+      return admin() || (personal is map ? personal.get('crearFalla', false) == true
+        : (configured is map ? configured.get('crearFalla', false) == true : profile().role != 'auxiliar'));
     }
-
-    match /{allPaths=**} {
-      allow read, write: if false;
+    function dispatchPermission() {
+      let personal = profile().get('vistasPersonalizadas', null);
+      let configured = overrides().get('vistas', null);
+      return admin() || (personal is list ? 'llamar' in personal
+        : (configured is list ? 'llamar' in configured : profile().role in ['inspector',
+          'supervisor', 'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector',
+          'jefe_electricos', 'jefe_produccion', 'gerente_produccion']));
     }
+    function image() {
+      return request.resource != null && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+    match /novedades/{sector}/{owner}/{fileName} {
+      allow read: if sectorAccess(sector);
+      allow create: if resource == null && sectorAccess(sector) && owner == request.auth.uid && reportPermission() && image();
+      allow update: if false;
+      allow delete: if admin();
+    }
+    match /intervenciones/{sector}/{owner}/{fileName} {
+      allow read: if sectorAccess(sector);
+      allow create: if resource == null && sectorAccess(sector) && owner == request.auth.uid && dispatchPermission() && image();
+      allow update: if false;
+      allow delete: if admin();
+    }
+    // Legacy paths contain no sector/owner: no new upload or overwrite.
+    // Download-token URLs already issued must be inventoried separately before release.
+    match /novedades/{fileName} { allow read: if admin() || sectorAccess(resource.metadata.get('sector', '')); allow write: if false; }
+    match /intervenciones/{fileName} { allow read: if admin() || sectorAccess(resource.metadata.get('sector', '')); allow write: if false; }
+    match /maquinas/{machineId}/{fileName} {
+      allow read: if member();
+      allow write: if admin() && image();
+    }
+    match /catalogo/procedimientos/{itemId}/{fileName} {
+      allow read: if member();
+      allow create: if resource == null && admin() && image();
+      allow update: if false;
+      allow delete: if admin();
+    }
+    match /{allPaths=**} { allow read, write: if false; }
   }
 }

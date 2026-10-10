@@ -50,7 +50,7 @@ const handleGoogleLogin = async () => {
     if (error?.code === 'auth/unauthorized-domain') {
       errorMsg.value = 'Este dominio no esta autorizado en Firebase Auth. Agrega stc-cmms.web.app en Authentication > Settings > Authorized domains.';
     } else {
-      errorMsg.value = 'Error al ingresar con Google. Verifica tu conexión.';
+      errorMsg.value = error?.code ? 'Error al ingresar con Google. Verifica tu conexión.' : error.message;
     }
   } finally {
     isLoading.value = '';

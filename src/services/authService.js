@@ -22,6 +22,7 @@ let pendingSession = Promise.resolve();
 let pendingUid = null;
 
 const normalizePerfil = (data) => {
+  if (data?.role === 'pendiente') throw new Error('Tu cuenta está pendiente de aprobación. Contactá al administrador para que asigne tu rol y sector.');
   if (!data || !knownRoles.has(data.role)) {
     throw new Error('Perfil sin rol válido. Contactá al administrador.');
   }
@@ -60,7 +61,7 @@ export const authService = {
     await setDoc(userRef, {
       email: user.email,
       displayName: user.displayName || '',
-      role: 'mecanico',
+      role: 'pendiente',
       sectorDefault: DEFAULT_SECTOR,
       sectoresAsignados: [DEFAULT_SECTOR],
       alcance: 'sector',

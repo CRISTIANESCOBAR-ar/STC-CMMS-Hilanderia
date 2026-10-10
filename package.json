@@ -23,8 +23,8 @@
     "reset:maquinas:dry": "node scripts/reset-maquinas-catalogo.mjs",
     "reset:maquinas:apply": "node scripts/reset-maquinas-catalogo.mjs --apply",
     "deploy:rules": "firebase deploy --only firestore:rules,storage",
-    "deploy:functions": "firebase deploy --only functions:geminiGenerate",
-    "deploy:security": "firebase deploy --only firestore:rules,storage,functions:geminiGenerate"
+    "deploy:functions": "firebase deploy --only functions:geminiGenerate,functions:finalizeOperationalUpload,functions:revokeOperationalDownloadToken",
+    "deploy:security": "firebase deploy --only firestore:rules,storage,functions:geminiGenerate,functions:finalizeOperationalUpload,functions:revokeOperationalDownloadToken"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",

@@ -2,30 +2,221 @@ import { before, after, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
+import { doc, setDoc, getDoc, getDocs, query, where, collection, updateDoc, deleteDoc, deleteField, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getMetadata, getDownloadURL, getBytes } from 'firebase/storage';
+import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from 'firebase-admin/app';
+import { getStorage as getAdminStorage } from 'firebase-admin/storage';
+import { revokeDownloadToken } from '../../functions/operationalImages.js';
 
 // Deliberately refuse execution without emulators; never test against live Firebase.
 assert.ok(process.env.FIRESTORE_EMULATOR_HOST, 'Run npm run test:rules with emulators');
 assert.ok(process.env.FIREBASE_STORAGE_EMULATOR_HOST, 'Storage emulator required');
 let environment;
+let serverApp;
 const identity = (uid, extra = {}) => environment.authenticatedContext(uid, {
   email: `${uid}@example.com`, firebase: { sign_in_provider: 'google.com' }, ...extra,
 });
 const newProfile = uid => ({
-  email: `${uid}@example.com`, displayName: 'Operador', role: 'mecanico',
+  email: `${uid}@example.com`, displayName: 'Operador', role: 'pendiente',
   sectorDefault: 'HILANDERIA', sectoresAsignados: ['HILANDERIA'],
   alcance: 'sector', jefeDeSectores: [], createdAt: serverTimestamp(),
 });
 
+async function approve(uid, role = 'mecanico', sector = 'HILANDERIA', extra = {}) {
+  await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), `usuarios/${uid}`), {
+    role, sectorDefault: sector, sectoresAsignados: [sector], ...extra,
+  }));
+}
+const novelty = (uid, sector = 'HILANDERIA') => ({
+  sector, estado: 'pendiente', creadoPorUid: uid, createdAt: serverTimestamp(),
+});
+const intervention = (uid, sector = 'HILANDERIA', type = 'MECANICO') => ({
+  sector, tipoIntervencion: type, estado: 'PENDIENTE', creadoPorUid: uid,
+  createdAt: serverTimestamp(), asignadoA: null, fechaAsignacion: null, fechaInicio: null, fechaFin: null,
+});
+
+const roles = ['mecanico', 'tejedor', 'inspector', 'auxiliar', 'supervisor',
+  'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos',
+  'jefe_produccion', 'gerente_produccion', 'admin'];
+
+for (const role of roles) {
+  test(`${role}: reporting and dispatch defaults are enforced on the server`, async () => {
+    await approve('actor', role);
+    const db = identity('actor').firestore();
+    const report = setDoc(doc(db, 'novedades/new'), novelty('actor'));
+    await (role === 'auxiliar' ? assertFails(report) : assertSucceeds(report));
+    const dispatch = setDoc(doc(db, 'intervenciones/new'), intervention('actor'));
+    await (['mecanico', 'tejedor', 'auxiliar'].includes(role) ? assertFails(dispatch) : assertSucceeds(dispatch));
+  });
+}
+
+for (const role of roles) {
+  test(`${role}: mechanical order execution respects granular permission`, async () => {
+    await approve('dispatcher', 'admin');
+    await approve('actor', role);
+    await assertSucceeds(setDoc(doc(identity('dispatcher').firestore(), 'intervenciones/order'), intervention('dispatcher')));
+    const order = doc(identity('actor').firestore(), 'intervenciones/order');
+    const taking = updateDoc(order, { estado: 'EN_PROCESO', asignadoA: 'actor', fechaInicio: serverTimestamp(), fechaAsignacion: serverTimestamp() });
+    if (['tejedor', 'inspector', 'auxiliar', 'supervisor'].includes(role)) {
+      await assertFails(taking);
+    } else {
+      await assertSucceeds(taking);
+      await assertSucceeds(updateDoc(order, { causaRaiz: 'Verificado', diagnosticoUpdatedAt: serverTimestamp() }));
+      await assertSucceeds(updateDoc(order, { estado: 'COMPLETADO', fechaFin: serverTimestamp() }));
+    }
+  });
+}
+
+test('patrol coverage stays inside sector; efficiency cannot rewrite quality rounds', async () => {
+  await approve('inspector', 'inspector', 'TEJEDURIA');
+  await approve('supervisor', 'supervisor', 'TEJEDURIA');
+  await approve('other', 'inspector');
+  const db = identity('inspector').firestore();
+  const patrol = doc(db, 'patrullas/day');
+  await assertSucceeds(setDoc(patrol, { sector: 'TEJEDURIA', inspectorUid: 'inspector',
+    createdAt: serverTimestamp(), estado: 'en_curso', rondas: {} }));
+  await assertSucceeds(updateDoc(patrol, { 'rondas.ronda_1': { datos: {} } }));
+  await assertFails(updateDoc(patrol, { inspectorUid: 'other' }));
+  await assertFails(getDoc(doc(identity('other').firestore(), 'patrullas/day')));
+  const efficiency = doc(identity('supervisor').firestore(), 'patrullas/day');
+  await assertSucceeds(updateDoc(efficiency, { 'rondas.ronda_e1': { datos: {} } }));
+  await assertFails(updateDoc(efficiency, { 'rondas.ronda_1': { datos: { forged: true } } }));
+});
+
+test('AI caches cannot expose summaries outside assigned sectors or legacy unscoped contents', async () => {
+  await approve('leader', 'jefe_sector');
+  const db = identity('leader').firestore();
+  await assertSucceeds(setDoc(doc(db, 'ai_summaries/own'), { sectores: ['HILANDERIA'], resumen: 'Seguro' }));
+  await assertFails(setDoc(doc(db, 'ai_summaries/other'), { sectores: ['TEJEDURIA'], resumen: 'Fuera de alcance' }));
+  await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'ai_summaries/legacy'), { resumen: 'Sin sector' }));
+  await assertFails(getDoc(doc(db, 'ai_summaries/legacy')));
+});
+
+test('custom dispatch view allows dispatch but does not grant execution automatically', async () => {
+  await approve('actor', 'auxiliar', 'TEJEDURIA', { vistasPersonalizadas: ['llamar'] });
+  const db = identity('actor').firestore();
+  const order = doc(db, 'intervenciones/custom');
+  await assertSucceeds(setDoc(order, intervention('actor', 'TEJEDURIA')));
+  await assertFails(updateDoc(order, { estado: 'EN_PROCESO', asignadoA: 'actor', fechaInicio: serverTimestamp(), fechaAsignacion: serverTimestamp() }));
+});
+
+test('quality permission denial applies even to inspector in the same sector', async () => {
+  await approve('inspector', 'inspector', 'TEJEDURIA', { permisosPersonalizados: { verCalidad: false } });
+  await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'patrullas/day'), {
+    sector: 'TEJEDURIA', inspectorUid: 'inspector', estado: 'en_curso', rondas: {},
+  }));
+  const patrol = doc(identity('inspector').firestore(), 'patrullas/day');
+  await assertFails(getDoc(patrol));
+  await assertFails(updateDoc(patrol, { 'rondas.ronda_1': { datos: {} } }));
+});
+
+test('legacy image is accessible only after trusted sector metadata and only in that sector', async () => {
+  await approve('hil');
+  await approve('tej', 'mecanico', 'TEJEDURIA');
+  await environment.withSecurityRulesDisabled(context => uploadBytes(ref(context.storage(), 'novedades/legacy-scoped.jpg'),
+    new Uint8Array([1,2,3]), { contentType: 'image/jpeg', customMetadata: { sector: 'HILANDERIA' } }));
+  await assertSucceeds(getMetadata(ref(identity('hil').storage(), 'novedades/legacy-scoped.jpg')));
+  await assertFails(getMetadata(ref(identity('tej').storage(), 'novedades/legacy-scoped.jpg')));
+});
+
+test('sector scope protects direct reads, collection queries and event creation', async () => {
+  await approve('actor');
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'novedades/hil'), { sector: 'HILANDERIA', estado: 'pendiente' });
+    await setDoc(doc(context.firestore(), 'novedades/tej'), { sector: 'TEJEDURIA', estado: 'pendiente' });
+  });
+  const db = identity('actor').firestore();
+  await assertSucceeds(getDoc(doc(db, 'novedades/hil')));
+  await assertFails(getDoc(doc(db, 'novedades/tej')));
+  await assertFails(getDocs(collection(db, 'novedades')));
+  await assertSucceeds(getDocs(query(collection(db, 'novedades'), where('sector', '==', 'HILANDERIA'))));
+  await assertFails(setDoc(doc(db, 'novedades/new'), novelty('actor', 'TEJEDURIA')));
+  await assertFails(setDoc(doc(db, 'novedades/forged'), novelty('another')));
+});
+
+test('configured grants/denials apply but never grant access to an unassigned sector', async () => {
+  await approve('actor', 'auxiliar', 'TEJEDURIA', { permisosPersonalizados: { crearFalla: true } });
+  const db = identity('actor').firestore();
+  await assertSucceeds(setDoc(doc(db, 'novedades/granted'), novelty('actor', 'TEJEDURIA')));
+  await assertFails(setDoc(doc(db, 'novedades/other'), novelty('actor', 'HILANDERIA')));
+  await approve('actor', 'mecanico', 'HILANDERIA', { permisosPersonalizados: { crearFalla: false } });
+  await assertFails(setDoc(doc(db, 'novedades/denied'), novelty('actor')));
+  await approve('actor', 'mecanico');
+  await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'config/organization'), {
+    profiles: { mecanico: { permisos: { crearFalla: false } } },
+  }));
+  await assertFails(setDoc(doc(db, 'novedades/config-denied'), novelty('actor')));
+});
+
+test('order cannot be taken twice, reassigned, closed by another actor or reopened', async () => {
+  await approve('dispatcher', 'supervisor');
+  await approve('one');
+  await approve('two');
+  await assertSucceeds(setDoc(doc(identity('dispatcher').firestore(), 'intervenciones/order'), intervention('dispatcher')));
+  const first = doc(identity('one').firestore(), 'intervenciones/order');
+  const second = doc(identity('two').firestore(), 'intervenciones/order');
+  const take = uid => ({ estado: 'EN_PROCESO', asignadoA: uid, fechaInicio: serverTimestamp(), fechaAsignacion: serverTimestamp() });
+  const simultaneous = await Promise.allSettled([updateDoc(first, take('one')), updateDoc(second, take('two'))]);
+  assert.equal(simultaneous.filter(result => result.status === 'fulfilled').length, 1);
+  const winner = simultaneous[0].status === 'fulfilled' ? first : second;
+  const loser = winner === first ? second : first;
+  await assertFails(updateDoc(loser, { estado: 'COMPLETADO', fechaFin: serverTimestamp() }));
+  await assertFails(updateDoc(winner, { sector: 'TEJEDURIA' }));
+  await assertFails(updateDoc(winner, { creadoPorUid: 'one' }));
+  await assertSucceeds(updateDoc(winner, { causaRaiz: 'Desgaste', diagnosticoUpdatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(winner, { estado: 'COMPLETADO', fechaFin: serverTimestamp() }));
+  await assertFails(updateDoc(winner, take('one')));
+});
+
+test('inspector may execute quality orders but not mechanical orders', async () => {
+  await approve('dispatcher', 'supervisor', 'TEJEDURIA');
+  await approve('inspector', 'inspector', 'TEJEDURIA');
+  const dispatch = identity('dispatcher').firestore();
+  await assertSucceeds(setDoc(doc(dispatch, 'intervenciones/quality'), intervention('dispatcher', 'TEJEDURIA', 'CALIDAD')));
+  await assertSucceeds(setDoc(doc(dispatch, 'intervenciones/mechanical'), intervention('dispatcher', 'TEJEDURIA')));
+  const db = identity('inspector').firestore();
+  const take = { estado: 'EN_PROCESO', asignadoA: 'inspector', fechaInicio: serverTimestamp(), fechaAsignacion: serverTimestamp() };
+  await assertSucceeds(updateDoc(doc(db, 'intervenciones/quality'), take));
+  await assertFails(updateDoc(doc(db, 'intervenciones/mechanical'), take));
+});
+
+test('auxiliary production access is scoped and does not authorize patrol edits', async () => {
+  await approve('aux', 'auxiliar', 'TEJEDURIA');
+  await approve('hil', 'auxiliar');
+  const db = identity('aux').firestore();
+  await assertSucceeds(setDoc(doc(db, 'shift_reports/day'), { fecha: '2026/10/10', registros: {}, updatedAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(doc(db, 'operarios_horarios/day'), { fecha: '2026-10-10' }));
+  await assertFails(getDoc(doc(identity('hil').firestore(), 'shift_reports/day')));
+  await assertFails(setDoc(doc(db, 'patrullas/day'), { sector: 'TEJEDURIA', inspectorUid: 'aux', createdAt: serverTimestamp() }));
+});
+
+test('images enforce sector, owner, role, approval and immutable files', async () => {
+  await approve('actor');
+  await approve('other', 'mecanico', 'TEJEDURIA');
+  const bytes = new Uint8Array([1,2,3]);
+  const options = { contentType: 'image/jpeg' };
+  const storage = identity('actor').storage();
+  const own = ref(storage, 'novedades/HILANDERIA/actor/scoped.jpg');
+  await assertSucceeds(uploadBytes(own, bytes, options));
+  await assertFails(uploadBytes(own, new Uint8Array([4,5,6]), options));
+  await assertFails(uploadBytes(ref(storage, 'novedades/TEJEDURIA/actor/scoped.jpg'), bytes, options));
+  await assertFails(uploadBytes(ref(storage, 'novedades/HILANDERIA/other/scoped.jpg'), bytes, options));
+  await assertFails(uploadBytes(ref(storage, 'intervenciones/HILANDERIA/actor/scoped.jpg'), bytes, options));
+  await assertFails(getMetadata(ref(identity('other').storage(), 'novedades/HILANDERIA/actor/scoped.jpg')));
+  await assertFails(uploadBytes(ref(identity('pending').storage(), 'novedades/HILANDERIA/pending/test.jpg'), bytes, options));
+});
+
 before(async () => {
+  assert.match(process.env.FIREBASE_STORAGE_EMULATOR_HOST, /^(127\.0\.0\.1|localhost):/);
+  process.env.STORAGE_EMULATOR_HOST = `http://${process.env.FIREBASE_STORAGE_EMULATOR_HOST}`;
+  serverApp = initializeAdminApp({ projectId: 'demo-cmms-production', storageBucket: 'demo-cmms-production.appspot.com' }, 'image-security-test');
   environment = await initializeTestEnvironment({
     projectId: 'demo-cmms-production',
     firestore: { rules: await readFile('firestore.rules', 'utf8') },
     storage: { rules: await readFile('storage.rules', 'utf8') },
   });
 });
-after(async () => { await environment?.cleanup(); });
+after(async () => { await environment?.cleanup(); if (serverApp) await deleteAdminApp(serverApp); });
 beforeEach(async () => { await environment.clearFirestore(); });
 
 test('identified account may create only its own default profile', async () => {
@@ -37,7 +228,7 @@ test('identified account may create only its own default profile', async () => {
 test('new profile cannot inject role, permissions, sectors or timestamps', async () => {
   const db = identity('operator').firestore();
   const patches = [
-    { role: 'admin' }, { vistasPersonalizadas: ['usuarios'] },
+    { role: 'admin' }, { role: 'mecanico' }, { vistasPersonalizadas: ['usuarios'] },
     { permisosPersonalizados: { configSistema: true } },
     { sectoresAsignados: ['HILANDERIA', 'TEJEDURIA'] },
     { alcance: 'global' }, { sectorDefault: 'TEJEDURIA' },
@@ -100,18 +291,22 @@ test('anonymous and unauthenticated accounts cannot read/write operational data 
   }
 });
 
-test('identified operations remain compatible while detailed permissions are pending S3', async () => {
+test('pending profile is excluded from operation until admin assigns a recognized role', async () => {
   const db = identity('operator').firestore();
-  await assertSucceeds(setDoc(doc(db, 'novedades/falla'), { sector: 'HILANDERIA' }));
-  await assertSucceeds(setDoc(doc(db, 'patrullas/ronda'), { inspectorUid: 'operator' }));
+  await assertSucceeds(setDoc(doc(db, 'usuarios/operator'), newProfile('operator')));
+  await assertFails(setDoc(doc(db, 'novedades/falla'), novelty('operator')));
+  await approve('operator');
+  await assertSucceeds(setDoc(doc(db, 'novedades/falla'), novelty('operator')));
+  await assertFails(setDoc(doc(db, 'patrullas/ronda'), { inspectorUid: 'operator' }));
   await assertFails(setDoc(doc(db, '_ai_rate_limits/operator'), { count: 0 }));
 });
 
 test('Storage rejects anonymous uploads while accepting identified image captures', async () => {
+  await approve('operator');
   const anonymous = identity('guest', { firebase: { sign_in_provider: 'anonymous' } });
   const image = new Uint8Array([1, 2, 3]);
   await assertFails(uploadBytes(ref(anonymous.storage(), 'novedades/guest.jpg'), image, { contentType: 'image/jpeg' }));
-  await assertSucceeds(uploadBytes(ref(identity('operator').storage(), 'novedades/operator.jpg'), image, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(ref(identity('operator').storage(), 'novedades/HILANDERIA/operator/operator.jpg'), image, { contentType: 'image/jpeg' }));
   await assertFails(uploadBytes(ref(identity('operator').storage(), 'novedades/file.txt'), image, { contentType: 'text/plain' }));
 });
 
@@ -126,4 +321,20 @@ test('inspector may read missing/configured thresholds but only admin may save t
   await assertSucceeds(setDoc(doc(identity('admin').firestore(), 'config/patrulla'), { umbralRoturaU: 5, umbralRoturaT: 5 }));
   const config = await assertSucceeds(getDoc(inspectorConfig));
   assert.equal(config.data().umbralRoturaU, 5);
+});
+
+test('finalizer fails closed when emulator retains tokens; authenticated bytes remain available', async () => {
+  await approve('actor');
+  const reference = ref(identity('actor').storage(), 'novedades/HILANDERIA/actor/token-test.jpg');
+  await assertSucceeds(uploadBytes(reference, new Uint8Array([1,2,3]), { contentType: 'image/jpeg' }));
+  const url = await getDownloadURL(reference);
+  assert.equal((await fetch(url)).status, 200);
+  // firebase-tools metadata.js retains its separate downloadTokens array when GCS
+  // custom metadata is patched to null. Do not mistake this emulator for a real
+  // token-revocation acceptance test: the finalizer must refuse that result.
+  await assert.rejects(revokeDownloadToken(getAdminStorage(serverApp).bucket(reference.bucket).file(reference.fullPath)), /revocar/);
+  const revoked = await fetch(url);
+  assert.equal(revoked.status, 200);
+  const bytes = await assertSucceeds(getBytes(reference));
+  assert.equal(bytes.byteLength, 3);
 });

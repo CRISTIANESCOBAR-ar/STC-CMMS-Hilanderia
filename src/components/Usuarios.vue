@@ -564,6 +564,7 @@ onMounted(async () => {
                   class="flex-1 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-600 outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
                 >
                   <option value="">Todos los Roles</option>
+                  <option value="pendiente">Pendientes de aprobación</option>
                   <option v-for="r in activeRoles" :key="r.value" :value="r.value">{{ r.label }}</option>
                 </select>
               </div>
@@ -704,6 +705,7 @@ onMounted(async () => {
                         v-model="selectedUser.role"
                         class="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-400 focus:bg-white transition-all"
                       >
+                        <option value="pendiente">Pendiente de aprobación</option>
                         <option v-for="r in activeRoles" :key="r.value" :value="r.value">{{ r.label }}</option>
                       </select>
                     </div>
@@ -1007,6 +1009,7 @@ onMounted(async () => {
                           v-model="selectedUser.role"
                           class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-1.5 text-xs font-bold text-gray-700 outline-none"
                         >
+                          <option value="pendiente">Pendiente de aprobación</option>
                           <option v-for="r in activeRoles" :key="r.value" :value="r.value">{{ r.label }}</option>
                         </select>
                       </div>

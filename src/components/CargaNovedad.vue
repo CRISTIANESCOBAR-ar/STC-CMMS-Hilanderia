@@ -1,7 +1,10 @@
 <script setup>
+import { sectorConstraints } from '../services/accessScope';
+
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { collection, addDoc, getDocs, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { getAuth } from 'firebase/auth';
 import { mantenimientoService } from '../services/mantenimientoService';
 import { catalogoService } from '../services/catalogoService';
 import { userProfile, userRole } from '../services/authService';
@@ -513,7 +516,7 @@ const abrirHistorial = async () => {
   historialMaquina.value = [];
   try {
     const q = query(
-      collection(db, 'novedades'),
+      collection(db, 'novedades'), ...sectorConstraints(),
       where('maquinaId', '==', maquinaSeleccionadaId.value),
       orderBy('createdAt', 'desc'),
       limit(5)
@@ -551,6 +554,7 @@ const enviarNotaTurno = async () => {
       nombreMaquina: maq ? `${maq.nombre_maquina} ${maq.maquina}` : maquinaSeleccionadaId.value,
       sector: maq?.sector || sectorPrincipalUsuario.value,
       nota: notaTurno.value.trim(),
+      creadoPorUid: getAuth().currentUser?.uid,
       creadoPorNombre: userProfile.value?.displayName || 'Anónimo',
       creadoPorEmail: userProfile.value?.email || null,
       createdAt: serverTimestamp(),

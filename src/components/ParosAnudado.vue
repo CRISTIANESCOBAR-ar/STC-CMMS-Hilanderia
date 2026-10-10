@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { collection, getDocs, query } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
 import { crearParo, actualizarParo, eliminarParo, suscribirParos } from '../services/paroTelarService';
+import { userRole } from '../services/authService';
 import { getTurnoActual } from '../constants/organization';
 import { Plus, X, Save, Trash2, Pencil, Clock } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
@@ -516,7 +517,7 @@ const parosFiltrados = computed(() => paros.value);
                 <button @click="abrirEdicion(paro)" class="w-9 h-9 flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-300 active:scale-90 transition-all">
                   <Pencil class="w-5 h-5" />
                 </button>
-                <button @click="eliminarRegistro(paro)" class="w-9 h-9 flex items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:border-red-300 active:scale-90 transition-all">
+                <button v-if="userRole === 'admin'" @click="eliminarRegistro(paro)" class="w-9 h-9 flex items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 hover:border-red-300 active:scale-90 transition-all">
                   <Trash2 class="w-5 h-5" />
                 </button>
               </div>

@@ -2,10 +2,33 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
+import { getStorage } from 'firebase-admin/storage';
+import { onObjectFinalized } from 'firebase-functions/v2/storage';
+import { validUploadPath, revokeDownloadToken } from './operationalImages.js';
 import { ALLOWED_ROLES, validateGeminiRequest, nextQuota } from './geminiPolicy.js';
 
 initializeApp();
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
+
+export const finalizeOperationalUpload = onCall({ region: 'us-central1', timeoutSeconds: 60, maxInstances: 10 }, async request => {
+  if (!request.auth || request.auth.token.firebase?.sign_in_provider === 'anonymous') {
+    throw new HttpsError('unauthenticated', 'Se requiere una cuenta identificada.');
+  }
+  const snapshot = await getFirestore().doc(`usuarios/${request.auth.uid}`).get();
+  const path = request.data?.path;
+  if (!snapshot.exists || !validUploadPath(snapshot.data(), request.auth.uid, path)) {
+    throw new HttpsError('permission-denied', 'Archivo fuera del alcance autorizado.');
+  }
+  await revokeDownloadToken(getStorage().bucket().file(path));
+  return { path };
+});
+
+// Also protects orphaned uploads when a browser closes before finalization.
+export const revokeOperationalDownloadToken = onObjectFinalized({ region: 'us-central1', retry: true, maxInstances: 5 }, async event => {
+  const name = event.data.name;
+  if (!name || !/^(novedades|intervenciones)\/(HILANDERIA|TEJEDURIA)\/[^/]+\/[^/]+$/.test(name)) return;
+  await revokeDownloadToken(getStorage().bucket(event.data.bucket).file(name));
+});
 
 async function authorizeCaller(auth) {
   if (!auth || auth.token.firebase?.sign_in_provider === 'anonymous') {

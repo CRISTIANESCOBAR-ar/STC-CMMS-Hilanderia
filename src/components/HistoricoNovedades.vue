@@ -1,4 +1,7 @@
 <script setup>
+import { showOperationalImage } from '../services/operationalImageService';
+import { sectorConstraints } from '../services/accessScope';
+
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { authService, userRole, userProfile } from '../services/authService';
 import { aiService } from '../services/aiService';
@@ -74,7 +77,7 @@ const cargarDatos = async () => {
   }, 10000);
 
   try {
-    const q = query(collection(db, 'novedades'));
+    const q = query(collection(db, 'novedades'), ...sectorConstraints());
     const snapshot = await getDocs(q);
     clearTimeout(timeoutId);
 
@@ -538,9 +541,9 @@ const getStatusClass = (estado) => {
                     </div>
                   </td>
                   <td class="px-5 py-4 text-center">
-                    <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all">
+                    <button type="button" v-if="n.fotoUrl" @click="showOperationalImage(n.fotoUrl)" class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all">
                       <ImageIcon class="w-4 h-4" />
-                    </a>
+                    </button>
                     <span v-else class="text-xs text-gray-300 font-bold">---</span>
                   </td>
                 </tr>
@@ -583,9 +586,9 @@ const getStatusClass = (estado) => {
             <p class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
             <div class="flex items-center justify-between pt-2">
               <span class="px-2.5 py-1 text-[10px] font-black rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
-              <a v-if="n.fotoUrl" :href="n.fotoUrl" target="_blank" class="flex items-center text-xs font-black text-blue-600 tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
+              <button type="button" v-if="n.fotoUrl" @click="showOperationalImage(n.fotoUrl)" class="flex items-center text-xs font-black text-blue-600 tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
                 <ImageIcon class="w-4 h-4 mr-1.5" /> Foto
-              </a>
+              </button>
             </div>
           </div>
           

@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// Producción S2: cuentas identificadas y perfiles protegidos.
-// Los permisos operativos por sector/acción se incorporan en la entrega S3.
+// Producción S3: aprobación de altas, roles, sectores y operaciones.
+// Ver docs/MATRIZ_PERMISOS_PRODUCCION.md y las pruebas del emulador.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -56,7 +56,7 @@ service cloud.firestore {
           'email', 'displayName', 'role', 'sectorDefault',
           'sectoresAsignados', 'alcance', 'jefeDeSectores', 'createdAt'
         ])
-        && request.resource.data.role == 'mecanico'
+        && request.resource.data.role == 'pendiente'
         && request.resource.data.sectorDefault == 'HILANDERIA'
         && request.resource.data.sectoresAsignados == ['HILANDERIA']
         && request.resource.data.alcance == 'sector'
@@ -68,7 +68,7 @@ service cloud.firestore {
 
     // ── Usuarios ─────────────────────────────────────────────────
     match /usuarios/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (uid() == userId || isMember());
       allow create: if isSignedIn()
         && uid() == userId
         && validNewUser();
@@ -81,87 +81,237 @@ service cloud.firestore {
 
     // ── Configuración ───────────────────────────────────────────
     match /config/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (docId == 'organization' || isMember());
       allow write: if isAdmin();
     }
 
     // ── Catálogos y administración ──────────────────────────────
     match /maquinas/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow create, delete: if isAdmin();
-      allow update: if isStaff();
+      allow update: if isAdmin() || (isStaff() && scoped(resource.data) && stableIdentity());
     }
 
     match /catalogo_puestos_control/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /codigos_defectos/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /codigos_paradas/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /sintomas/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /motivos_tipo/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
     match /rutas_patrulla/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isMember();
       allow write: if isAdmin();
     }
 
-    // ── Operación (mantener flujo actual para usuarios autenticados) ──
+    function isMember() {
+      return isSignedIn() && userRole() in ['admin', 'mecanico', 'tejedor', 'inspector',
+        'auxiliar', 'supervisor', 'supervisor_mecanico', 'supervisor_electrico',
+        'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'];
+    }
+
+    function assignedSectors() {
+      let profile = userDoc().data;
+      return profile.get('sectoresAsignados', [profile.get('sectorDefault', 'HILANDERIA')]);
+    }
+
+    function leaderSectors() {
+      return isJefe() ? userDoc().data.get('jefeDeSectores', []) : [];
+    }
+
+    function sectorAccess(sector) {
+      return isMember() && sector in ['HILANDERIA', 'TEJEDURIA']
+        && (isAdmin() || sector in assignedSectors() || sector in leaderSectors());
+    }
+
+    function scoped(data) {
+      return isMember() && (isAdmin() || sectorAccess(data.get('sector', '')));
+    }
+
+    function roleOverrides() {
+      let path = /databases/$(database)/documents/config/organization;
+      return exists(path) ? get(path).data.get('profiles', {}).get(userRole(), {}) : {};
+    }
+
+    function hasView(slug, defaults) {
+      let personal = userDoc().data.get('vistasPersonalizadas', null);
+      let configured = roleOverrides().get('vistas', null);
+      return isMember() && (isAdmin() || (personal is list ? slug in personal
+        : (configured is list ? slug in configured : userRole() in defaults)));
+    }
+
+    function hasPermission(name, defaults) {
+      let personal = userDoc().data.get('permisosPersonalizados', null);
+      let configured = roleOverrides().get('permisos', null);
+      return isMember() && (isAdmin() || (personal is map ? personal.get(name, false) == true
+        : (configured is map ? configured.get(name, false) == true : userRole() in defaults)));
+    }
+
+    function canReport() {
+      return hasPermission('crearFalla', ['mecanico', 'tejedor', 'inspector', 'supervisor',
+        'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos',
+        'jefe_produccion', 'gerente_produccion']);
+    }
+
+    function canDispatch() {
+      return hasView('llamar', ['inspector', 'supervisor', 'supervisor_mecanico',
+        'supervisor_electrico', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion']);
+    }
+
+    function canReadQuality() {
+      return hasPermission('verCalidad', ['inspector', 'auxiliar', 'supervisor',
+        'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos',
+        'jefe_produccion', 'gerente_produccion']);
+    }
+
+    function canExecute(data) {
+      return hasPermission('cerrarOrden', ['mecanico', 'supervisor_mecanico',
+        'supervisor_electrico', 'jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'])
+        || (userRole() == 'inspector' && data.get('tipoIntervencion', '') == 'CALIDAD');
+    }
+
+    function stableIdentity() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'sector', 'createdAt', 'creadoPorUid', 'creadoPorNombre', 'creadoPorEmail',
+        'inspectorUid', 'inspectorNombre', 'inspectorEmail', 'fecha', 'turno'
+      ]);
+    }
+
+    function validCreation() {
+      return scoped(request.resource.data)
+        && request.resource.data.creadoPorUid == uid()
+        && request.resource.data.createdAt == request.time;
+    }
+
+    function tejeduriaRead() {
+      return sectorAccess('TEJEDURIA');
+    }
+
+    function productionWrite(view, defaults) {
+      return tejeduriaRead() && hasView(view, defaults);
+    }
+
     match /novedades/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if scoped(resource.data);
+      allow create: if validCreation() && canReport() && request.resource.data.estado == 'pendiente';
+      allow update: if scoped(resource.data) && stableIdentity()
+        && hasView('jefe', ['jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'feedbackJefe', 'updatedAt'])
+        && request.resource.data.estado in ['pendiente', 'en proceso', 'resuelto']
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin();
     }
 
     match /intervenciones/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if scoped(resource.data);
+      allow create: if validCreation() && canDispatch()
+        && request.resource.data.estado == 'PENDIENTE'
+        && request.resource.data.asignadoA == null
+        && request.resource.data.fechaInicio == null && request.resource.data.fechaFin == null;
+      allow update: if scoped(resource.data) && stableIdentity() && canExecute(resource.data)
+        && (
+          (resource.data.estado == 'PENDIENTE'
+            && request.resource.data.estado == 'EN_PROCESO' && request.resource.data.asignadoA == uid()
+            && request.resource.data.fechaInicio == request.time
+            && request.resource.data.fechaAsignacion == request.time
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'estado', 'asignadoA', 'asignadoNombre', 'fechaInicio', 'fechaAsignacion']))
+          || (resource.data.estado == 'EN_PROCESO' && resource.data.asignadoA == uid()
+            && request.resource.data.asignadoA == resource.data.asignadoA
+            && ((request.resource.data.estado == 'EN_PROCESO'
+              && request.resource.data.diagnosticoUpdatedAt == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'causaRaiz', 'accionTomada', 'piezaId', 'piezaNombre', 'tiempoReal', 'tiempoAuto',
+                'numeroCatalogo', 'numeroArticulo', 'diagnosticoUpdatedAt']))
+              || (request.resource.data.estado == 'COMPLETADO'
+                && request.resource.data.fechaFin == request.time
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'fechaFin']))))
+        );
+      allow delete: if isAdmin();
     }
 
     match /patrullas/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if scoped(resource.data) && canReadQuality();
+      allow create: if scoped(request.resource.data) && canReadQuality() && request.resource.data.inspectorUid == uid()
+        && request.resource.data.createdAt == request.time
+        && (hasView('patrulla', ['inspector']) || hasView('eficiencia', ['supervisor', 'supervisor_mecanico']));
+      // Inspectors may cover another inspector within their assigned sector.
+      allow update: if scoped(resource.data) && canReadQuality() && stableIdentity()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rondas', 'estado'])
+        && (hasView('patrulla', ['inspector'])
+          || (hasView('eficiencia', ['supervisor', 'supervisor_mecanico'])
+            && request.resource.data.estado == resource.data.estado
+            && request.resource.data.rondas.diff(resource.data.get('rondas', {})).affectedKeys()
+              .hasOnly(['ronda_e1', 'ronda_e2', 'ronda_e3'])));
+      allow delete: if isAdmin();
     }
 
     match /notas_turno/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if scoped(resource.data);
+      allow create: if validCreation() && canReport();
+      allow update: if scoped(resource.data) && stableIdentity() && isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+      allow delete: if isAdmin();
     }
 
     match /muestras_anudados/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if tejeduriaRead() && canReadQuality();
+      allow create: if productionWrite('patrulla', ['inspector']) && canReadQuality()
+        && request.resource.data.creadoPor == uid() && request.resource.data.createdAt == request.time;
+      allow update, delete: if isAdmin();
     }
 
     match /shift_reports/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if tejeduriaRead();
+      allow create, update: if productionWrite('shiftreport', ['auxiliar'])
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isAdmin();
     }
 
     match /operarios_horarios/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if tejeduriaRead();
+      allow create, update: if productionWrite('operarios', ['auxiliar']);
+      allow delete: if isAdmin();
     }
 
     match /paros_telares/{fecha}/registros/{registroId} {
-      allow read, write: if isSignedIn();
+      allow read: if tejeduriaRead();
+      allow create, update: if productionWrite('paros-anudado', []);
+      allow delete: if isAdmin();
     }
 
     match /ai_summaries/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if isMember() && (resource == null || isAdmin()
+        || resource.data.get('sectores', []).size() > 0
+          && resource.data.sectores.hasOnly(assignedSectors().concat(leaderSectors())));
+      allow create, update: if isMember()
+        && hasView('jefe', ['jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'])
+        && request.resource.data.sectores.size() > 0
+        && (isAdmin() || request.resource.data.sectores.hasOnly(assignedSectors().concat(leaderSectors())));
+      allow delete: if isAdmin();
     }
 
     match /fcm_tokens/{userId} {
-      allow read: if isSignedIn() && (uid() == userId || isStaff());
-      allow create, update: if isSignedIn() && uid() == userId;
+      allow read: if isMember() && (uid() == userId || isStaff());
+      allow create, update: if isMember() && uid() == userId;
       allow delete: if isSignedIn() && (uid() == userId || isAdmin());
     }
 

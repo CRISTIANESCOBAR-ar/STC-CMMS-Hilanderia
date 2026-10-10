@@ -1,4 +1,7 @@
 <script setup>
+import { showOperationalImage } from '../services/operationalImageService';
+import { sectorConstraints } from '../services/accessScope';
+
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { aiService } from '../services/aiService';
 import { formatSummary as formatMarkdown } from '../utils/formatSummary';
@@ -102,7 +105,7 @@ const cargarDatos = async () => {
 
   try {
     const q = query(
-      collection(db, 'novedades'),
+      collection(db, 'novedades'), ...sectorConstraints(),
       where('estado', 'in', ['pendiente', 'en proceso'])
     );
     const snapshot = await getDocs(q);
@@ -619,9 +622,9 @@ const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.ti
                 "{{ novedad.observaciones }}"
               </p>
 
-              <a v-if="novedad.fotoUrl" :href="novedad.fotoUrl" target="_blank" class="inline-flex items-center text-base font-black underline underline-offset-4 mb-4 hover:opacity-70 transition p-2 bg-black/5 rounded-xl">
+              <button type="button" v-if="novedad.fotoUrl" @click="showOperationalImage(novedad.fotoUrl)" class="inline-flex items-center text-base font-black underline underline-offset-4 mb-4 hover:opacity-70 transition p-2 bg-black/5 rounded-xl">
                 <ImageIcon class="w-5 h-5 mr-2" /> Ver Foto Evidencia
-              </a>
+              </button>
             </div>
 
             <div class="mt-4 flex flex-col gap-4">

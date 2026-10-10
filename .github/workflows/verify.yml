@@ -1,0 +1,38 @@
+name: Verify production preparation
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:rules
+      - run: node --check functions/index.js
+      # This build verifies compilation, not a deployable production configuration.
+      # Real Firebase credentials and deploy permissions are not required here.
+      - run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ci-public-placeholder
+          VITE_FIREBASE_AUTH_DOMAIN: demo-cmms-production.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: demo-cmms-production
+          VITE_FIREBASE_STORAGE_BUCKET: demo-cmms-production.appspot.com
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '123456789'
+          VITE_FIREBASE_APP_ID: '1:123456789:web:ci'

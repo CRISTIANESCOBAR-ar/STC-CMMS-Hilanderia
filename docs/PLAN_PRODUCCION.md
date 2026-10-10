@@ -22,7 +22,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
 | D1 | Dependencias y avisos de seguridad | En curso | Actualizaciones compatibles verificadas; clasificar/resolver avisos restantes antes de producción |
 | E1 | Consultas y rendimiento | Pendiente | Paginación real; listeners acotados; mediciones con volumen representativo |
-| O1 | Operación y liberación | Pendiente | CI; entorno de prueba; monitoreo/alertas; backup/restauración y rollback ensayados |
+| O1 | Operación y liberación | En curso | CI; entorno de prueba; monitoreo/alertas; backup/restauración y rollback ensayados |
 | V1 | Sistema visual y navegación | Pendiente | Componentes compartidos y problemas críticos siempre visibles |
 | V2 | Modernización de vistas | Pendiente | Cada vista validada en resoluciones de planta, zoom y teclado |
 | G1 | Salida de beta | Pendiente | Piloto por roles; carga representativa; cero incidencias críticas; recuperación ensayada |
@@ -122,3 +122,12 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
   dependencias del CLI. No degradar Firebase ni ExcelJS para eliminar un aviso.
   No se habilita producción mientras falte evaluar exposición y resolver riesgos.
 - Rollback: revertir commit D1 y ejecutar npm ci sobre el lockfile aprobado.
+
+### O1 — Verificación automática inicial
+
+- GitHub Actions en push de main/codex y pull requests: npm ci, pruebas unitarias,
+  emuladores Firestore/Storage, sintaxis Functions y build sin secretos reales.
+- El pipeline tiene permisos de lectura y no despliega.
+- Monitoreo, alertas, backups/restauración, entorno piloto y pruebas de carga siguen pendientes.
+- El estado remoto del pipeline se registra después del primer push.
+- Rollback: revertir commit del workflow; no modifica aplicaciones ni datos de Firebase.

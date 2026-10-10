@@ -203,3 +203,12 @@ pruebas del servicio en entorno piloto.
 - Selección más reciente gana; respuestas pendientes se descartan al cambiar tipo/modelo o salir.
 - Ordenamiento tolera campos legacy ausentes, nulos o numéricos.
 - Validación: 38 pruebas unitarias; build de frontend. La causa concreta en el despliegue requiere modelo/rol y respuesta real de Firestore; no se modificaron permisos ni datos remotos.
+
+### Diagnóstico del renderizado del catálogo
+
+- Consola reportada: `index-CYgqgMnK.js`, error Vue `emitsOptions` durante parcheo con Teleport.
+- Verificación de lectura el 10/10/2026: ambos sitios configurados sirven ese mismo bundle con Vue 3.5.30. La rama actual usa Vue 3.5.43; no se puede dar por desplegada una corrección solo porque se hizo push.
+- Prueba del SFC real compilado con renderer Vue en memoria, iconos reales y servicios simulados: carga, datos, cambio de modelo y desmontaje con admin sin errores. No reproduce el fallo del navegador antiguo ni prueba DOM/extensiones/transiciones CSS.
+- El rol admin depende del perfil Firestore y no del proveedor Gmail. No se inspeccionó ni cambió el perfil remoto de la cuenta del usuario.
+- `node scripts/verify-hosting-release.mjs main` (o `legacy`) compara el bundle servido con dist/index.html; solo lectura, no despliega. Ejecutar después del build/despliegue correcto y antes de atribuir un fallo a caché del navegador.
+- No afirmar que actualizar Vue corrige específicamente este stack sin reproducción. Pendiente verificar comando/carpeta de despliegue y repetir en cliente con build actual.

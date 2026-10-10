@@ -71,6 +71,7 @@ import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, 
 import { ROLE_LABEL, ROLE_OPTIONS, SECTOR_OPTIONS, isJefeRole, getQuickActions } from './constants/organization';
 import { canAccessViewForUser, getDefaultRouteForUser } from './services/profileService';
 import Swal from 'sweetalert2';
+import { createUpdateNoticeTracker, isAppRegistration, activateWaitingWorker } from './utils/serviceWorkerUpdate';
 
 // Wrapper compatible con el template: respeta overrides por usuario
 const canAccessView = (role, slug) => canAccessViewForUser(role, slug, userProfile.value?.vistasPersonalizadas);
@@ -125,6 +126,7 @@ const closeMenu = () => {
   isMenuOpen.value = false;
 };
 
+const firstNotice = createUpdateNoticeTracker();
 let _updateDialogOpen = false; // evita múltiples Swal simultáneos
 
 // Función para verificar actualizaciones del Service Worker
@@ -134,7 +136,7 @@ const checkForUpdates = async () => {
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       for (let reg of regs) {
-        if (reg.waiting && navigator.serviceWorker.controller) {
+        if (isAppRegistration(reg, window.location.origin) && reg.waiting && new URL(reg.waiting.scriptURL).pathname === '/sw.js' && navigator.serviceWorker.controller && firstNotice(reg.waiting)) {
           hasUpdate.value = true;
           _updateDialogOpen = true;
           // Parar el polling mientras el diálogo está visible
@@ -175,19 +177,8 @@ const checkForUpdates = async () => {
 // Limpiar cache y actualizar
 const limpiarCacheYActualizar = async () => {
   try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (let reg of regs) {
-        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      }
-    }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      for (let key of keys) {
-        await caches.delete(key);
-      }
-    }
-    await new Promise(r => setTimeout(r, 300));
+    const reg = await navigator.serviceWorker.getRegistration(window.location.origin + '/');
+    await activateWaitingWorker(reg);
     window.location.reload();
   } catch (err) {
     console.error("Error updating:", err);

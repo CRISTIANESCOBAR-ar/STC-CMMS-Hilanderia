@@ -1,7 +1,6 @@
 const CACHE_NAME = 'cmms-cache-v14';
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME));
 });
 
@@ -9,7 +8,7 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames
-      .filter(name => name !== CACHE_NAME)
+      .filter(name => name.startsWith('cmms-cache-') && name !== CACHE_NAME)
       .map(name => caches.delete(name)));
     await self.clients.claim();
     // NO se usa client.navigate() — es bloqueado por COOP policy.

@@ -183,3 +183,15 @@ pruebas del servicio en entorno piloto.
 - Commit inicial de zona: `7292f64`; complemento nocturno separado y reversible.
 - Piloto pendiente: relevo real, índices compuestos y datos legacy ambiguos; R3 sigue a cargo de concurrencia y R4 de borradores/actualización.
 - Detalles y límites de rollback: [FECHAS_TURNOS.md](FECHAS_TURNOS.md). Sin despliegue ni modificación de datos remotos.
+
+### R4 — Corrección inicial del aviso repetido de actualización
+
+- FCM se registra en `/firebase-messaging/`, separado del worker raíz `/sw.js`.
+- Sin registro FCM válido no se permite que getToken cree otro worker raíz implícitamente.
+- Avisos solo del worker de aplicación; la misma instancia pendiente se anuncia una vez por sesión.
+- Actualización espera `activated`, con timeout/error; no borra cachés globales ni recarga tras 300 ms.
+- Worker de aplicación espera confirmación para reemplazar un controlador existente; limpieza limitada a `cmms-cache-*`.
+- Login libera sus listeners al desmontarse. Eliminado log del token FCM.
+- Validación: 34 pruebas unitarias y build correctos. Pendiente prueba real de actualización y recepción FCM tras regenerar token con nuevo ámbito.
+- El despliegue anterior conserva la lógica vieja hasta cargar esta versión. No se desplegó automáticamente.
+- R4 completo sigue pendiente: borradores, sincronización y ensayo de múltiples pestañas/recuperación.

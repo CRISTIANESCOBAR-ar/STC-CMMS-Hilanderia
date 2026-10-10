@@ -22,12 +22,15 @@ export const notificationService = {
       let swReg = null;
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         try {
-          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/firebase-messaging/' });
           console.log('Service Worker (firebase-messaging-sw.js) registrado:', swReg.scope);
         } catch (swErr) {
           console.warn('No se pudo registrar firebase-messaging-sw.js:', swErr);
         }
       }
+
+      // Never let getToken implicitly register a competing worker at the app root.
+      if (!swReg) throw new Error('No se pudo preparar el servicio de notificaciones.');
 
       const permission = await Notification.requestPermission();
       
@@ -40,7 +43,6 @@ export const notificationService = {
         const currentToken = await getToken(messaging, getTokenOptions);
 
         if (currentToken) {
-          console.log('Token FCM obtenido:', currentToken);
           
           // Guardar el token en Firestore asociado al usuario
           await setDoc(doc(db, 'fcm_tokens', userId), {

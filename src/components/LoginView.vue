@@ -1,5 +1,8 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { isAppRegistration, activateWaitingWorker } from '../utils/serviceWorkerUpdate';
+const updateListeners = [];
+onUnmounted(() => updateListeners.forEach(remove => remove()));
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { authService, sessionError } from '../services/authService';
 import { Loader2, RefreshCw, Wrench } from 'lucide-vue-next';
@@ -19,20 +22,25 @@ onMounted(async () => {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       for (let reg of regs) {
+        if (!isAppRegistration(reg, window.location.origin)) continue;
         // Solo mostrar banner si hay un SW esperando Y ya hay un controlador activo
         // (si no hay controlador, es la primera instalación, no una actualización)
-        if (reg.waiting && navigator.serviceWorker.controller) {
+        if (reg.waiting && new URL(reg.waiting.scriptURL).pathname === '/sw.js' && navigator.serviceWorker.controller) {
           hasUpdate.value = true;
         }
         // Escuchar si llega un update mientras la pantalla de login está abierta
-        reg.addEventListener('updatefound', () => {
+        const onUpdateFound = () => {
           const newWorker = reg.installing;
-          newWorker?.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          const onStateChange = () => {
+            if (newWorker?.state === 'installed' && new URL(newWorker.scriptURL).pathname === '/sw.js' && navigator.serviceWorker.controller) {
               hasUpdate.value = true;
             }
-          });
-        });
+          };
+          newWorker?.addEventListener('statechange', onStateChange);
+          updateListeners.push(() => newWorker?.removeEventListener('statechange', onStateChange));
+        };
+        reg.addEventListener('updatefound', onUpdateFound);
+        updateListeners.push(() => reg.removeEventListener('updatefound', onUpdateFound));
       }
     } catch (err) {
       console.warn('Check update sw error', err);
@@ -60,29 +68,12 @@ const handleGoogleLogin = async () => {
 const limpiarCacheYActualizar = async () => {
   isLoading.value = 'update';
   try {
-    // 1. Si hay un SW en espera, decirle que se active
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (let reg of regs) {
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-      }
-    }
-    // 2. Limpiar Caches de la PWA
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      for (let key of keys) {
-        await caches.delete(key);
-      }
-    }
-    // 3. Esperar brevemente para que el SW se active
-    await new Promise(r => setTimeout(r, 300));
-    // 4. Recargar la página
+    const reg = await navigator.serviceWorker.getRegistration(window.location.origin + '/');
+    await activateWaitingWorker(reg);
     window.location.reload();
   } catch (err) {
     console.error("Error al limpiar caché:", err);
-    errorMsg.value = "No se pudo actualizar. Intenta borrar caché del navegador manualmente.";
+    errorMsg.value = "No se pudo actualizar. Intentá nuevamente cuando tengas conexión.";
     isLoading.value = '';
   }
 };

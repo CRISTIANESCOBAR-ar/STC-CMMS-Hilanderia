@@ -144,8 +144,8 @@ const novedadesFiltradas = computed(() => {
       if (typeof n.createdAt.toDate === 'function') dateObj = n.createdAt.toDate();
       else dateObj = new Date(n.createdAt);
       
-      const [yyyy, mm, dd] = plantDate(dateObj).split('-');
-      matchesDate = `${yyyy}-${mm}-${dd}` === filterDate.value;
+      try { matchesDate = plantDate(dateObj) === filterDate.value; }
+      catch { matchesDate = false; }
     }
     
     return matchesSearch && matchesStatus && matchesDate;

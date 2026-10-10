@@ -17,7 +17,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | S2 | Protección de perfiles | Verificado localmente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
 | S3 | Permisos operativos y Storage | Verificado localmente; piloto pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
 | R1 | Sesión y configuración | Verificado localmente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
-| R2 | Fechas y turnos de planta | En curso; zona y límites verificados, criterio nocturno pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
+| R2 | Fechas y turnos de planta | Verificado localmente; piloto de relevo pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
 | D1 | Dependencias y avisos de seguridad | En curso | Actualizaciones compatibles verificadas; clasificar/resolver avisos restantes antes de producción |
@@ -171,3 +171,15 @@ pruebas del servicio en entorno piloto.
   real debe ensayarse en el bucket piloto. No se usa fallback público para ocultar el fallo.
 - Backend Node 22 con lockfile propio. Instalación inicial reportó 9 avisos moderados;
   quedan dentro de D1 y no se desplegó el backend. CI ahora instala e importa Functions.
+
+### R2 — Fechas y turnos de planta
+
+- Zona IANA explícita; independencia de la zona configurada en la PC.
+- Planta confirmó turno C con fecha de inicio a las 22:00, estable durante medianoche.
+- Patrullas/muestras/paros nuevos versionan criterio; lecturas legacy compatibles sin reescritura.
+- Capturas abiertas al relevo avisan antes de guardar; edición conserva identidad y turno.
+- Informes diarios calendario e informes por turno con madrugada completa; 7 días exactos.
+- Validación: 31 pruebas unitarias y 47 de reglas (78 total); build correcto.
+- Commit inicial de zona: `7292f64`; complemento nocturno separado y reversible.
+- Piloto pendiente: relevo real, índices compuestos y datos legacy ambiguos; R3 sigue a cargo de concurrencia y R4 de borradores/actualización.
+- Detalles y límites de rollback: [FECHAS_TURNOS.md](FECHAS_TURNOS.md). Sin despliegue ni modificación de datos remotos.

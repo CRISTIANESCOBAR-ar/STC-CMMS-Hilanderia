@@ -10,7 +10,7 @@ import { cargarPatrullaActiva, crearPatrulla, guardarRondaEficiencia, guardarRon
 import { Loader2, ChevronDown, CloudUpload, BarChart3, Check, ArrowLeft, Lock } from 'lucide-vue-next';
 
 const router = useRouter();
-const turnoActual = ref(getTurnoActual());
+const turnoActual = computed(() => patrullaData.value?.turno || getTurnoActual());
 
 const emit = defineEmits(['completada']);
 

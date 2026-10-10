@@ -1,7 +1,7 @@
 <script setup>
-import { plantDate, plantShift, addDays } from '../utils/plantTime';
+import { shiftSlot, plantShift, addDays } from '../utils/plantTime';
 import { ref, computed, watch, onMounted } from 'vue';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Search, Users, Filter, Camera, Loader2, XCircle, Calendar, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X, LayoutGrid, Table2 } from 'lucide-vue-next';
 import CameraCapture from './CameraCapture.vue';
@@ -41,7 +41,7 @@ const guardarMaestro = async () => {
   try {
     await setDoc(doc(db, 'config', 'operarios_tejeduria'), {
       operarios: maestroOperarios.value,
-      updatedAt: new Date(),
+      updatedAt: serverTimestamp(),
     });
   } catch (e) {
     console.error('Error guardando maestro:', e);
@@ -105,7 +105,7 @@ const tieneHorarios = computed(() =>
 );
 
 // ── Fecha ──
-const fechaHoy = plantDate;
+const fechaHoy = () => shiftSlot().fecha;
 const fechaSeleccionada = ref(fechaHoy());
 const esHoy = computed(() => fechaSeleccionada.value === fechaHoy());
 const cambiarFecha = (delta) => { fechaSeleccionada.value = addDays(fechaSeleccionada.value, delta); };
@@ -137,7 +137,7 @@ const guardarHorarios = async (turno) => {
       fecha: fechaSeleccionada.value,
       horarios,
       extras,
-      updatedAt: new Date(),
+      updatedAt: serverTimestamp(),
     }, { merge: true });
   } catch (e) {
     console.error('Error guardando horarios:', e);

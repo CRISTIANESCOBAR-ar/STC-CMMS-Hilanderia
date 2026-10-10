@@ -16,7 +16,7 @@ import SeguimientoRoturas from './SeguimientoRoturas.vue';
 const router = useRouter();
 const route = useRoute();
 
-const turnoActual = ref(getTurnoActual());
+const turnoActual = computed(() => patrullaData.value?.turno || getTurnoActual());
 const subVista = computed(() => route.params.sub || null);
 const patrullaData = ref(null);
 const cargandoPatrulla = ref(true);

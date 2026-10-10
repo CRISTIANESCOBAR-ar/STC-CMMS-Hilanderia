@@ -1,5 +1,6 @@
 <script setup>
-import { plantDate } from '../utils/plantTime';
+import { shiftSlot } from '../utils/plantTime';
+import { usePlantClock } from '../composables/usePlantClock';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { collection, getDocs, query } from 'firebase/firestore';
 import { db, auth } from '../firebase/config';
@@ -18,13 +19,16 @@ const mostrarForm = ref(false);
 const editandoId = ref(null);
 
 // ── Fecha y turno ──
-const fechaHoy = () => plantDate().replaceAll('-', '/');
+const fechaHoy = () => shiftSlot().fecha.replaceAll('-', '/');
 const fechaReporte = ref(fechaHoy());
 const fechaInput = computed({
   get: () => fechaReporte.value.replace(/\//g, '-'),
   set: (v) => { fechaReporte.value = v.replace(/-/g, '/'); }
 });
-const turnoActual = computed(() => getTurnoActual());
+const clock = usePlantClock();
+const turnoActual = computed(() => getTurnoActual(clock.value));
+let formSlot = shiftSlot();
+let editingRecord = null;
 const supervisorNombre = computed(() => {
   const u = auth.currentUser;
   return u?.displayName || u?.email?.split('@')[0] || 'Supervisor';
@@ -192,6 +196,8 @@ onUnmounted(() => { if (unsubscribeFn) unsubscribeFn(); });
 
 // ── Acciones del formulario ──
 function abrirNuevo() {
+  formSlot = shiftSlot();
+  editingRecord = null;
   editandoId.value = null;
   form.value = resetForm();
   mostrarForm.value = true;
@@ -202,6 +208,7 @@ function abrirNuevo() {
 }
 
 function abrirEdicion(paro) {
+  editingRecord = paro;
   editandoId.value = paro.id;
   form.value = {
     telar: paro.telar || '',
@@ -231,6 +238,11 @@ function cerrarForm() {
 }
 
 async function guardar() {
+  const current = shiftSlot();
+  if (!editandoId.value && (current.fecha !== formSlot.fecha || current.turno !== formSlot.turno)) {
+    await Swal.fire({ icon: 'warning', title: 'Cambió el turno', text: 'Conservá los datos y volvé a abrir el formulario para registrar en el turno actual.' });
+    return;
+  }
   const f = form.value;
   if (!f.telar) {
     Swal.fire('', 'Seleccioná un telar', 'warning');
@@ -256,14 +268,14 @@ async function guardar() {
     anudadores: f.anudadores.filter(Boolean),
     hilosCruzados: f.hilosCruzados,
     revisor: f.revisor.trim(),
-    turno: turnoActual.value,
+    turno: editingRecord?.turno || formSlot.turno,
     supervisor: auth.currentUser?.uid || '',
     supervisorNombre: supervisorNombre.value
   };
 
   try {
     if (editandoId.value) {
-      await actualizarParo(fechaReporte.value, editandoId.value, datos);
+      await actualizarParo(editingRecord.fechaDocumento || fechaReporte.value, editandoId.value, datos);
     } else {
       await crearParo(fechaReporte.value, datos);
     }
@@ -289,7 +301,7 @@ async function eliminarRegistro(paro) {
   });
   if (!res.isConfirmed) return;
   try {
-    await eliminarParo(fechaReporte.value, paro.id);
+    await eliminarParo(paro.fechaDocumento || fechaReporte.value, paro.id);
     Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1000, showConfirmButton: false });
   } catch (e) {
     Swal.fire('Error', 'No se pudo eliminar', 'error');

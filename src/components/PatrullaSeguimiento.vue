@@ -1,9 +1,10 @@
 <script setup>
-import { plantDate, moveShift, PLANT_TIME_ZONE } from '../utils/plantTime';
+import { shiftSlot, moveShift, PLANT_TIME_ZONE } from '../utils/plantTime';
+import { usePlantClock } from '../composables/usePlantClock';
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { userProfile, userRole } from '../services/authService';
-import { getTurnoActual, getTurnoLabel } from '../constants/organization';
+import { getTurnoLabel } from '../constants/organization';
 import { cargarPatrullasPorFechaTurno } from '../services/patrullaService';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, ScanLine, Eye,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 
 const router = useRouter();
+const clock = usePlantClock();
 
 // ── Helpers de navegación de turnos ──────────────────────────────
 const TURNO_ORD = { A: 0, B: 1, C: 2 };
@@ -21,9 +23,8 @@ function turnoAnterior(fecha, turno) { return moveShift(fecha, turno, -1); }
 function turnoSiguiente(fecha, turno) { return moveShift(fecha, turno, 1); }
 
 function esFuturo(fecha, turno) {
-  const ahora = new Date();
-  const hoy = plantDate(ahora);
-  const tHoy = getTurnoActual(ahora);
+  const ahora = clock.value;
+  const { fecha: hoy, turno: tHoy } = shiftSlot(ahora);
   if (fecha > hoy) return true;
   if (fecha === hoy && TURNO_ORD[turno] > TURNO_ORD[tHoy]) return true;
   return false;
@@ -42,8 +43,8 @@ function horaRonda(isoStr) {
 
 // ── Estado ────────────────────────────────────────────────────────
 const _now = new Date();
-const fechaVer = ref(plantDate(_now));
-const turnoVer = ref(getTurnoActual(_now));
+const fechaVer = ref(shiftSlot(_now).fecha);
+const turnoVer = ref(shiftSlot(_now).turno);
 const patrullas = ref([]);
 const patrullaIdx = ref(0);
 const cargando = ref(true);
@@ -51,8 +52,8 @@ const cargando = ref(true);
 const patrullaData = computed(() => patrullas.value[patrullaIdx.value] ?? null);
 
 const esSlotActual = computed(() => {
-  const hoy = plantDate();
-  return fechaVer.value === hoy && turnoVer.value === getTurnoActual();
+  const { fecha, turno } = shiftSlot(clock.value);
+  return fechaVer.value === fecha && turnoVer.value === turno;
 });
 
 const puedeNavSig = computed(() => {

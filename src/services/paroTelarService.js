@@ -4,6 +4,7 @@
  */
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { SHIFT_DATE_CRITERION, addDays, normalizeShiftRecord } from '../utils/plantTime';
 
 const COLLECTION = 'paros_telares';
 
@@ -22,6 +23,8 @@ export async function crearParo(fecha, datos) {
   const ref = registrosRef(fecha);
   const docRef = await addDoc(ref, {
     ...datos,
+    fecha: fechaToDocId(fecha),
+    fechaCriterio: SHIFT_DATE_CRITERION,
     createdAt: serverTimestamp()
   });
   return docRef.id;
@@ -48,9 +51,14 @@ export async function eliminarParo(fecha, paroId) {
  * Retorna función unsubscribe.
  */
 export function suscribirParos(fecha, callback) {
-  const q = query(registrosRef(fecha), orderBy('createdAt', 'asc'));
-  return onSnapshot(q, (snap) => {
-    const paros = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    callback(paros);
-  });
+  const selected = fechaToDocId(fecha);
+  const results = new Map();
+  const dates = [selected, addDays(selected, 1)];
+  const stops = dates.map(source => onSnapshot(query(registrosRef(source), orderBy('createdAt', 'asc')), snap => {
+    results.set(source, snap.docs.map(d => normalizeShiftRecord({ ...d.data(), id: d.id, fecha: d.data().fecha || source, fechaDocumento: source })));
+    if (results.size !== dates.length) return;
+    callback([...results.values()].flat().filter(record => record.fecha === selected)
+      .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
+  }));
+  return () => stops.forEach(stop => stop());
 }

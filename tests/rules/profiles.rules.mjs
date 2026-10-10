@@ -39,6 +39,22 @@ const roles = ['mecanico', 'tejedor', 'inspector', 'auxiliar', 'supervisor',
   'supervisor_mecanico', 'supervisor_electrico', 'jefe_sector', 'jefe_electricos',
   'jefe_produccion', 'gerente_produccion', 'admin'];
 
+test('night shift metadata is accepted while patrol date and criterion stay immutable', async () => {
+  await approve('night', 'inspector', 'TEJEDURIA');
+  const db = identity('night').firestore();
+  const patrol = doc(db, 'patrullas/night');
+  await assertSucceeds(setDoc(patrol, {
+    sector: 'TEJEDURIA', inspectorUid: 'night', fecha: '2026-10-10', turno: 'C',
+    fechaCriterio: 'inicio-turno-v1', estado: 'en_curso', rondas: {}, createdAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(patrol, { 'rondas.ronda_1': { datos: {} } }));
+  await assertFails(updateDoc(patrol, { fecha: '2026-10-11' }));
+  await assertFails(updateDoc(patrol, { fechaCriterio: 'calendario' }));
+  await assertSucceeds(setDoc(doc(db, 'muestras_anudados/night'), {
+    fecha: '2026-10-10', turno: 'C', fechaCriterio: 'inicio-turno-v1', creadoPor: 'night', createdAt: serverTimestamp(),
+  }));
+});
+
 for (const role of roles) {
   test(`${role}: reporting and dispatch defaults are enforced on the server`, async () => {
     await approve('actor', role);

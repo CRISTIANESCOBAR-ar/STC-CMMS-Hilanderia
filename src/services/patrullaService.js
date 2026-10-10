@@ -1,8 +1,7 @@
-import { plantDate } from '../utils/plantTime';
+import { shiftSlot, SHIFT_DATE_CRITERION, shiftCandidateDates, normalizeShiftRecord } from '../utils/plantTime';
 import { sectorConstraints } from './accessScope';
 import { collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { getTurnoActual } from '../constants/organization';
 
 const COL_PATRULLAS = 'patrullas';
 const DOC_CONFIG    = 'config/patrulla';
@@ -30,40 +29,17 @@ export async function savePatrullaConfig(cfg) {
  * Activa = estado 'en_curso' + turno + fecha de hoy.
  */
 export async function cargarPatrullaActiva(inspectorUid) {
-  const hoy = new Date();
-  const fechaStr = plantDate(hoy); // YYYY-MM-DD
-  const turno = getTurnoActual(hoy);
-
-  const q = query(
-    collection(db, COL_PATRULLAS), ...sectorConstraints(),
-    where('inspectorUid', '==', inspectorUid),
-    where('fecha', '==', fechaStr),
-    where('turno', '==', turno),
-    where('estado', '==', 'en_curso'),
-    limit(1)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() };
+  const { fecha, turno } = shiftSlot();
+  const records = await cargarPatrullasPorFechaTurno(fecha, turno, [
+    where('inspectorUid', '==', inspectorUid), where('estado', '==', 'en_curso'),
+  ]);
+  records.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+  return records[0] || null;
 }
 
-/**
- * Carga TODAS las patrullas activas del turno actual (para vista de calidad global).
- */
 export async function cargarPatrullasTurnoActual() {
-  const hoy = new Date();
-  const fechaStr = plantDate(hoy);
-  const turno = getTurnoActual(hoy);
-
-  const q = query(
-    collection(db, COL_PATRULLAS), ...sectorConstraints(),
-    where('fecha', '==', fechaStr),
-    where('turno', '==', turno),
-    where('estado', '==', 'en_curso'),
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const { fecha, turno } = shiftSlot();
+  return cargarPatrullasPorFechaTurno(fecha, turno, [where('estado', '==', 'en_curso')]);
 }
 
 /**
@@ -76,8 +52,8 @@ export async function crearPatrulla({ inspectorUid, inspectorNombre, inspectorEm
     inspectorNombre,
     inspectorEmail: inspectorEmail || null,
     sector,
-    turno: getTurnoActual(hoy),
-    fecha: plantDate(hoy),
+    ...shiftSlot(hoy),
+    fechaCriterio: SHIFT_DATE_CRITERION,
     estado: 'en_curso',
     rondas: {},
     createdAt: serverTimestamp(),
@@ -214,14 +190,13 @@ export async function guardarRondaParcialEficiencia(patrullaId, rondaKey, datos)
 /**
  * Carga patrullas para una fecha y turno específicos (para vista de seguimiento).
  */
-export async function cargarPatrullasPorFechaTurno(fecha, turno) {
-  const q = query(
+export async function cargarPatrullasPorFechaTurno(fecha, turno, extra = []) {
+  const snapshots = await Promise.all(shiftCandidateDates(fecha, turno).map(candidate => getDocs(query(
     collection(db, COL_PATRULLAS), ...sectorConstraints(),
-    where('fecha', '==', fecha),
-    where('turno', '==', turno),
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    where('fecha', '==', candidate), where('turno', '==', turno), ...extra,
+  ))));
+  return snapshots.flatMap(snap => snap.docs.map(d => normalizeShiftRecord({ id: d.id, ...d.data() })))
+    .filter(record => record.fecha === fecha && record.turno === turno);
 }
 
 export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30) {
@@ -231,7 +206,7 @@ export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30)
   if (inspectorUid) constraints.unshift(where('inspectorUid', '==', inspectorUid));
   const q = query(collection(db, COL_PATRULLAS), ...sectorConstraints(), ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(d => normalizeShiftRecord({ id: d.id, ...d.data() }));
 }
 
 /**
@@ -240,7 +215,7 @@ export async function cargarHistorialPatrullas(inspectorUid = null, limite = 30)
 export async function cargarPatrullaPorId(patrullaId) {
   const snap = await getDoc(doc(db, COL_PATRULLAS, patrullaId));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() };
+  return normalizeShiftRecord({ id: snap.id, ...snap.data() });
 }
 
 /**

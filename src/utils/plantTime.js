@@ -61,3 +61,40 @@ export function shiftStart(instant = new Date()) {
   const slot = shiftSlot(instant);
   return plantInstant(slot.fecha, { A: 6, B: 14, C: 22 }[slot.turno]);
 }
+
+export const SHIFT_DATE_CRITERION = 'inicio-turno-v1';
+
+// Legacy patrols stored a calendar/UTC date. Recover their slot from the event,
+// retaining the original date and never rewriting the document during reads.
+export function recordShiftSlot(record) {
+  if (record.fechaCriterio === SHIFT_DATE_CRITERION) return { fecha: record.fecha, turno: record.turno };
+  const timestamp = record.createdAt;
+  const instant = timestamp?.toDate?.() ?? (typeof timestamp?.seconds === 'number' ? new Date(timestamp.seconds * 1000) : timestamp);
+  if (instant != null) {
+    try {
+      const slot = shiftSlot(instant);
+      if (slot.turno === record.turno) return slot;
+    } catch { /* An ambiguous legacy record keeps its stored date. */ }
+  }
+  return { fecha: record.fecha, turno: record.turno };
+}
+
+export function normalizeShiftRecord(record) {
+  return { ...record, fechaOriginal: record.fecha, ...recordShiftSlot(record) };
+}
+
+export function shiftCandidateDates(fecha, turno) {
+  return turno === 'C' ? [addDays(fecha, 0), addDays(fecha, 1)] : [addDays(fecha, 0)];
+}
+
+export function reportRange(fromDate, toDate, turno = null) {
+  addDays(fromDate, 0);
+  addDays(toDate, 0);
+  if (fromDate > toDate || turno !== null && !['A', 'B', 'C'].includes(turno)) throw new RangeError('Período o turno inválido');
+  const startHour = turno ? { A: 6, B: 14, C: 22 }[turno] : 0;
+  const endHour = turno ? { A: 14, B: 22, C: 6 }[turno] : 0;
+  return {
+    desde: plantInstant(fromDate, startHour),
+    hastaExclusiva: plantInstant(!turno || turno === 'C' ? addDays(toDate, 1) : toDate, endHour),
+  };
+}

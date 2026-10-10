@@ -1,4 +1,4 @@
-import { plantDate, plantInstant, addDays, plantShift, PLANT_TIME_ZONE } from '../utils/plantTime';
+import { plantDate, plantInstant, addDays, plantShift, shiftSlot, reportRange, PLANT_TIME_ZONE } from '../utils/plantTime';
 import { sectorConstraints } from './accessScope';
 import { collection, query, where, getDocs, Timestamp, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -155,14 +155,14 @@ export const aiService = {
     sectores = resolveSummarySectors(sectores);
     try {
       const ahora = new Date();
-      const hoy = plantDate(ahora);
+      const hoy = turno ? shiftSlot(ahora).fecha : plantDate(ahora);
       if (!Number.isInteger(dias) || dias < 1) throw new RangeError('Cantidad de días inválida.');
       if (Boolean(fechaDesde) !== Boolean(fechaHasta)) throw new RangeError('Completar ambas fechas del período.');
       const inicio = fechaDesde || addDays(hoy, 1 - dias);
       const fin = fechaHasta || hoy;
       if (inicio > fin) throw new RangeError('El inicio del período supera el final.');
-      const desde = plantInstant(inicio);
-      const hasta = new Date(plantInstant(addDays(fin, 1)).getTime() - 1);
+      const { desde, hastaExclusiva } = reportRange(inicio, fin, turno || null);
+      const hasta = new Date(hastaExclusiva.getTime() - 1);
       const sectorSuffix = sectores ? `_${sectores.sort().join('-')}` : '';
       const turnoSuffix = turno ? `_t${turno}` : '';
       const periodoKey = fechaDesde ? `${fechaDesde}_${fechaHasta}` : `${dias}d`;
@@ -205,7 +205,7 @@ export const aiService = {
         intervenciones = intervenciones.filter(i => enTurno(i.createdAt));
       }
 
-      const diasLabel = fechaDesde ? Math.ceil((hasta - desde) / 86400000) : dias;
+      const diasLabel = (Date.parse(fin + 'T00:00:00Z') - Date.parse(inicio + 'T00:00:00Z')) / 86400000 + 1;
 
       if (novedades.length === 0 && intervenciones.length === 0) {
         return {
@@ -276,7 +276,7 @@ export const aiService = {
 
       const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
       const desdeStr = desde.toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
-      const hastaStr = hasta.toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
+      const hastaStr = plantInstant(fin).toLocaleDateString('es-ES', { ...opcionesFecha, timeZone: PLANT_TIME_ZONE });
 
       const prompt = `
 Eres un experto Planificador de Mantenimiento Industrial en una planta textil (Santana Textiles).

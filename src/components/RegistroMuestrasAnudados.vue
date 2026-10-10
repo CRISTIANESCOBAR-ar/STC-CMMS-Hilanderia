@@ -1,5 +1,5 @@
 <script setup>
-import { plantDate } from '../utils/plantTime';
+import { shiftSlot, SHIFT_DATE_CRITERION, shiftCandidateDates, normalizeShiftRecord } from '../utils/plantTime';
 import { ref, computed, onMounted, watch } from 'vue';
 import {
   collection, addDoc, getDocs, getDoc, query,
@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
-import { getTurnoActual, getTurnoLabel } from '../constants/organization';
+import { getTurnoLabel } from '../constants/organization';
 
 // ── Defectos de Anudado ───────────────────────────────────────────────────────
 const DEFECTOS_ANUDADO = [
@@ -29,8 +29,9 @@ import { Plus, X, Save, Loader2, Trash2, AlertTriangle, Scissors } from 'lucide-
 import Swal from 'sweetalert2';
 
 // ── Constantes de sesión ──────────────────────────────────────────────────────
-const TURNO = getTurnoActual();
-const FECHA = plantDate();
+const captureSlot = shiftSlot();
+const TURNO = captureSlot.turno;
+const FECHA = captureSlot.fecha;
 
 // ── Máscara Partida: 7 dígitos "1542301" → "1-5423.01" ────────────────────────
 const maskPartida = (raw) => {
@@ -122,12 +123,12 @@ const cargarMuestras = async () => {
   // Intento con orderBy (requiere índice compuesto en Firestore)
   const cargar = async (conOrden) => {
     const constraints = [
-      where('fecha', '==', FECHA),
+      where('fecha', 'in', shiftCandidateDates(FECHA, TURNO)),
       where('turno', '==', TURNO),
     ];
     if (conOrden) constraints.push(orderBy('createdAt', 'asc'));
     const snap = await getDocs(query(collection(db, 'muestras_anudados'), ...constraints));
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const docs = snap.docs.map(d => normalizeShiftRecord({ id: d.id, ...d.data() })).filter(d => d.fecha === FECHA);
     if (!conOrden) {
       docs.sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() ?? 0;
@@ -188,6 +189,11 @@ const onInspectorInput = (e) => {
 // ── Guardar ───────────────────────────────────────────────────────────────────
 // keepOpen=true → limpia el form para el siguiente; keepOpen=false → cierra el modal
 const guardar = async (keepOpen = false) => {
+  const current = shiftSlot();
+  if (current.fecha !== FECHA || current.turno !== TURNO) {
+    await Swal.fire({ icon: 'warning', title: 'Cambió el turno', text: 'Conservá los datos de la muestra y volvé a abrir esta vista para registrar en el turno actual.' });
+    return;
+  }
   const f = form.value;
   if (!f.telar.trim()) {
     Swal.fire({ icon: 'warning', title: 'Telar requerido', confirmButtonColor: '#e11d48' });
@@ -204,6 +210,7 @@ const guardar = async (keepOpen = false) => {
   guardando.value = true;
   try {
     await addDoc(collection(db, 'muestras_anudados'), {
+      fechaCriterio:   SHIFT_DATE_CRITERION,
       fecha:           FECHA,
       turno:           TURNO,
       telar:           f.telar.trim(),

@@ -1,137 +1,70 @@
-# Despliegue reversible — Seguridad y Gemini (junio 2026)
+# Publicación y reversión
 
-Rama de trabajo: `feat/seguridad-gemini-jun2026`
+Guía vigente desde el 10 de octubre de 2026. Plan: [PLAN_PRODUCCION.md](PLAN_PRODUCCION.md).
+Rama: `codex/preparacion-produccion`. Base: `045e2866b61a864f8ad5ef421a30b3dd4c24dfc9`.
 
-## Estrategia general
+## Código y despliegue son pasos distintos
 
-| Capa | Sin romper producción limitada | Cuándo activar en junio |
-|------|-------------------------------|-------------------------|
-| **Hosting (Vue)** | Desplegar cuando quieras; IA usa fallback `.env` si Functions no están | Tras probar módulos piloto |
-| **Firestore rules** | Desplegar en horario bajo; probar login + reportar falla + patrulla | Antes del rollout amplio |
-| **Storage rules** | Mismo momento que Firestore | Con reglas Firestore |
-| **Cloud Functions** | Opcional hasta tener API key | Cuando tengas `GEMINI_API_KEY` en Secret Manager |
+Commit y push guardan el trabajo en GitHub; no publican en Firebase.
+Cada bloque debe superar verificaciones antes de incorporarse a un piloto.
+Usar commits pequeños por responsabilidad y conservar el historial remoto.
 
-## Commits en esta rama (orden lógico)
+## Antes de publicar
 
-1. Reglas Firestore Fase 1 + Storage + backup permisivo  
-2. Cloud Function `geminiGenerate` + cliente con fallback  
-3. Fix vista previa admin + composable `useMaquinasList`  
-4. Documentación y `.env.example`
+- Registrar SHA candidato y última versión aprobada por capa (Hosting, Functions,
+  Firestore y Storage), junto con identificador de release de Hosting.
+- Confirmar proyecto/sitio en `.firebaserc`: `main` y `legacy` son dos sitios del
+  mismo proyecto; no aíslan datos. Un preview usa el Firebase incluido en su build.
+- Validar reglas/datos en proyecto separado o emuladores.
+- Ejecutar `npm ci`, `npm test`, pruebas de reglas cuando corresponda y `npm run build`.
+- IA requiere `GEMINI_API_KEY` en Secret Manager y `geminiGenerate` desplegada.
+  No incluir secretos en variables `VITE_*`. Si una clave Gemini estuvo en builds
+  anteriores, rotarla antes del piloto seguro.
+- Checklist por rol y backup previo a migraciones.
+- Publicar por capas y verificar antes de avanzar.
 
-## Rollback rápido
+## Revertir código publicado en GitHub
 
-### Solo reglas Firestore (volver al estado permisivo)
-
-```powershell
-git checkout main -- firestore.rules
-firebase deploy --only firestore:rules --project stc-cmms-hilanderia
-```
-
-O usar el backup incluido:
+Sobre la rama que recibió el cambio, con checkout limpio:
 
 ```powershell
-Copy-Item firestore.rules.permissive-backup firestore.rules
-firebase deploy --only firestore:rules --project stc-cmms-hilanderia
-```
-
-### Hosting (app anterior)
-
-```powershell
-git checkout main
+git revert <SHA-del-commit>
+npm test
 npm run build
-npm run deploy:main
+git push origin HEAD
 ```
 
-### Functions (deshabilitar proxy IA)
+Para commits dependientes revertir del más nuevo al más antiguo.
+No usar `reset --hard`, push forzado ni borrar ramas como rollback.
+Un revert de código no revierte datos, reglas ni releases remotos por sí solo.
 
-No desplegar Functions, o:
+## Revertir versión desplegada
 
-```powershell
-firebase functions:delete geminiGenerate --project stc-cmms-hilanderia
-```
+1. Hosting: restaurar la release previamente registrada en Firebase Hosting.
+2. Functions: desplegar código aprobado, mantener secret y comprobar compatibilidad
+   con frontend activo.
+3. Reglas: restaurar versión aprobada Firestore/Storage y verificar operaciones.
+   No recurrir al backup permisivo como rollback estándar.
+4. Datos: migraciones requieren plan propio; `git revert` no recupera documentos
+   eliminados ni valores sobrescritos.
 
-La app seguirá funcionando si `VITE_GEMINI_API_KEY` está en el build, o mostrará mensaje sin IA.
+Para recompilar una versión anterior usar checkout temporal limpio del SHA aprobado,
+`npm ci` y entorno correspondiente; no cambiar archivos históricos en un checkout
+con trabajo pendiente.
 
-### Revertir rama completa en Git
+## Registro de releases
 
-```powershell
-git checkout main
-git branch -D feat/seguridad-gemini-jun2026
-```
+Completar antes del primer despliegue piloto:
 
-## Despliegue por fases (recomendado)
+| Campo | Valor |
+| --- | --- |
+| Proyecto Firebase de prueba | Pendiente |
+| SHA candidato | Pendiente |
+| SHA aprobado anterior por capa | Pendiente |
+| Release de Hosting anterior | Pendiente |
+| Backup/restauración ensayada | Pendiente |
+| Roles/flujos verificados | Pendiente |
+| Responsable y ventana | Pendiente |
+| Resultado y decisión de ampliar usuarios | Pendiente |
 
-### Fase A — Solo código (sin tocar Firebase remoto)
-
-```powershell
-git checkout feat/seguridad-gemini-jun2026
-npm install
-npm run build
-npm run preview
-```
-
-Probar: login, reportar falla, intervenciones, gestión máquinas (admin).
-
-### Fase B — Reglas (producción limitada)
-
-```powershell
-firebase deploy --only firestore:rules,storage --project stc-cmms-hilanderia
-```
-
-Checklist post-deploy:
-
-- [ ] Usuario nuevo puede iniciar sesión (crea doc `usuarios/{uid}` con rol `mecanico`)
-- [ ] Admin puede editar usuarios y `config/organization`
-- [ ] Operario puede crear novedad e intervención
-- [ ] Subida de foto en novedad/intervención
-- [ ] Patrulla: crear y actualizar `patrullas`
-
-**Checklist extendido patrulla + toma de puntos (redeploy junio):**  
-→ `docs/CHECKLIST_PATRULLA_JUNIO_2026.md`
-
-### Fase C — Hosting con fallback IA
-
-```powershell
-npm run deploy:main
-```
-
-### Fase D — Gemini en servidor (cuando tengas API key)
-
-1. Crear API key en [Google AI Studio](https://aistudio.google.com/apikey) con facturación.
-2. Configurar secret:
-
-```powershell
-cd functions
-npm install
-cd ..
-firebase functions:secrets:set GEMINI_API_KEY --project stc-cmms-hilanderia
-```
-
-3. Desplegar:
-
-```powershell
-firebase deploy --only functions:geminiGenerate --project stc-cmms-hilanderia
-```
-
-4. Verificar en Panel de Control → resumen diario (debe usar Cloud Function).
-5. Opcional: quitar `VITE_GEMINI_API_KEY` del build de producción para no exponer la clave.
-
-## Cuándo necesitas la API key de Gemini
-
-| Función | Sin API key | Con Cloud Function + secret |
-|---------|-------------|----------------------------|
-| Resumen diario IA (Dashboard jefe) | Mensaje + datos JSON en crudo | Resumen WhatsApp |
-| Resumen ejecutivo semanal | Idem | Informe completo |
-| OCR planilla operarios (Tejeduría) | Error amigable | Lectura de imagen |
-
-**No es obligatoria** para el resto del CMMS (fallas, intervenciones, patrulla, máquinas).
-
-## Merge a `main` (después de pruebas)
-
-```powershell
-git checkout main
-git merge feat/seguridad-gemini-jun2026
-git push origin main
-```
-
-Si algo falla en producción: `git revert -m 1 <merge-commit>` y redeploy hosting + reglas permisivas.
+Hasta superar estas puertas, las entregas son código revisable y reversible en la rama.

@@ -20,6 +20,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | R2 | Fechas y turnos de planta | Pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
 | R4 | Borradores, sincronización y PWA | Pendiente | Captura recuperable ante recarga/red caída; estado visible; actualización coherente |
+| D1 | Dependencias y avisos de seguridad | En curso | Actualizaciones compatibles verificadas; clasificar/resolver avisos restantes antes de producción |
 | E1 | Consultas y rendimiento | Pendiente | Paginación real; listeners acotados; mediciones con volumen representativo |
 | O1 | Operación y liberación | Pendiente | CI; entorno de prueba; monitoreo/alertas; backup/restauración y rollback ensayados |
 | V1 | Sistema visual y navegación | Pendiente | Componentes compartidos y problemas críticos siempre visibles |
@@ -110,3 +111,14 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
 - Validación acumulada: 15 pruebas unitarias y 10 de reglas, build correcto.
 - Pendiente: ensayo manual de corte de red y recuperación en puesto de planta.
 - Rollback: revertir commit R1; no hubo cambios ni migraciones de datos remotos.
+
+### D1 — Actualizaciones compatibles iniciales
+
+- Actualizadas versiones dentro de rangos declarados mediante audit fix sin force.
+- Avisos totales: 37 → 24 (11 moderados, 13 altos); eliminado aviso crítico.
+- Vite 7.3.7 y Vue 3.5.43; lockfile fija el árbol usado en las verificaciones.
+- Validación tras actualizar: 15 unitarias, 10 de reglas y build correctos.
+- Pendiente: revisar gRPC/Firebase (uso Node), PDF.js en scripts, UUID/ExcelJS y
+  dependencias del CLI. No degradar Firebase ni ExcelJS para eliminar un aviso.
+  No se habilita producción mientras falte evaluar exposición y resolver riesgos.
+- Rollback: revertir commit D1 y ejecutar npm ci sobre el lockfile aprobado.

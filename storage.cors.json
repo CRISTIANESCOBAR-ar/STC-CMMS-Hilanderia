@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://stc-cmms.web.app",
+      "https://stc-cmms.firebaseapp.com",
+      "https://stc-cmms-hilanderia.web.app",
+      "https://stc-cmms-hilanderia.firebaseapp.com"
+    ],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]

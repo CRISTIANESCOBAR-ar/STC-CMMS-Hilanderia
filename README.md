@@ -12,8 +12,8 @@ Vue 3 + Vite + Tailwind; Firebase Auth, Firestore, Storage, Hosting y Functions.
 3. Ejecutar `npm run dev` (puerto 5200).
 
 El ingreso usa Google. Los perfiles existentes conservan su rol; las cuentas
-nuevas se crean como mecánico de Hilandería y deben ser asignadas por un administrador.
-La aprobación de altas y los permisos operativos detallados se completan en S3.
+nuevas quedan pendientes de aprobación hasta que un administrador asigne rol y sectores.
+La matriz de S3 está en docs/MATRIZ_PERMISOS_PRODUCCION.md; el piloto requiere auditoría de compatibilidad e índices listos.
 No se conceden privilegios de administrador por una dirección de correo fija.
 Si no existe administrador, usar el script administrativo ya disponible con
 credenciales de servidor autorizadas; nunca desde un cliente web.

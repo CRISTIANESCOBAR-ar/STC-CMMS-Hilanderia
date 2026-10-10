@@ -15,7 +15,7 @@ reglas y diseño visual en distintas entregas y despliegues.
 | P0 | Plan y procedimiento reversible | Verificado localmente | Rama aislada, guía y commit publicado |
 | S1 | IA solo en servidor y contenido seguro | Verificado localmente | Sin clave Gemini en frontend; errores controlados; HTML externo escapado; pruebas y build |
 | S2 | Protección de perfiles | Verificado localmente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
-| S3 | Permisos operativos y Storage | Pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
+| S3 | Permisos operativos y Storage | Verificado localmente; piloto pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
 | R1 | Sesión y configuración | Verificado localmente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
 | R2 | Fechas y turnos de planta | Pendiente | Zona explícita; criterio nocturno; límites horarios probados; compatibilidad con historial |
 | R3 | Concurrencia y trazabilidad | Pendiente | Sin doble toma de orden; transiciones válidas; actor y fecha registrados |
@@ -145,5 +145,29 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
 
 Los commits están publicados en `origin/codex/preparacion-produccion`. Ninguna de
 estas entregas modifica Firebase remoto. Antes del despliegue de Functions revisar
-además el runtime declarado (actualmente Node 20) y migrarlo a uno soportado, con
+bucket/región del trigger. El runtime se actualizó a Node 22 en S3; completar
 pruebas del servicio en entorno piloto.
+
+### S3 — Permisos operativos, consultas y compatibilidad
+
+- Implementada aprobación de nuevas cuentas, alcance por sector y operaciones en servidor.
+- Consultas de novedades/patrullas/IA/historial acotan sector antes de descargar.
+- Identidad inmutable; toma/cierre de órdenes por actor asignado; inspector limitado a CALIDAD.
+- Permisos personalizados/organizacionales efectivos en reglas; verCalidad restringe patrullas.
+- Fotos nuevas con sector/propietario, validación MIME/tamaño y sin sobrescritura.
+- Caché IA v2 aislada por sectores; índices de consultas declarados.
+- Auditoría solo lectura de datos antiguos, con proyecto explícito y conteos agregados.
+- Matriz y procedimiento: [MATRIZ_PERMISOS_PRODUCCION.md](MATRIZ_PERMISOS_PRODUCCION.md).
+- Fotos operativas se descargan con autenticación; nueva captura guarda ruta y revoca token en backend antes de registrar. Migración/rollback de metadata legada preparados, sin ejecutar.
+- Validación acumulada: 25 pruebas unitarias, 46 de reglas (71 en total), build y carga de exports Functions correctos.
+- Pendiente de piloto: desplegar Functions, verificar CORS y ejecutar/ensayar migración de imágenes legadas. Los enlaces ya emitidos en beta siguen vigentes hasta esa migración.
+- No se ejecutó auditoría contra Firebase real ni se publicaron índices, reglas o datos.
+- Puerta piloto: compatibilidad e índices reales, aprobación de cuentas, imágenes y
+  actualización coordinada de clientes; detalles en la matriz.
+
+- Limitación comprobada del emulador Storage: firebase-tools conserva un array de tokens
+  separado cuando el SDK GCS elimina la clave de metadata. Se prueba que la finalización
+  rechaza ese resultado, no que el emulador revoca el enlace. La aceptación de revocación
+  real debe ensayarse en el bucket piloto. No se usa fallback público para ocultar el fallo.
+- Backend Node 22 con lockfile propio. Instalación inicial reportó 9 avisos moderados;
+  quedan dentro de D1 y no se desplegó el backend. CI ahora instala e importa Functions.

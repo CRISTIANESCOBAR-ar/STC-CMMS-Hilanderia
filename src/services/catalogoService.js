@@ -1,5 +1,6 @@
 import { collection, addDoc, getDocs, query, where, writeBatch, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { compareCatalogItems } from '../utils/catalogSort';
 
 const COLLECTION_NAME = 'catalogo_puestos_control';
 
@@ -87,11 +88,7 @@ export const catalogoService = {
     const snap = await getDocs(q);
     return snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => {
-        if (a.seccion !== b.seccion) return a.seccion.localeCompare(b.seccion);
-        if (a.grupo   !== b.grupo)   return String(a.grupo).localeCompare(String(b.grupo));
-        return a.denominacion.localeCompare(b.denominacion);
-      });
+      .sort(compareCatalogItems);
   },
 
   /**

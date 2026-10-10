@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { createLatestLoad } from '../utils/latestLoad';
 import { maquinaService } from '../services/maquinaService';
 import { catalogoService } from '../services/catalogoService';
 import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
@@ -39,6 +40,28 @@ const maquinas       = ref([]);
 const catalogoItems  = ref([]);
 const cargandoMaq    = ref(true);
 const cargandoCat    = ref(false);
+const errorMaquinas = ref('');
+const errorCatalogo = ref('');
+const loadMessage = error => error?.code === 'permission-denied'
+  ? 'No tenés permiso para consultar estos datos. Verificá tu sesión y perfil.'
+  : error?.code === 'load/timeout' ? error.message
+    : 'No se pudieron cargar los datos. Revisá la conexión e intentá nuevamente.';
+const machineLoader = createLatestLoad(state => {
+  cargandoMaq.value = state.loading;
+  errorMaquinas.value = state.error ? loadMessage(state.error) : '';
+  if (state.data) maquinas.value = state.data;
+});
+const catalogLoader = createLatestLoad(state => {
+  cargandoCat.value = state.loading;
+  errorCatalogo.value = state.error ? loadMessage(state.error) : '';
+  if (state.data) {
+    catalogoItems.value = state.data;
+    const firstSection = state.data.map(item => String(item.seccion ?? 'Sin sección')).sort()[0];
+    if (firstSection) seccionesExpandidas.value.add(firstSection);
+  }
+});
+const cargarMaquinas = () => machineLoader.run(() => maquinaService.obtenerMaquinasOnce());
+onUnmounted(() => { machineLoader.invalidate(); catalogLoader.invalidate(); });
 
 const tipoSeleccionado  = ref(null);
 const modeloSeleccionado = ref(null);
@@ -65,10 +88,7 @@ const catNuevoForm   = ref(null);   // { seccion, grupo, denominacion, numeroCat
 const seccionesExpandidas = ref(new Set());
 
 // ── Carga de Máquinas ─────────────────────────────────────────────────────────
-onMounted(async () => {
-  maquinas.value = await maquinaService.obtenerMaquinasOnce();
-  cargandoMaq.value = false;
-});
+onMounted(cargarMaquinas);
 
 // ── Computed: Tipos + Modelos ─────────────────────────────────────────────────
 const tiposDisponibles = computed(() => {
@@ -94,6 +114,9 @@ const modelosDelTipo = computed(() => {
 // ── Selección de Tipo ─────────────────────────────────────────────────────────
 const seleccionarTipo = (tipo) => {
   if (tipoSeleccionado.value === tipo) return;
+  catalogLoader.invalidate();
+  cargandoCat.value = false;
+  errorCatalogo.value = '';
   tipoSeleccionado.value = tipo;
   modeloSeleccionado.value = null;
   catalogoItems.value = [];
@@ -115,15 +138,7 @@ const seleccionarModelo = async (modelo) => {
   filtroProc.value = null;
   tabActiva.value = 'catalogo';
   pasoMobile.value = 'detalle';
-  cargandoCat.value = true;
-  try {
-    catalogoItems.value = await catalogoService.obtenerPorModelo(modelo);
-    // Expandir la primera sección por defecto
-    const secciones = [...new Set(catalogoItems.value.map(i => i.seccion))].sort();
-    if (secciones.length > 0) seccionesExpandidas.value.add(secciones[0]);
-  } finally {
-    cargandoCat.value = false;
-  }
+  await catalogLoader.run(() => catalogoService.obtenerPorModelo(modelo));
 };
 
 // ── Estructura del catálogo: seccion > grupo > items ─────────────────────────
@@ -434,6 +449,11 @@ const catEliminar = async (item) => {
       </span>
     </div>
 
+    <div v-if="errorMaquinas" role="alert" class="p-4 bg-red-50 text-red-800 text-sm">
+      <p>{{ errorMaquinas }}</p>
+      <button @click="cargarMaquinas" class="mt-2 underline font-semibold">Reintentar carga de máquinas</button>
+    </div>
+
     <!-- ── Layout DESKTOP: 3 columnas ──────────────────────────────────────── -->
     <div class="hidden sm:flex flex-1 overflow-hidden">
 
@@ -518,6 +538,11 @@ const catEliminar = async (item) => {
         <div v-else-if="cargandoCat" class="flex flex-col items-center justify-center h-full gap-3 text-indigo-400">
           <Loader2 class="w-8 h-8 animate-spin" />
           <p class="text-sm">Cargando catálogo...</p>
+        </div>
+
+        <div v-else-if="errorCatalogo" role="alert" class="p-5 text-red-800 bg-red-50">
+          <p class="text-sm">{{ errorCatalogo }}</p>
+          <button @click="seleccionarModelo(modeloSeleccionado)" class="mt-3 underline font-semibold text-sm">Reintentar</button>
         </div>
 
         <template v-else>
@@ -1065,6 +1090,11 @@ const catEliminar = async (item) => {
         <div v-if="cargandoCat" class="flex flex-col items-center justify-center h-full gap-3 text-indigo-400">
           <Loader2 class="w-8 h-8 animate-spin" />
           <p class="text-sm">Cargando catálogo...</p>
+        </div>
+
+        <div v-else-if="errorCatalogo" role="alert" class="p-5 text-red-800 bg-red-50">
+          <p class="text-sm">{{ errorCatalogo }}</p>
+          <button @click="seleccionarModelo(modeloSeleccionado)" class="mt-3 underline font-semibold text-sm">Reintentar</button>
         </div>
 
         <template v-else>

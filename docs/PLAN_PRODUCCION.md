@@ -195,3 +195,11 @@ pruebas del servicio en entorno piloto.
 - Validación: 34 pruebas unitarias y build correctos. Pendiente prueba real de actualización y recepción FCM tras regenerar token con nuevo ámbito.
 - El despliegue anterior conserva la lógica vieja hasta cargar esta versión. No se desplegó automáticamente.
 - R4 completo sigue pendiente: borradores, sincronización y ensayo de múltiples pestañas/recuperación.
+
+### Corrección de carga del catálogo
+
+- Máquinas y catálogo tienen espera máxima de 15 segundos, error visible y reintento en escritorio y móvil.
+- No se muestra un fallo de permisos/conexión como un catálogo vacío.
+- Selección más reciente gana; respuestas pendientes se descartan al cambiar tipo/modelo o salir.
+- Ordenamiento tolera campos legacy ausentes, nulos o numéricos.
+- Validación: 38 pruebas unitarias; build de frontend. La causa concreta en el despliegue requiere modelo/rol y respuesta real de Firestore; no se modificaron permisos ni datos remotos.

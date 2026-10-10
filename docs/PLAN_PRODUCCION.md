@@ -12,8 +12,8 @@ reglas y diseño visual en distintas entregas y despliegues.
 
 | ID | Entrega | Estado | Criterio de salida |
 | --- | --- | --- | --- |
-| P0 | Plan y procedimiento reversible | En curso | Rama aislada, guía y commit publicado |
-| S1 | IA solo en servidor y contenido seguro | Pendiente | Sin clave Gemini en frontend; errores controlados; HTML externo escapado; pruebas y build |
+| P0 | Plan y procedimiento reversible | Verificado localmente | Rama aislada, guía y commit publicado |
+| S1 | IA solo en servidor y contenido seguro | Verificado localmente | Sin clave Gemini en frontend; errores controlados; HTML externo escapado; pruebas y build |
 | S2 | Protección de perfiles | Pendiente | Creación sin privilegios; roles/sectores protegidos; emulador; login compatible |
 | S3 | Permisos operativos y Storage | Pendiente | Matriz rol/sector/operación; datos y consultas compatibles; pruebas positivas/negativas |
 | R1 | Sesión y configuración | Pendiente | Error de perfil no concede acceso; recuperación visible; lectura de configuración no escribe |
@@ -59,3 +59,17 @@ Consultar hashes con `git log --oneline` en la rama. Procedimiento:
 - Base conservada y rama propia.
 - Cambios preexistentes en `.firebase/hosting.ZGlzdA.cache` y `.continue/` fuera de los commits.
 - Push a rama de trabajo; despliegue, migraciones y merge tienen puertas separadas.
+
+### S1 — IA y contenido seguro
+
+- Eliminado fallback de Gemini en navegador; preservados errores de permisos y cuotas.
+- Resúmenes escapan HTML externo y mantienen negrita/cursiva/saltos de línea.
+- Backend exige cuenta identificada y perfil con rol reconocido; valida modelo, texto,
+  imágenes OCR, configuración y tamaño; limita a 12 solicitudes por usuario/10 minutos.
+- Timeout de proveedor 90 segundos; salida máxima 8192 tokens; 10 instancias máximas.
+- Validación: 10 pruebas automatizadas, sintaxis Functions y build correctos;
+  sin referencias de clave/endpoint Gemini en los assets del frontend.
+- Pendiente: prueba real de Functions/OCR con secret en entorno de prueba; límites
+  iniciales sujetos a medición de carga. No se desplegó ni se probó el servicio remoto.
+- Rollback: revertir commit S1; mantener backend compatible mientras se restaura Hosting.
+  No reactivar el fallback con una clave privada como procedimiento de recuperación.

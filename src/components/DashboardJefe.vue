@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { aiService } from '../services/aiService';
+import { formatSummary as formatMarkdown } from '../utils/formatSummary';
 import { notificationService } from '../services/notificationService';
 import { userProfile, userRole, previewSector } from '../services/authService';
 import { db, auth } from '../firebase/config';
@@ -279,15 +280,6 @@ const copiarWhatsApp = () => {
     console.error('Error copiando:', err);
     Swal.fire({ icon: 'error', title: 'Oops...', text: 'No se pudo copiar al portapapeles.' });
   });
-};
-
-const formatMarkdown = (text) => {
-  if (!text) return '';
-  // Convertimos el formato WhatsApp (*negrita* y _cursiva_) a HTML para pintarlo en la web
-  return text
-    .replace(/\*(.*?)\*/g, '<b>$1</b>')
-    .replace(/_(.*?)_/g, '<i>$1</i>')
-    .replace(/\n/g, '<br/>');
 };
 
 // Novedades filtradas por sector primero, luego por tipo

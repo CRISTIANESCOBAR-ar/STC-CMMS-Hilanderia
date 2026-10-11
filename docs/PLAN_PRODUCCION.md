@@ -212,3 +212,12 @@ pruebas del servicio en entorno piloto.
 - El rol admin depende del perfil Firestore y no del proveedor Gmail. No se inspeccionó ni cambió el perfil remoto de la cuenta del usuario.
 - `node scripts/verify-hosting-release.mjs main` (o `legacy`) compara el bundle servido con dist/index.html; solo lectura, no despliega. Ejecutar después del build/despliegue correcto y antes de atribuir un fallo a caché del navegador.
 - No afirmar que actualizar Vue corrige específicamente este stack sin reproducción. Pendiente verificar comando/carpeta de despliegue y repetir en cliente con build actual.
+
+### Corrección comprobada de /maquinas (Teleport)
+
+- Ruta confirmada por el usuario: `/maquinas` corresponde a GestionMaquinas, no a CatalogoExplorer.
+- GestionMaquinas e HistoricoNovedades usan Teleport hacia `#navbar-actions`, eliminado/inexistente en App.vue. Se restaura antes de router-view, estable y visible en escritorio.
+- Prueba del SFC real de GestionMaquinas con rol admin reproduce exactamente `Cannot read properties of null (reading emitsOptions)` al resolver máquinas sin destino de Teleport. Con el destino presente, carga y renderiza registros sin errores.
+- 40 pruebas unitarias correctas. El renderer de prueba no valida CSS, extensiones ni navegador real; comprobar escritorio/tablet y navegación al salir en piloto.
+- No cambia roles ni reglas. El perfil mostrado por el usuario es Administrador Global; TEJEDURIA no limita el alcance del rol admin.
+- El sitio público debe recibir un nuevo build para incorporar la corrección; no se desplegó automáticamente.

@@ -733,6 +733,8 @@ const navigateTab = (action) => {
       </nav>
 
       <!-- Router View Workspace -->
+      <!-- Keep the desktop Teleport destination mounted before routed views. -->
+      <div id="navbar-actions" class="hidden lg:flex items-center px-4 py-2 bg-white border-b border-gray-100 shrink-0 empty:hidden"></div>
       <main class="flex-1 overflow-y-auto relative w-full h-full min-h-0 bg-transparent pb-0" :style="showTabBar ? (isPreviewMode ? 'padding-bottom: 96px' : 'padding-bottom: 56px') : (isPreviewMode ? 'padding-bottom: 40px' : '')">
         <router-view></router-view>
       </main>

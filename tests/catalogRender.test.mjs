@@ -18,8 +18,10 @@ function evaluate(code, dependencies) {
   return new Function('dependencies', code.replace('export default', 'return').replace('export function render', 'return function render'))(dependencies);
 }
 
-function host() {
-  const node = (type, text = '') => ({ type, text, children: [], parent: null });
+function host({ missingDesktopPortal = false } = {}) {
+  const node = (type, text = '') => ({ type, text, children: [], parent: null,
+    tagName: type.toUpperCase(), options: [], addEventListener() {}, removeEventListener() {},
+    setAttribute() {}, removeAttribute() {}, getAttribute() { return null; } });
   const body = node('body');
   const insert = (child, parent, anchor) => {
     if (child.parent) child.parent.children.splice(child.parent.children.indexOf(child), 1);
@@ -34,7 +36,7 @@ function host() {
     setElementText: (child, text) => { child.text = text; child.children = []; },
     parentNode: child => child.parent,
     nextSibling: child => child.parent?.children[child.parent.children.indexOf(child) + 1] || null,
-    patchProp() {}, querySelector: () => body,
+    patchProp() {}, querySelector: selector => missingDesktopPortal && selector === '#navbar-actions' ? null : body,
     insertStaticContent(text, parent, anchor) { const child = node('static', text); insert(child, parent, anchor); return [child, child]; },
   });
   return { renderer, root: node('root'), body };
@@ -80,4 +82,50 @@ test('real catalog template renders loading, data and model changes for admin wi
   await Vue.nextTick();
   app.unmount();
   assert.deepEqual(errors.map(error => error.message), []);
+});
+
+test('machine view reproduces emitsOptions with missing portal and renders with restored target', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/GestionMaquinas.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id: 'machine-render-test' });
+  const template = compileTemplate({ id: 'machine-render-test', source: descriptor.template.content,
+    compilerOptions: { bindingMetadata: script.bindings } });
+  assert.deepEqual(template.errors, []);
+  const machineSource = fs.readFileSync(new URL('../src/composables/useMaquinasList.js', import.meta.url), 'utf8')
+    .replaceAll('export function ', 'function ') + '\nreturn { useMaquinasList, normalizeMachineRecord };';
+  const findings = [];
+  for (const missingDesktopPortal of [true, false]) {
+    let finish;
+    const dependencies = {
+      vue: Vue, 'lucide-vue-next': icons,
+      'firebase/firestore': { collection() {}, query() {}, getDocs: () => new Promise(resolve => { finish = resolve; }) },
+      'firebase/storage': {}, '../firebase/config': {},
+      '../constants/organization': { DEFAULT_SECTOR: 'HILANDERIA', SECTOR_OPTIONS: ['HILANDERIA', 'TEJEDURIA'], normalizeSectorValue: value => value },
+      '../services/authService': { authService: {}, userRole: Vue.ref('admin') },
+      '../services/catalogoService': { catalogoService: { obtenerTodo: async () => [] } },
+      '../services/maquinaService': { maquinaService: {} }, '../utils/imageCompressor': {},
+      '../data/catalogo_full_r60.json': [], sweetalert2: { fire: async () => ({}) },
+      exceljs: {}, 'file-saver': {}, 'tippy.js': () => ({}),
+    };
+    dependencies['../composables/useMaquinasList'] = evaluate(machineSource, dependencies);
+    const component = evaluate(script.content, dependencies);
+    component.render = evaluate(template.code, dependencies);
+    const { renderer, root } = host({ missingDesktopPortal });
+    const app = renderer.createApp(component);
+    const errors = [];
+    app.config.errorHandler = error => errors.push(error.message);
+    app.mount(root);
+    await Vue.nextTick();
+    finish({ docs: [{ id: 'machine1', data: () => ({ tipo: 'TELAR', maquina: 35001, sector: 'TEJEDURIA' }) }] });
+    await new Promise(resolve => setImmediate(resolve));
+    findings.push(errors);
+    if (!missingDesktopPortal) {
+      assert.equal(root._vnode.component.setupState.isLoading, false);
+      assert.equal(root._vnode.component.setupState.maquinas.length, 1);
+      app.unmount();
+    }
+  }
+  assert.ok(findings[0].some(message => message.includes('emitsOptions')), JSON.stringify(findings));
+  assert.deepEqual(findings[1], []);
+  const shell = fs.readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8');
+  assert.ok(shell.indexOf('id="navbar-actions"') < shell.indexOf('<router-view>'));
 });

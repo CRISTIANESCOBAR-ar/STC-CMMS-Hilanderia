@@ -846,3 +846,54 @@ test('symptom view ignores stale loads and preserves the edit draft after a fail
   await state.remove(row); assert.equal(state.busy,false);
   assert.deepEqual(errors,[]); app.unmount();
 });
+
+test('rounds editor preserves reordered machines, guards dirty drafts and duplicate saves, and retains failed drafts', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/RondasAdmin.vue', import.meta.url),'utf8'));
+  const script = compileScript(descriptor,{ id:'rounds-test' });
+  const template = compileTemplate({ id:'rounds-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors,[]);
+  const route = { id:'route',nombre:'Recorrido completo',sector:'TEJEDURIA',tipo:'roturas',orden:1,activa:true,maquinas:[{ maquinaId:'a',orden:1 },{ maquinaId:'b',orden:2 }] };
+  const machines = [{ id:'a',maquina:35001,tipo:'TELAR',sector:'TEJEDURIA',activo:true },{ id:'b',maquina:35002,tipo:'TELAR',sector:'TEJEDURIA',activo:true },{ id:'c',maquina:35003,tipo:'TELAR',sector:'TEJEDURIA',activo:false },{ id:'d',maquina:165001,tipo:'CARDA',sector:'HILANDERIA',activo:true }];
+  const role = Vue.ref('admin'), writes = []; let confirm = false, finishWrite, leave;
+  const dependencies = {
+    vue:Vue, 'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,
+    '../firebase/config':{ db:{} }, '../services/authService':{ userRole:role },'../constants/organization':{ normalizeSectorValue:value => String(value || '').toUpperCase() },
+    '../utils/tooltipDirective':{ vTippy }, sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },
+    'firebase/firestore':{ collection:() => 'machines',getDocs:async () => ({ docs:machines.map(machine => ({ id:machine.id,data:() => machine })) }) },
+    '../services/patrullaService':{ cargarTodasRutasPatrulla:async () => [route],guardarRutaPatrulla:(id,data) => { writes.push({ id,data }); return new Promise((resolve,reject) => { finishWrite={ resolve,reject }; }); },eliminarRutaPatrulla:async () => {} },
+  };
+  const component = evaluate(script.content,dependencies); component.render = evaluate(template.code,dependencies);
+  const { renderer,root } = host(); const app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root);
+  const state=root._vnode.component.setupState; await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.cargando,false); assert.equal(state.rutas.length,1);
+  state.search='recorrido'; assert.equal(state.rutasVisibles.length,1); state.tipoFiltro='eficiencia'; assert.equal(state.rutasVisibles.length,0); state.tipoFiltro='';
+  await state.abrirEditor(route); assert.equal(state.gridTelar.length,8); assert.equal(state.gridTelar[0].length,10);
+  assert.equal(state.maquinasFiltradas.length,2); state.agregarMaquina(machines[0]); assert.equal(state.form.maquinas.length,2);
+  state.agregarMaquina(machines[2]); assert.equal(state.form.maquinas.length,2);
+  state.mover(1,-1); assert.deepEqual(state.form.maquinas.map(machine => machine.maquinaId),['b','a']);
+  assert.equal(state.dirty,true); assert.equal(await leave(),false); assert.equal(await state.cerrarEditor(),false);
+  await state.abrirEditor(); assert.equal(state.editandoId,'route');
+  const event={ target:{ value:'HILANDERIA' } }; await state.cambiarSector(event); assert.equal(state.form.sector,'TEJEDURIA'); assert.equal(event.target.value,'TEJEDURIA');
+  const failed=state.guardarRuta(); await state.guardarRuta(); assert.equal(writes.length,1); assert.deepEqual(writes[0].data.maquinas,[{ maquinaId:'b',orden:1 },{ maquinaId:'a',orden:2 }]);
+  state.mover(0,1); state.quitarMaquina('a'); assert.equal(state.form.maquinas.length,2); assert.equal(await state.cerrarEditor(),false);
+  finishWrite.reject(new Error('Sin conexión')); await failed; assert.match(state.formError,/Sin conexión/); assert.equal(state.modoEditor,true); assert.equal(state.dirty,true);
+  const saved=state.guardarRuta(); finishWrite.resolve('route'); await saved; assert.equal(state.dirty,false); assert.match(state.mensaje,/guardada/);
+  state.mover(0,1); confirm=true; await state.cambiarSector({ target:{ value:'HILANDERIA' } }); assert.equal(state.form.maquinas.length,0); assert.equal(state.maquinasDisponibles[0].id,'d');
+  state.agregarMaquina(machines[3]); assert.deepEqual(state.form.maquinas,[{ maquinaId:'d',orden:1 }]);
+  role.value='tejedor'; await state.guardarRuta(); assert.equal(writes.length,2); assert.deepEqual(errors,[]); app.unmount();
+});
+
+test('rounds load failures stop loading and retry; partial creation keeps its ID for safe retry', async () => {
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/RondasAdmin.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'rounds-retry-test' });
+  const template=compileTemplate({ id:'rounds-retry-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  let failLoad=true; const writes=[];
+  const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave() {} },'lucide-vue-next':icons,'../firebase/config':{ db:{} },'../services/authService':{ userRole:Vue.ref('admin') },'../constants/organization':{ normalizeSectorValue:value => value },'../utils/tooltipDirective':{ vTippy },sweetalert2:{ fire:async () => ({ isConfirmed:true }) },'firebase/firestore':{ collection:() => 'machines',getDocs:async () => ({ docs:[] }) },'../services/patrullaService':{ cargarTodasRutasPatrulla:async () => { if(failLoad) throw new Error('Read failed'); return []; },guardarRutaPatrulla:async (id,data) => { writes.push(id); return id || 'created-id'; },eliminarRutaPatrulla:async () => {} } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(), app=renderer.createApp(component); app.mount(root); const state=root._vnode.component.setupState;
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(state.cargando,false); assert.match(state.error,/No se pudo/);
+  await state.abrirEditor(); assert.equal(state.modoEditor,false);
+  failLoad=false; await state.cargar(); await state.abrirEditor(); state.form.nombre='Nueva ruta'; failLoad=true;
+  await state.guardarRuta(); assert.equal(state.editandoId,'created-id'); assert.match(state.formError,/Read failed/);
+  failLoad=false; await state.guardarRuta(); assert.deepEqual(writes,[null,'created-id']); assert.equal(state.formError,''); app.unmount();
+});

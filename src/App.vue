@@ -1,6 +1,7 @@
 <script setup>
 import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 
 const VISTA_DESCRIPTIONS = {
   carga_novedad: 'Reporte rápido de fallas o paros en máquinas.',
@@ -31,6 +32,7 @@ const vNavTippy = {
 
     const instance = tippy(el, {
       content: title,
+      theme: 'light-border',
       placement: 'right',
       delay: [100, 100],
       allowHTML: true,
@@ -38,9 +40,9 @@ const vNavTippy = {
         descTimeout = setTimeout(() => {
           if (description) {
             instance.setContent(`
-              <div class="flex flex-col gap-0.5 text-left text-xs max-w-[200px] pointer-events-none">
-                <span class="font-black text-white">${title}</span>
-                <span class="text-gray-300 text-[10px] leading-normal whitespace-normal border-t border-gray-700/60 pt-1 mt-0.5">${description}</span>
+              <div class="flex flex-col gap-1 text-left text-xs max-w-[240px] pointer-events-none">
+                <span class="font-semibold text-slate-800">${title}</span>
+                <span class="text-slate-600 text-xs leading-normal whitespace-normal border-t border-slate-200 pt-1.5 mt-0.5">${description}</span>
               </div>
             `);
           }

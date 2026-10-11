@@ -1,612 +1,165 @@
 <script setup>
-import { plantDate } from '../utils/plantTime';
-import { showOperationalImage } from '../services/operationalImageService';
-import { sectorConstraints } from '../services/accessScope';
-
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { authService, userRole, userProfile } from '../services/authService';
-import { aiService } from '../services/aiService';
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
+import { RefreshCw, Download, Sparkles, Eye, X, Copy } from 'lucide-vue-next';
 import { db } from '../firebase/config';
-import { collection, getDocs, query } from 'firebase/firestore';
-import { 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle, 
-  ChevronLeft, 
-  ChevronRight, 
-  ChevronsLeft,
-  ChevronsRight,
-  Search,
-  Filter,
-  Image as ImageIcon,
-  History,
-  Sparkles,
-  Copy,
-  ChevronUp,
-  ChevronDown
-} from 'lucide-vue-next';
-import ExcelJS from 'exceljs';
+import { userProfile } from '../services/authService';
+import { aiService } from '../services/aiService';
+import { getSectorScope } from '../utils/sectorScope';
+import { loadFaultEventsPage } from '../services/faultEvents';
+import { collectHistoryPages, updateHistoryState } from '../services/historyService';
+import { eventView, filterFaultEvents, faultEventWindow } from '../utils/faultEvents';
+import { plantDate, addDays, PLANT_TIME_ZONE } from '../utils/plantTime';
+import { formatSummary } from '../utils/formatSummary';
+import { vTippy } from '../utils/tooltipDirective';
+import PlantDatePicker from './PlantDatePicker.vue';
+import OperationalImage from './OperationalImage.vue';
 import { saveAs } from 'file-saver';
 import Swal from 'sweetalert2';
-import tippy from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
-import 'tippy.js/animations/shift-away.css';
-import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList, isJefeRole } from '../constants/organization';
+import 'tippy.js/themes/light-border.css';
 
-const novedades = ref([]);
-const isLoading = ref(true);
-const errorCarga = ref(false);
-let unsubscribe = null;
-
-// Paginación y Filtros
-const itemsPerPage = ref(25);
-const currentPage = ref(1);
-const searchQuery = ref('');
-const statusFilter = ref('todos');
-const filterDate = ref(''); // YYYY-MM-DD
-
-// Estado IA
-const iaSummary = ref('');
-const iaSummaryRaw = ref('');
-const isIaLoading = ref(false);
-const iaError = ref(false);
-const iaFromCache = ref(false);
-const iaCollapsed = ref(false);
-
-let timeoutId = null;
-
-const sectoresVisibles = computed(() => {
-  const perfil = userProfile.value;
-  if (!perfil) return [DEFAULT_SECTOR];
-  if (perfil.role === 'admin' && perfil.alcance === 'global') return null;
-  if (isJefeRole(perfil.role)) {
-    const sectoresJefe = perfil.jefeDeSectores?.length ? perfil.jefeDeSectores : perfil.sectoresAsignados;
-    return sanitizeSectorList(sectoresJefe, perfil.sectorDefault);
-  }
-  return sanitizeSectorList(perfil.sectoresAsignados, perfil.sectorDefault);
-});
-
-const cargarDatos = async () => {
-  isLoading.value = true;
-  errorCarga.value = false;
-
-  timeoutId = setTimeout(() => {
-    if (isLoading.value && novedades.value.length === 0) {
-      errorCarga.value = true;
-      isLoading.value = false;
-    }
-  }, 10000);
-
+const period = ref('week'), state = ref(''), category = ref(''), sector = ref(''), search = ref('');
+const rangeFrom = ref(addDays(plantDate(), -6)), rangeTo = ref(plantDate());
+const events = ref([]), loading = ref(true), loadingMore = ref(false), hasMore = ref(false), error = ref('');
+const exporting = ref(false), exportScope = ref('loaded');
+const selected = ref(null), modalType = ref(''), modal = ref(null), photoExpanded = ref(false), nextState = ref(''), saving = ref(false);
+const aiDate = ref(plantDate()), aiText = ref(''), aiLoading = ref(false), aiError = ref(''), aiFromCache = ref(false);
+const availableSectors = computed(() => { try { return getSectorScope(userProfile.value) || ['HILANDERIA', 'TEJEDURIA']; } catch { return []; } });
+const visible = computed(() => filterFaultEvents(events.value, { category:category.value, state:state.value, search:search.value }).map(event => eventView(event)));
+const aiHtml = computed(() => formatSummary(aiText.value));
+onBeforeRouteLeave(() => !saving.value);
+const stateLabel = value => ({ pendiente:'Pendiente', 'en proceso':'En proceso', resuelto:'Resuelto' }[value] || value || 'Sin estado');
+function formatDate(value) {
+  if (!value) return '—';
+  const date = value?.toDate?.() || (value?.seconds != null ? new Date(value.seconds * 1000) : new Date(value));
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit', timeZone:PLANT_TIME_ZONE }).format(date);
+}
+let generation = 0, aiGeneration = 0, cursor = null, activeOptions, activeSectors, previousFocus;
+async function reload() {
+  const token = ++generation;
+  events.value = []; cursor = null; hasMore.value = false; loading.value = true; loadingMore.value = false; error.value = '';
   try {
-    const q = query(collection(db, 'novedades'), ...sectorConstraints());
-    const snapshot = await getDocs(q);
-    clearTimeout(timeoutId);
-
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Ordenar por fecha descendente
-    const ordenadas = data.sort((a, b) => {
-      const getTime = (val) => {
-        if (!val) return 0;
-        if (typeof val.toMillis === 'function') return val.toMillis();
-        return new Date(val).getTime() || 0;
-      };
-      return getTime(b.createdAt) - getTime(a.createdAt);
-    });
-
-    if (sectoresVisibles.value === null) {
-      novedades.value = ordenadas;
-    } else {
-      novedades.value = ordenadas.filter((n) => sectoresVisibles.value.includes(normalizeSectorValue(n.sector || DEFAULT_SECTOR)));
+    activeSectors = getSectorScope(userProfile.value);
+    if (sector.value) {
+      if (activeSectors !== null && !activeSectors.includes(sector.value)) sector.value = '';
+      else activeSectors = [sector.value];
     }
-
-    isLoading.value = false;
-    errorCarga.value = false;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    console.error("Error obteniendo histórico:", err);
-    if (novedades.value.length === 0) {
-      errorCarga.value = true;
-    }
-    isLoading.value = false;
-  }
-};
-
-onMounted(() => {
-  cargarDatos();
-  // Inicializar tooltips con un pequeño delay para asegurar que los elementos Teleport estén listos
-  setTimeout(() => {
-    tippy('[data-tippy-content]', {
-      animation: 'shift-away',
-      theme: 'translucent',
-      duration: [200, 150]
-    });
-  }, 500);
-});
-
-onUnmounted(() => {
-  if (unsubscribe) unsubscribe();
-  if (timeoutId) clearTimeout(timeoutId);
-});
-
-const novedadesFiltradas = computed(() => {
-  const search = searchQuery.value.toLowerCase();
-  return novedades.value.filter(n => {
-    const numMaq = String(n.numeroMaquina || '').toLowerCase();
-    const tipoMaq = String(n.tipoMaquina || '').toLowerCase();
-    const obs = String(n.observaciones || '').toLowerCase();
-    const matchesSearch = numMaq.includes(search) || tipoMaq.includes(search) || obs.includes(search);
-    const matchesStatus = statusFilter.value === 'todos' || n.estado === statusFilter.value;
-    
-    let matchesDate = true;
-    if (filterDate.value && n.createdAt) {
-      let dateObj;
-      if (typeof n.createdAt.toDate === 'function') dateObj = n.createdAt.toDate();
-      else dateObj = new Date(n.createdAt);
-      
-      try { matchesDate = plantDate(dateObj) === filterDate.value; }
-      catch { matchesDate = false; }
-    }
-    
-    return matchesSearch && matchesStatus && matchesDate;
-  });
-});
-
-watch([searchQuery, statusFilter], () => {
-  currentPage.value = 1;
-});
-
-watch(filterDate, (newVal) => {
-  currentPage.value = 1;
-  if (newVal) {
-    cargarAnalisisIA();
-  } else {
-    iaSummary.value = '';
-    iaSummaryRaw.value = '';
-  }
-});
-
-const cargarAnalisisIA = async (forceRegenerate = false) => {
-  if (!filterDate.value) return;
-  isIaLoading.value = true;
-  iaError.value = false;
+    activeOptions = { kind:'faults', period:period.value, state:state.value, category:category.value, order:'desc', now:new Date(), range:{ from:rangeFrom.value, to:rangeTo.value } };
+    faultEventWindow(activeOptions.period, activeOptions.now, activeOptions.range);
+    const page = await loadFaultEventsPage(db, activeSectors, activeOptions);
+    if (token !== generation) return;
+    events.value = page.events; cursor = page.cursor; hasMore.value = page.hasMore;
+  } catch (failure) { if (token === generation) error.value = failure.code === 'failed-precondition' ? 'Los filtros se están preparando. Reintentá en unos minutos.' : failure.message || 'No se pudo cargar el histórico.'; }
+  finally { if (token === generation) loading.value = false; }
+}
+async function more() {
+  if (loading.value || loadingMore.value || !hasMore.value || !cursor) return;
+  const token = generation; loadingMore.value = true;
   try {
-    const response = await aiService.generarResumenDiario(forceRegenerate, filterDate.value);
-    iaSummaryRaw.value = response.text;
-    iaSummary.value = formatMarkdown(response.text);
-    iaFromCache.value = response.fromCache;
-  } catch (error) {
-    console.error("No se pudo cargar análisis de IA", error);
-    iaError.value = true;
-  } finally {
-    isIaLoading.value = false;
-  }
-};
-
-const formatMarkdown = (text) => {
-  if (!text) return '';
-  return text.replace(/\*(.*?)\*/g, '<b>$1</b>').replace(/_(.*?)_/g, '<i>$1</i>').replace(/\n/g, '<br/>');
-};
-
-const copiarWhatsApp = () => {
-  if (!iaSummaryRaw.value) return;
-  navigator.clipboard.writeText(iaSummaryRaw.value).then(() => {
-    Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'El reporte está listo para pegar en WhatsApp.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
-  });
-};
-
-const totalPages = computed(() => Math.ceil(novedadesFiltradas.value.length / itemsPerPage.value) || 1);
-const paginatedNovedades = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value;
-  return novedadesFiltradas.value.slice(start, start + itemsPerPage.value);
-});
-
-const goToFirst = () => { currentPage.value = 1; };
-const goToPrev = () => { if (currentPage.value > 1) currentPage.value--; };
-const goToNext = () => { if (currentPage.value < totalPages.value) currentPage.value++; };
-const goToLast = () => { currentPage.value = totalPages.value; };
-
-const exportToExcel = async () => {
-  if (novedadesFiltradas.value.length === 0) return;
-
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Historial Novedades');
-
-  // Configurar Columnas
-  worksheet.columns = [
-    { header: 'FECHA', key: 'fecha', width: 22 },
-    { header: 'TIPO', key: 'tipo', width: 15 },
-    { header: 'MÁQUINA', key: 'maquina', width: 12 },
-    { header: 'LADO', key: 'lado', width: 8 },
-    { header: 'OBSERVACIONES', key: 'observaciones', width: 60 },
-    { header: 'ESTADO', key: 'estado', width: 15 }
-  ];
-
-  // Agregar Datos
-  novedadesFiltradas.value.forEach(n => {
-    let obsText = n.observaciones;
-    if (n.seccion || n.denominacion) {
-      obsText += ` \n[Punto: ${n.denominacion || n.seccion}`;
-      if (n.numeroArticulo && n.numeroArticulo !== '-') obsText += ` | Art: ${n.numeroArticulo}`;
-      if (n.numeroCatalogo && n.numeroCatalogo !== '-') obsText += ` | Cat: ${n.numeroCatalogo}`;
-      obsText += `]`;
-    }
-
-    worksheet.addRow({
-      fecha: formatDate(n.createdAt),
-      tipo: n.tipoMaquina,
-      maquina: n.numeroMaquina,
-      lado: n.lado,
-      observaciones: obsText,
-      estado: n.estado
-    });
-  });
-
-  // Estilo de Encabezado
-  const headerRow = worksheet.getRow(1);
-  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-  headerRow.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF2563EB' } // Blue-600
-  };
-  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-
-  // Bordes y Zebra Stripes
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell(cell => {
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-      };
-      if (rowNumber > 1) {
-        cell.font = { size: 10 };
-        cell.alignment = { wrapText: true, vertical: 'middle' };
-        if (rowNumber % 2 === 0) {
-          row.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF9FAFB' }
-          };
-        }
-      }
-    });
-  });
-
-  // Filtros Automáticos
-  worksheet.autoFilter = 'A1:F1';
-
-  // Generar y Descargar
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `Historial_STC_${new Date().toISOString().split('T')[0]}.xlsx`);
-};
-
-const formatDate = (val) => {
-  if (!val) return '---';
-  let date;
-  if (typeof val.toDate === 'function') date = val.toDate();
-  else if (val instanceof Date) date = val;
-  else if (typeof val === 'number' || typeof val === 'string') date = new Date(val);
-  else return '---';
-
-  return date.toLocaleString('es-AR', { 
-    day: '2-digit', month: '2-digit', year: '2-digit', 
-    hour: '2-digit', minute: '2-digit' 
-  });
-};
-
-const getStatusClass = (estado) => {
-  switch (estado) {
-    case 'pendiente': return 'bg-red-100 text-red-700 border-red-200';
-    case 'en proceso': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    case 'resuelto': return 'bg-green-100 text-green-700 border-green-200';
-    default: return 'bg-gray-100 text-gray-700';
-  }
-};
+    const page = await loadFaultEventsPage(db, activeSectors, activeOptions, cursor);
+    if (token !== generation) return;
+    const ids = new Set(events.value.map(event => event.id));
+    events.value.push(...page.events.filter(event => !ids.has(event.id)));
+    cursor = page.cursor; hasMore.value = page.hasMore; error.value = '';
+  } catch { if (token === generation) error.value = 'No se pudo cargar la siguiente página. Podés reintentar.'; }
+  finally { if (token === generation) loadingMore.value = false; }
+}
+watch([period, state, category, sector, rangeFrom, rangeTo, () => JSON.stringify(userProfile.value)], () => {
+  closeModal(true); aiGeneration++; aiLoading.value = false; aiText.value = ''; reload();
+}, { immediate:true });
+watch(aiDate, () => { aiGeneration++; aiText.value = ''; aiError.value = ''; aiLoading.value = false; });
+function clearFilters() { period.value = 'week'; state.value = ''; category.value = ''; sector.value = ''; search.value = ''; }
+function openDetail(event) { previousFocus = globalThis.document?.activeElement; selected.value = event; nextState.value = event.estado; photoExpanded.value = false; modalType.value = 'detail'; }
+function openAi() { previousFocus = globalThis.document?.activeElement; aiDate.value = period.value === 'range' ? rangeTo.value : plantDate(); modalType.value = 'ai'; }
+function closeModal(force = false) { if (saving.value && !force) return; modalType.value = ''; selected.value = null; nextTick(() => { if (previousFocus?.isConnected) previousFocus.focus(); }); }
+watch(modalType, async value => { if (value) { await nextTick(); modal.value?.focus?.(); } });
+function modalKeyboard(event) {
+  if (event.key === 'Escape') { event.stopPropagation(); closeModal(); }
+  if (event.key !== 'Tab') return;
+  const nodes = [...(modal.value?.querySelectorAll('button:not(:disabled),select:not(:disabled),input:not(:disabled),textarea:not(:disabled)') || [])].filter(node => node.getClientRects().length);
+  if (!nodes.length) { event.preventDefault(); return; }
+  const first = nodes[0], last = nodes.at(-1), active = globalThis.document?.activeElement;
+  if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); }
+}
+async function saveState() {
+  if (saving.value || userProfile.value?.role !== 'admin' || !selected.value || nextState.value === selected.value.estado) return;
+  const record = selected.value, value = nextState.value;
+  const confirmation = await Swal.fire({ title:'¿Cambiar el estado del reporte?', text:`Máquina ${record.numeroMaquinaDisplay}: ${stateLabel(record.estado)} → ${stateLabel(value)}`, showCancelButton:true, confirmButtonText:'Guardar estado', cancelButtonText:'Cancelar', icon:'question' });
+  if (!confirmation.isConfirmed || saving.value || selected.value?.id !== record.id) return;
+  saving.value = true;
+  try { await updateHistoryState(record, value); closeModal(true); await reload(); }
+  catch (failure) { await Swal.fire({ icon:'error', title:'No se pudo cambiar el estado', text:failure.message }); }
+  finally { saving.value = false; }
+}
+async function generateAi(force = false) {
+  if (aiLoading.value) return;
+  const token = ++aiGeneration, target = aiDate.value;
+  let sectors;
+  try { sectors = getSectorScope(userProfile.value); if (sector.value) { if (sectors !== null && !sectors.includes(sector.value)) throw new Error('Sector no autorizado.'); sectors = [sector.value]; } }
+  catch (failure) { aiError.value = failure.message; return; }
+  aiLoading.value = true; aiError.value = '';
+  try { const result = await aiService.generarResumenDiario(force, target, sectors); if (token === aiGeneration) { aiText.value = result.text; aiFromCache.value = result.fromCache; } }
+  catch (failure) { if (token === aiGeneration) aiError.value = failure.message || 'No se pudo generar el análisis.'; }
+  finally { if (token === aiGeneration) aiLoading.value = false; }
+}
+async function copyAi() {
+  try { await navigator.clipboard.writeText(aiText.value); await Swal.fire({ toast:true, icon:'success', title:'Resumen copiado', timer:1500, showConfirmButton:false }); }
+  catch { await Swal.fire({ icon:'error', title:'No se pudo copiar el resumen' }); }
+}
+async function exportExcel() {
+  if (exporting.value || loading.value || error.value && !events.value.length) return;
+  exporting.value = true;
+  const token = generation, criteria = { category:category.value, state:state.value, search:search.value }, scope = exportScope.value;
+  const assertCurrent = () => { if (token !== generation || criteria.search !== search.value) throw new Error('Cambiaron los filtros o el perfil durante la exportación. Reintentá con los filtros actuales.'); };
+  try {
+    const records = scope === 'all' ? await collectHistoryPages(activeSectors, activeOptions, assertCurrent) : [...events.value];
+    const rows = filterFaultEvents(records, criteria);
+    if (!rows.length) { await Swal.fire({ icon:'info', title:'Sin registros para exportar' }); return; }
+    const { default:ExcelJS } = await import('exceljs'); assertCurrent();
+    const workbook = new ExcelJS.Workbook(), sheet = workbook.addWorksheet('Historial');
+    sheet.columns = [{ header:'FECHA', key:'fecha', width:22 }, { header:'MÁQUINA ID', key:'numeroMaquina', width:16 }, { header:'TIPO', key:'tipoMaquina', width:16 }, { header:'SECTOR', key:'sector', width:16 }, { header:'LADO', key:'lado', width:8 }, { header:'CATEGORÍA', key:'tipoProblema', width:16 }, { header:'MOTIVO', key:'motivo', width:30 }, { header:'OBSERVACIONES', key:'observaciones', width:60 }, { header:'ESTADO', key:'estado', width:16 }, { header:'REPORTADO POR', key:'creadoPorNombre', width:25 }, { header:'PUNTO DE CONTROL', key:'punto', width:35 }, { header:'CATÁLOGO', key:'numeroCatalogo', width:18 }, { header:'ARTÍCULO', key:'numeroArticulo', width:18 }, { header:'CRÍTICO', key:'critico', width:10 }];
+    rows.forEach(row => sheet.addRow({ ...row, fecha:formatDate(row.createdAt), punto:[row.seccion,row.grupo,row.denominacion].filter(Boolean).join(' · '), critico:row.critico ? 'Sí' : 'No' }));
+    sheet.getRow(1).font = { bold:true, color:{ argb:'FFFFFFFF' } }; sheet.getRow(1).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF4F46E5' } };
+    sheet.views = [{ state:'frozen', ySplit:1 }]; sheet.autoFilter = 'A1:N1';
+    sheet.eachRow(row => { row.alignment = { vertical:'top', wrapText:true }; });
+    const buffer = await workbook.xlsx.writeBuffer(); assertCurrent();
+    saveAs(new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `Historial_STC_${plantDate()}_${scope === 'all' ? 'periodo' : 'cargados'}.xlsx`);
+  } catch (failure) { await Swal.fire({ icon:'error', title:'No se pudo exportar', text:failure.message }); }
+  finally { exporting.value = false; }
+}
+onUnmounted(() => { generation++; aiGeneration++; });
 </script>
 
 <template>
-  <div class="h-[calc(100vh-120px)] bg-gray-50 flex flex-col overflow-hidden">
-    <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-0 lg:pt-4 pb-2 flex flex-col space-y-1 lg:space-y-3 overflow-hidden">
-      
-      <!-- Portal para Navbar (Desktop) -->
-      <Teleport to="#navbar-actions">
-        <div class="flex items-center w-full gap-4">
-          <!-- Título (Desktop) -->
-          <div class="flex items-center space-x-3 shrink-0">
-            <div class="bg-blue-600 p-1.5 rounded-lg text-white">
-              <History class="w-4 h-4" />
-            </div>
-            <div class="hidden xl:block text-white">
-              <h1 class="text-sm font-black tracking-tight leading-none">Histórico</h1>
-              <p class="text-[8px] text-gray-400 font-bold tracking-widest mt-0.5">Novedades</p>
-            </div>
-          </div>
-
-          <!-- Búsqueda y Filtros (Desktop) -->
-          <div class="flex-1 flex items-center gap-2 max-w-2xl mx-auto">
-            <div class="relative flex-[1.5]">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-              <input 
-                v-model="searchQuery" 
-                type="text" 
-                placeholder="Buscar máquina o falla..." 
-                class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-100 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-md text-xs text-gray-700 outline-none transition-all placeholder:text-gray-400 shadow-sm" 
-              />
-            </div>
-            
-            <div class="relative flex-[0.8] min-w-30">
-              <input 
-                v-model="filterDate" 
-                type="date" 
-                :class="{'text-transparent': !filterDate, 'text-gray-700': filterDate}"
-                class="h-8 w-full px-2 bg-white border border-slate-100 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
-                title="Filtrar por fecha y analizar IA"
-              />
-              <span v-if="!filterDate" class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none font-black tracking-widest bg-white px-1">Fecha IA...</span>
-            </div>
-            
-            <select 
-              v-model="statusFilter"
-              class="h-8 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm flex-[0.7]"
-            >
-              <option value="todos">Todos los estados</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="en proceso">En proceso</option>
-              <option value="resuelto">Resuelto</option>
-            </select>
-            
-            <button 
-              @click="exportToExcel"
-              data-tippy-content="Exportar a Excel (XLSX)"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md shrink-0"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-              <span>Exportar</span>
-            </button>
-          </div>
-        </div>
-      </Teleport>
-      
-      <!-- Portal para Navbar (Mobile) -->
-      <Teleport to="#navbar-mobile-portal">
-        <div class="flex items-center gap-2">
-          <h1 class="text-sm font-black text-white tracking-tighter shrink-0">Histórico</h1>
-          <div class="flex items-center gap-1">
-             <button @click="exportToExcel" data-tippy-content="Exportar a Excel (XLSX)" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
-          </div>
-        </div>
-      </Teleport>
-
-      <!-- Header Local (Solo Móvil) - Espacioso -->
-      <div class="md:hidden bg-white/95 backdrop-blur-sm p-2 rounded-xl shadow-md border border-gray-100 shrink-0 sticky top-0 z-20 space-y-2">
-        <div class="flex items-center gap-2">
-          <div class="relative flex-[1.2]">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500/20" />
-          </div>
-          <select v-model="statusFilter" class="bg-gray-50 border border-gray-100 text-xs font-black rounded-lg px-2 py-2 outline-none focus:border-blue-500 flex-[0.8] text-center">
-            <option value="todos">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="en proceso">En Proceso</option>
-            <option value="resuelto">Resuelto</option>
-          </select>
-        </div>
-        <div class="relative">
-          <input v-model="filterDate" type="date" :class="{'text-transparent flex items-center': !filterDate, 'text-gray-600': filterDate}" class="w-full bg-gray-50 border border-gray-100 text-sm font-bold rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-blue-500/20" />
-          <span v-if="!filterDate" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none font-bold">Seleccionar Fecha IA...</span>
-        </div>
-      </div>
-
-      <!-- Contenido Principal -->
-      
-      <!-- Panel de Inteligencia Artificial (Aparece al seleccionar Fecha) -->
-      <div v-if="filterDate && !errorCarga" class="mt-2 mb-4 bg-linear-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 md:p-5 border border-indigo-100 shadow-sm relative overflow-y-auto shrink-0 max-h-[45vh] lg:max-h-[35vh]">
-         <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <Sparkles class="w-24 h-24 text-indigo-600" />
-         </div>
-         
-         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-indigo-100/50 pb-2">
-           <!-- Titulo -->
-           <h3 class="flex items-center text-lg md:text-xl font-black text-indigo-900 truncate pr-2" @click="iaCollapsed = !iaCollapsed">
-             <Sparkles class="w-5 h-5 md:w-6 md:h-6 mr-1.5 md:mr-2 text-indigo-600 shrink-0" /> 
-             <span class="truncate cursor-pointer select-none hover:opacity-80 transition-opacity">Análisis IA</span>
-           </h3>
-           
-           <!-- Acciones -->
-           <div class="flex items-center gap-1.5 shrink-0">
-             <div v-if="!isIaLoading && iaSummary" class="flex items-center gap-1.5">
-               <button @click="copiarWhatsApp" title="Copiar para WhatsApp" class="bg-green-500 text-white font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-green-600 transition shadow-md border border-green-600 flex items-center shrink-0">
-                 <Copy class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                 <span class="hidden md:inline text-[10px] uppercase tracking-wider">WhatsApp</span>
-               </button>
-               
-               <template v-if="iaFromCache">
-                 <button @click="cargarAnalisisIA(true)" title="Regenerar Análisis" class="bg-white border border-indigo-200 text-indigo-600 font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-indigo-50 transition shadow-sm shrink-0 flex items-center">
-                   <Sparkles class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                   <span class="hidden md:inline text-[10px] uppercase tracking-wider">Regenerar</span>
-                 </button>
-               </template>
-             </div>
-             
-             <!-- Separador Vertical -->
-             <div class="w-px h-5 bg-indigo-200 mx-0.5 md:mx-1"></div>
-             
-             <!-- Colapsar -->
-             <button 
-               @click="iaCollapsed = !iaCollapsed" 
-               class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-indigo-200"
-               title="Expandir/Contraer"
-             >
-               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-             </button>
-           </div>
-         </div>
-
-         <div v-show="!iaCollapsed">
-           <div v-if="isIaLoading" class="flex flex-col items-center justify-center py-4 z-10 relative">
-             <div class="animate-pulse flex gap-2 w-full max-w-sm">
-                <div class="h-2 bg-indigo-200 rounded w-full"></div>
-                <div class="h-2 bg-indigo-200 rounded w-1/2"></div>
-             </div>
-             <p class="text-xs text-indigo-600 font-bold mt-2 tracking-wide">Generando resumen...</p>
-           </div>
-           
-           <div v-else-if="iaError" class="text-indigo-800 text-sm font-semibold z-10 relative">
-             No se pudo generar el resumen de IA automáticamente para esta fecha.
-             <button @click="cargarAnalisisIA(true)" class="underline ml-2">Reintentar</button>
-           </div>
-
-           <div v-else class="text-indigo-950 text-base md:text-lg leading-relaxed z-10 relative font-medium space-y-2 bg-white/70 p-3 rounded-2xl border border-white max-w-none" v-html="iaSummary">
-           </div>
-         </div>
-      </div>
-
-      <!-- Estado Carga Lista (Solo si está vacío) -->
-      <div v-if="isLoading && novedades.length === 0" class="flex-1 flex flex-col items-center justify-center text-gray-400">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-        <p class="font-bold text-xs tracking-widest text-gray-400">Cargando historial...</p>
-      </div>
-
-      <div v-else-if="errorCarga && novedades.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8">
-        <AlertTriangle class="w-12 h-12 text-red-300 mb-3" />
-        <h2 class="font-black text-gray-800 text-sm">Error de conexión</h2>
-        <button @click="cargarDatos" class="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg text-xs font-black shadow-lg">Reintentar</button>
-      </div>
-
-      <div v-else-if="novedadesFiltradas.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-lg border border-gray-100">
-        <CheckCircle class="w-12 h-12 text-gray-200 mb-3" />
-        <p class="text-xs font-bold text-gray-400 tracking-widest">Sin resultados</p>
-      </div>
-
-      <template v-else>
-        <!-- TABLA DESKTOP -->
-        <div class="hidden md:flex flex-1 flex-col bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden min-h-0">
-          <div class="overflow-auto flex-1 min-h-0">
-            <table class="w-full text-left border-collapse">
-              <thead class="sticky top-0 bg-gray-50 z-20 shadow-sm border-b border-gray-100">
-                <tr class="text-xs font-black text-gray-500 tracking-widest">
-                  <th class="px-5 py-4 bg-gray-50">Fecha</th>
-                  <th class="px-5 py-4 bg-gray-50">Máquina</th>
-                  <th class="px-5 py-4 bg-gray-50">Lado</th>
-                  <th class="px-5 py-4 bg-gray-50">Observaciones</th>
-                  <th class="px-5 py-4 bg-gray-50">Estado</th>
-                  <th class="px-5 py-4 bg-gray-50 text-center">Foto</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-50">
-                <tr v-for="n in paginatedNovedades" :key="n.id" class="hover:bg-blue-50/50 transition-colors group">
-                  <td class="px-5 py-4 text-xs font-bold text-gray-500 whitespace-nowrap">{{ formatDate(n.createdAt) }}</td>
-                  <td class="px-5 py-4">
-                    <div class="flex flex-col">
-                      <span class="text-base font-black text-gray-800">{{ n.numeroMaquina }}</span>
-                      <span class="text-[10px] text-gray-400 font-bold tracking-tighter">{{ n.tipoMaquina }}</span>
-                      <span v-if="n.motivo" class="mt-1 text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 self-start uppercase tracking-widest">{{ n.motivo }}</span>
-                    </div>
-                  </td>
-                  <td class="px-5 py-4 text-sm font-black text-gray-600">{{ n.lado }}</td>
-                  <td class="px-5 py-4 max-w-sm">
-                    <div v-if="n.seccion || n.denominacion" class="mb-2 bg-indigo-50 border border-indigo-100 p-2 rounded-lg inline-block w-full">
-                       <span class="block text-[9px] font-black text-indigo-400 tracking-widest leading-none mb-0.5">Punto de control afectado</span>
-                       <div class="flex justify-between items-center gap-2">
-                         <span class="text-xs font-bold text-indigo-900 truncate">{{ n.denominacion || n.seccion }} <span v-if="n.grupo" class="text-indigo-400 font-normal">({{ n.grupo }})</span></span>
-                         <span v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="shrink-0 bg-indigo-100 text-indigo-800 text-[9px] font-black px-1.5 py-0.5 rounded border border-indigo-200">
-                           Art: {{ n.numeroArticulo }}
-                         </span>
-                       </div>
-                    </div>
-                    <p class="text-sm text-gray-700 font-medium whitespace-normal">{{ n.observaciones }}</p>
-                  </td>
-                  <td class="px-5 py-4">
-                    <div class="flex items-center space-x-2">
-                      <span 
-                        :class="getStatusClass(n.estado)"
-                        class="px-2.5 py-1 rounded text-[10px] font-black border whitespace-nowrap"
-                      >
-                        {{ n.estado }}
-                      </span>
-                      <!-- Solo Admin puede cambiar estado (Mecánico solo lee) -->
-                      <button 
-                        v-if="userRole === 'admin'"
-                        @click="cambiarEstado(n)" 
-                        class="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-                      >
-                        <RefreshCw class="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                  </td>
-                  <td class="px-5 py-4 text-center">
-                    <button type="button" v-if="n.fotoUrl" @click="showOperationalImage(n.fotoUrl)" class="p-2 bg-gray-100 text-gray-500 hover:bg-blue-600 hover:text-white rounded-lg inline-flex transition-all">
-                      <ImageIcon class="w-4 h-4" />
-                    </button>
-                    <span v-else class="text-xs text-gray-300 font-bold">---</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          
-          <!-- Paginación Desktop -->
-          <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
-            <span class="text-xs text-gray-400 font-black tracking-widest">{{ novedadesFiltradas.length }} registros</span>
-            <div class="flex items-center space-x-1.5">
-              <button @click="goToFirst" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronsLeft class="w-4 h-4" /></button>
-              <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronLeft class="w-4 h-4" /></button>
-              <div class="px-4 py-1.5 text-sm font-black text-gray-700 bg-white rounded-lg border border-gray-200">Pág {{ currentPage }} / {{ totalPages }}</div>
-              <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronRight class="w-4 h-4" /></button>
-              <button @click="goToLast" :disabled="currentPage === totalPages" class="p-2 rounded-lg hover:bg-white disabled:opacity-30 text-gray-500 border border-transparent hover:border-gray-200 transition-all shadow-sm"><ChevronsRight class="w-4 h-4" /></button>
-            </div>
-          </div>
-        </div>
-
-        <!-- TARJETAS MÓVIL (Con Scroll) -->
-        <div class="md:hidden flex-1 overflow-y-auto pr-1 space-y-4">
-          <div v-for="n in paginatedNovedades" :key="n.id" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
-            <div class="flex justify-between items-start">
-              <span class="text-sm font-black text-gray-800">{{ n.numeroMaquina }} ({{ n.lado }})</span>
-              <span class="text-xs font-bold text-gray-400 mt-0.5">{{ formatDate(n.createdAt) }}</span>
-            </div>
-            
-            <div v-if="n.seccion || n.denominacion" class="bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg space-y-1">
-               <div class="flex flex-col">
-                  <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none">Punto de Control</span>
-                  <span class="text-xs font-bold text-indigo-900 leading-tight mt-0.5">{{ n.denominacion || n.seccion }}</span>
-               </div>
-               <div v-if="n.numeroArticulo && n.numeroArticulo !== '-'" class="flex gap-2">
-                 <span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Art: {{ n.numeroArticulo }}</span>
-                 <span v-if="n.numeroCatalogo && n.numeroCatalogo !== '-'" class="bg-indigo-100 border border-indigo-200 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded">Cat: {{ n.numeroCatalogo }}</span>
-               </div>
-            </div>
-
-            <p class="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">"{{ n.observaciones }}"</p>
-            <div class="flex items-center justify-between pt-2">
-              <span class="px-2.5 py-1 text-[10px] font-black rounded-md border" :class="getStatusClass(n.estado)">{{ n.estado }}</span>
-              <button type="button" v-if="n.fotoUrl" @click="showOperationalImage(n.fotoUrl)" class="flex items-center text-xs font-black text-blue-600 tracking-widest bg-blue-50 py-1.5 px-3 rounded-lg hover:bg-blue-100 transition-colors">
-                <ImageIcon class="w-4 h-4 mr-1.5" /> Foto
-              </button>
-            </div>
-          </div>
-          
-          <!-- Paginación Móvil -->
-          <div class="flex items-center justify-center space-x-3 py-3">
-            <button @click="goToPrev" :disabled="currentPage === 1" class="p-3 bg-white rounded-lg border border-gray-200 disabled:opacity-30 shadow-sm active:scale-95"><ChevronLeft class="w-5 h-5" /></button>
-            <span class="text-sm font-black text-gray-600 bg-white px-4 py-2.5 rounded-lg border border-gray-100">{{ currentPage }} / {{ totalPages }}</span>
-            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-3 bg-white rounded-lg border border-gray-200 disabled:opacity-30 shadow-sm active:scale-95"><ChevronRight class="w-5 h-5" /></button>
-          </div>
-        </div>
-      </template>
-    </main>
+  <div class="history-page" :inert="!!modalType">
+    <header class="history-header"><div><h1>Histórico de novedades</h1><p>Reportes de fallas · Más recientes primero</p></div><div class="history-actions"><button class="history-button" @click="reload" :disabled="loading" v-tippy="'Actualizar los registros del período'"><RefreshCw :size="16" />Actualizar</button><button class="history-button" @click="openAi" v-tippy="'Consultar el análisis de un día, sin modificar los filtros'"><Sparkles :size="16" />Análisis IA</button></div></header>
+    <div class="history-filters"><label class="history-search">Buscar en registros cargados<input v-model="search" type="search" placeholder="Máquina, motivo o persona…" /></label><label>Período<select v-model="period"><option value="week">Últimos 7 días</option><option value="today">Hoy</option><option value="range">Rango personalizado</option></select></label><label>Estado<select v-model="state"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="en proceso">En proceso</option><option value="resuelto">Resuelto</option></select></label><label>Categoría<select v-model="category"><option value="">Todas</option><option value="Mecánico">Mecánico</option><option value="Eléctrico">Eléctrico</option><option value="other">Otras / sin categoría</option></select></label><label v-if="availableSectors.length > 1">Sector<select v-model="sector"><option value="">Todos los permitidos</option><option v-for="value in availableSectors" :key="value" :value="value">{{ value }}</option></select></label><button class="history-button" @click="clearFilters">Limpiar</button><div v-if="period === 'range'" class="history-range"><label>Desde<PlantDatePicker v-model="rangeFrom" label="Desde" /></label><label>Hasta<PlantDatePicker v-model="rangeTo" label="Hasta" /></label><small>Hasta 31 días por consulta</small></div></div>
+    <div class="history-export"><span>{{ visible.length }} visibles de {{ events.length }} cargados<span v-if="hasMore"> · Hay más registros</span></span><div><select v-model="exportScope" aria-label="Alcance de exportación"><option value="loaded">Exportar registros cargados</option><option value="all">Exportar todo el período filtrado</option></select><button class="history-button primary" :disabled="exporting || loading" @click="exportExcel" v-tippy="'Exportar el alcance seleccionado; incluye búsqueda y filtros'"><Download :size="16" />{{ exporting ? 'Exportando…' : 'Exportar' }}</button></div></div>
+    <p v-if="error" class="history-error" role="alert">{{ error }} <button class="history-button" @click="events.length ? more() : reload()">Reintentar</button></p>
+    <div v-if="loading" class="history-empty" role="status">Cargando historial…</div>
+    <div v-else class="history-table-scroll"><table class="history-table"><thead><tr><th>Fecha</th><th>Máquina</th><th>Categoría</th><th>Reporte</th><th>Estado</th><th>Detalle</th></tr></thead><tbody><tr v-for="event in visible" :key="event.id" :class="{ critical:event.critico }"><td>{{ formatDate(event.createdAt) }}</td><td><strong>{{ event.numeroMaquinaDisplay }}</strong><small>{{ event.tipoMaquina }} · {{ event.sector }}<span v-if="event.lado && event.lado !== 'U'"> · Lado {{ event.lado }}</span></small></td><td>{{ event.tipoProblema || 'Sin categoría' }}<small v-if="event.critico" class="critical-label">Crítico</small></td><td class="history-description"><strong>{{ event.motivo || event.denominacion || 'Reporte de falla' }}</strong><p>{{ event.observaciones }}</p><small>{{ event.creadoPorNombre || 'Sin identificar' }}<span v-if="event.fotoUrl"> · Foto adjunta</span></small></td><td><span class="history-state" :class="event.estado?.replace(' ', '-')">{{ stateLabel(event.estado) }}</span></td><td><button class="history-button" :aria-label="'Detalle de máquina ' + event.numeroMaquinaDisplay" v-tippy="'Ver descripción completa, punto de control y foto'" @click="openDetail(event)"><Eye :size="16" /></button></td></tr><tr v-if="!visible.length"><td colspan="6" class="history-empty">Sin registros con estos filtros<span v-if="hasMore">. Podés cargar más para continuar la búsqueda.</span></td></tr></tbody></table></div>
+    <footer class="history-footer"><span>Páginas de 50 · Búsqueda y Otras filtran registros cargados</span><button v-if="hasMore" class="history-button" :disabled="loadingMore || loading" @click="more">{{ loadingMore ? 'Cargando…' : 'Cargar 50 más' }}</button><span v-else-if="!loading && !error">Fin del período</span></footer>
   </div>
+  <Teleport to="body"><div v-if="modalType" class="history-modal-overlay" @click.self="closeModal()"><section ref="modal" class="history-modal" role="dialog" aria-modal="true" :aria-label="modalType === 'detail' ? 'Detalle de reporte' : 'Análisis diario'" tabindex="-1" @keydown="modalKeyboard"><header><div><h2>{{ modalType === 'detail' ? 'Reporte · Máquina ' + selected?.numeroMaquinaDisplay : 'Análisis diario' }}</h2><p v-if="selected">{{ formatDate(selected.createdAt) }} · {{ selected.tipoProblema }} · {{ stateLabel(selected.estado) }}</p></div><button class="history-button" aria-label="Cerrar modal" :disabled="saving" @click="closeModal()" v-tippy="'Cerrar'"><X :size="18" /></button></header><div class="history-modal-body">
+    <template v-if="modalType === 'detail' && selected"><div class="history-detail-grid"><section><h3>{{ selected.motivo || 'Descripción del reporte' }}</h3><p class="history-full-description">{{ selected.observaciones || 'Sin observaciones' }}</p><button v-if="selected.fotoUrl" class="history-photo" @click="photoExpanded = !photoExpanded" :aria-label="photoExpanded ? 'Reducir foto' : 'Ampliar foto'" v-tippy="photoExpanded ? 'Reducir foto' : 'Ampliar foto'" :class="{ expanded:photoExpanded }"><OperationalImage :src="selected.fotoUrl" /></button></section><dl><dt>Identificador completo</dt><dd>{{ selected.numeroMaquina }}</dd><dt>Tipo / sector</dt><dd>{{ selected.tipoMaquina }} / {{ selected.sector }}</dd><dt>Lado</dt><dd>{{ selected.lado || '—' }}</dd><dt>Reportado por</dt><dd>{{ selected.creadoPorNombre || 'Sin identificar' }}</dd><dt>Prioridad</dt><dd>{{ selected.critico ? 'Crítica' : 'Normal' }}</dd><dt>Punto de control</dt><dd>{{ [selected.seccion,selected.grupo,selected.denominacion].filter(Boolean).join(' · ') || 'No informado' }}</dd><dt>Subgrupo</dt><dd>{{ selected.subGrupo || '—' }}</dd><dt>Catálogo / artículo</dt><dd>{{ selected.numeroCatalogo || '—' }} / {{ selected.numeroArticulo || '—' }}</dd><dt v-if="selected.feedbackJefe">Seguimiento</dt><dd v-if="selected.feedbackJefe">{{ selected.feedbackJefe }}</dd></dl></div></template>
+    <template v-else-if="modalType === 'ai'"><div class="history-ai-actions"><label>Día del análisis<PlantDatePicker v-model="aiDate" label="Día del análisis" /></label><button class="history-button primary" :disabled="aiLoading" @click="generateAi(false)">{{ aiLoading ? 'Generando…' : 'Consultar análisis' }}</button><button v-if="aiText" class="history-button" :disabled="aiLoading" @click="generateAi(true)">Regenerar</button><button v-if="aiText" class="history-button" @click="copyAi"><Copy :size="16" />Copiar resumen</button></div><p class="history-ai-note">Análisis del día completo para los sectores seleccionados. No aplica búsqueda, estado o categoría.</p><p v-if="aiError" class="history-error" role="alert">{{ aiError }}</p><p v-if="aiLoading" role="status">Generando resumen…</p><p v-if="aiFromCache && aiText" class="history-ai-note">Resumen guardado previamente</p><div v-if="aiText" class="history-ai-text" v-html="aiHtml"></div></template>
+    </div><footer><div v-if="modalType === 'detail' && userProfile?.role === 'admin'" class="history-state-action"><label>Estado<select v-model="nextState" :disabled="saving"><option value="pendiente">Pendiente</option><option value="en proceso">En proceso</option><option value="resuelto">Resuelto</option></select></label><button class="history-button primary" :disabled="saving || nextState === selected?.estado" @click="saveState">{{ saving ? 'Guardando…' : 'Guardar estado' }}</button></div><button class="history-button" :disabled="saving" @click="closeModal()">Cerrar</button></footer></section></div></Teleport>
 </template>
 
 <style scoped>
-/* Elimina scrollbars pero permite scroll si es necesario (o deja el nativo moderno) */
-main {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
-}
+.history-page { height:100%; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px; background:#f8fafc; overflow:hidden; }
+.history-header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-shrink:0; } h1 { color:#0f172a; font-size:19px; font-weight:650; } .history-header p { font-size:12px; color:#64748b; margin-top:2px; }
+.history-actions,.history-export > div { display:flex; gap:6px; flex-wrap:wrap; }
+.history-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #cbd5e1; border-radius:5px; background:white; color:#334155; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; } .history-button:hover { background:#f1f5f9; } .history-button.primary { background:#4f46e5; border-color:#4f46e5; color:white; } .history-button:disabled { opacity:.45; cursor:default; }
+.history-filters { display:flex; gap:8px; align-items:end; flex-wrap:wrap; padding:9px; border:1px solid #e2e8f0; border-radius:6px; background:white; flex-shrink:0; } label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:#64748b; font-weight:600; } input,select { min-height:34px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:5px; color:#334155; background:white; font-size:12px; min-width:0; max-width:100%; } .history-search { flex:1; min-width:180px; } .history-range { display:flex; gap:8px; align-items:end; flex-wrap:wrap; width:100%; } small { font-size:11px; color:#64748b; }
+.history-export { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; flex-shrink:0; font-size:11px; color:#64748b; }
+.history-table-scroll { flex:1; min-height:0; overflow:auto; background:white; border:1px solid #e2e8f0; border-radius:8px; } .history-table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:12px; color:#334155; } th { position:sticky; top:0; z-index:1; background:#f1f5f9; text-align:left; padding:10px 9px; border-bottom:1px solid #cbd5e1; font-size:11px; font-weight:600; color:#64748b; } th:nth-child(1) { width:15%; } th:nth-child(2) { width:16%; } th:nth-child(3) { width:13%; } th:nth-child(4) { width:35%; } th:nth-child(5) { width:13%; } th:nth-child(6) { width:8%; }
+td { padding:10px 9px; border-bottom:1px solid #e2e8f0; vertical-align:top; overflow-wrap:anywhere; } tr:hover td { background:#f8fafc; } td strong { color:#0f172a; font-weight:600; } td small { display:block; margin-top:4px; } .history-description p { color:#64748b; margin-top:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; } .history-state { display:inline-block; border-radius:4px; padding:3px 6px; font-size:10px; font-weight:600; background:#f1f5f9; color:#475569; } .pendiente { background:#fef2f2; color:#b91c1c; } .en-proceso { background:#fffbeb; color:#b45309; } .resuelto { background:#ecfdf5; color:#047857; } .critical td:first-child { border-left:3px solid #ef4444; } .critical-label { color:#b91c1c; font-weight:600; }
+.history-footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:11px; color:#64748b; flex-shrink:0; } .history-empty { padding:40px 16px; text-align:center; color:#64748b; } .history-error { padding:10px; color:#b91c1c; font-size:12px; }
+.history-modal-overlay { position:fixed; inset:0; z-index:100; background:#0f172a66; display:flex; align-items:center; justify-content:center; padding:16px; } .history-modal { width:min(1000px,100%); max-height:calc(100dvh - 32px); background:white; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 20px 60px #0f172a40; display:flex; flex-direction:column; overflow:hidden; outline:none; } .history-modal > header { padding:15px 18px; display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid #e2e8f0; flex-shrink:0; } h2 { font-size:17px; font-weight:650; color:#0f172a; } .history-modal header p { font-size:12px; color:#64748b; margin-top:4px; } .history-modal-body { padding:18px; overflow:auto; min-height:0; font-size:13px; color:#334155; } .history-detail-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:24px; } h3 { font-size:15px; font-weight:600; margin-bottom:10px; } .history-full-description { white-space:pre-wrap; line-height:1.6; } dl { display:grid; grid-template-columns:120px minmax(0,1fr); gap:8px; font-size:12px; overflow-wrap:anywhere; } dt { color:#64748b; } dd { color:#334155; } .history-photo { display:block; width:100%; margin-top:16px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; cursor:zoom-in; } .history-photo :deep(img) { width:100%; max-height:250px; object-fit:contain; } .history-photo.expanded :deep(img) { max-height:65dvh; }
+.history-modal footer { display:flex; justify-content:space-between; align-items:end; flex-wrap:wrap; gap:10px; padding:12px 18px; border-top:1px solid #e2e8f0; flex-shrink:0; } .history-state-action,.history-ai-actions { display:flex; gap:8px; align-items:end; flex-wrap:wrap; } .history-ai-note { color:#64748b; font-size:12px; margin:12px 0; } .history-ai-text { overflow-wrap:anywhere; line-height:1.65; } button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid #818cf8; outline-offset:2px; }
+@media(max-width:980px) { .history-table th,.history-table td { padding:8px 6px; } .history-table th:nth-child(4) { width:31%; } .history-table th:nth-child(1) { width:17%; } .history-table th:nth-child(5) { width:15%; } }
+@media(max-width:767px) { .history-page { padding:8px; } .history-header { align-items:start; flex-wrap:wrap; } h1 { font-size:17px; } .history-table { min-width:620px; } .history-detail-grid { grid-template-columns:minmax(0,1fr); gap:18px; } .history-modal-overlay { padding:8px; } .history-modal { max-height:calc(100dvh - 16px); } .history-export > div { width:100%; } .history-export select { flex:1; } }
 </style>

@@ -5,7 +5,7 @@ import { before, after, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, getDoc, getDocs, query, where, collection, updateDoc, deleteDoc, deleteField, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, query, where, collection, updateDoc, deleteDoc, deleteField, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { ref, uploadBytes, getMetadata, getDownloadURL, getBytes } from 'firebase/storage';
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from 'firebase-admin/app';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
@@ -32,6 +32,23 @@ async function approve(uid, role = 'mecanico', sector = 'HILANDERIA', extra = {}
 }
 const novelty = (uid, sector = 'HILANDERIA') => ({
   sector, estado: 'pendiente', creadoPorUid: uid, createdAt: serverTimestamp(),
+});
+
+test('history state changes allow administrator transactions but reject operators and invalid payloads', async () => {
+  await approve('history-admin', 'admin');
+  await approve('history-operator', 'mecanico');
+  await environment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'novedades/history-state'), novelty('creator')));
+  const db = identity('history-admin').firestore(), reference = doc(db, 'novedades/history-state');
+  await assertSucceeds(runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(reference);
+    assert.equal(snapshot.data().estado, 'pendiente');
+    transaction.update(reference, { estado:'resuelto', updatedAt:serverTimestamp() });
+  }));
+  assert.equal((await getDoc(reference)).data().estado, 'resuelto');
+  await assertFails(updateDoc(doc(identity('history-operator').firestore(), 'novedades/history-state'), { estado:'en proceso', updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(reference, { estado:'COMPLETADO', updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(reference, { estado:'pendiente', numeroMaquina:35001, updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(reference, { estado:'pendiente' }));
 });
 
 test('fault event pagination enforces sectors, time windows and older pending state', async () => {

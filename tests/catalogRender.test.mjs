@@ -7,8 +7,10 @@ import * as Vue from 'vue';
 import * as icons from 'lucide-vue-next';
 import { catalogColumnLayout } from '../src/utils/catalogColumnLayout.js';
 import { createLatestLoad } from '../src/utils/latestLoad.js';
-import { eventView } from '../src/utils/faultEvents.js';
+import { eventView, filterFaultEvents, faultEventWindow } from '../src/utils/faultEvents.js';
 import { canExecuteIntervention } from '../src/utils/interventionAccess.js';
+import { formatSummary } from '../src/utils/formatSummary.js';
+import { plantDate, addDays, PLANT_TIME_ZONE } from '../src/utils/plantTime.js';
 
 function evaluate(code, dependencies) {
   code = code.replace(/^import\s+['"][^'"]+['"];?\s*/gm, '');
@@ -49,6 +51,96 @@ function host({ missingDesktopPortal = false } = {}) {
   });
   return { renderer, root: node('root'), body };
 }
+
+test('history uses bounded pages, ignores stale responses, opens detail and generates safe AI only on demand', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/HistoricoNovedades.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id:'history-test' });
+  const template = compileTemplate({ id:'history-test', source:descriptor.template.content, compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors, []);
+  const requests = [], aiRequests = [], writes = [], downloads = [];
+  const profile = Vue.ref({ role:'admin' });
+  let finishAI, failState = true;
+  const records = [
+    { id:'first', numeroMaquina:35001, tipoMaquina:'TELAR', sector:'TEJEDURIA', tipoProblema:'Mecánico', estado:'pendiente', observaciones:'Pérdida de aceite', creadoPorNombre:'Inspector', createdAt:{ seconds:1791712800 } },
+    { id:'second', numeroMaquina:35064, sector:'TEJEDURIA', tipoProblema:'Eléctrico', estado:'resuelto', observaciones:'Sensor', createdAt:{ seconds:1791712800 } },
+  ];
+  const dependencies = {
+    vue:Vue, 'lucide-vue-next':icons, 'vue-router':{ onBeforeRouteLeave() {} }, '../firebase/config':{ db:{} }, '../services/authService':{ userProfile:profile },
+    '../utils/sectorScope':{ getSectorScope:() => profile.value.role === 'admin' ? null : ['TEJEDURIA'] },
+    '../utils/faultEvents':{ eventView, filterFaultEvents, faultEventWindow },
+    '../utils/plantTime':{ plantDate, addDays, PLANT_TIME_ZONE }, '../utils/formatSummary':{ formatSummary }, '../utils/tooltipDirective':{ vTippy },
+    './PlantDatePicker.vue':{ props:['modelValue'], render:() => Vue.h('button', 'Fecha') }, './OperationalImage.vue':{ render:() => Vue.h('img') },
+    'file-saver':{ saveAs:(blob, name) => downloads.push({ blob, name }) }, sweetalert2:{ fire:async () => ({ isConfirmed:true }) },
+    '../services/faultEvents':{ loadFaultEventsPage:(db, sectors, options, cursor) => new Promise(resolve => requests.push({ sectors, options, cursor, resolve })) },
+    '../services/historyService':{
+      collectHistoryPages:async () => [...records, { ...records[0], id:'third', numeroMaquina:165001 }],
+      updateHistoryState:async (record, state) => { writes.push({ record, state }); if (failState) throw new Error('Conflict'); },
+    },
+    '../services/aiService':{ aiService:{ generarResumenDiario:(force, day, sectors) => { aiRequests.push({ force, day, sectors }); return new Promise(resolve => { finishAI = resolve; }); } } },
+  };
+  const component = evaluate(script.content, dependencies); component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host(); const app = renderer.createApp(component), errors = [];
+  app.config.errorHandler = error => errors.push(error); app.mount(root);
+  const state = root._vnode.component.setupState;
+  assert.equal(requests[0].options.period, 'week'); assert.equal(requests[0].options.order, 'desc');
+  requests[0].resolve({ events:records, cursor:'page1', hasMore:true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.visible[0].numeroMaquinaDisplay, '1');
+  const more = state.more();
+  state.state = 'pendiente'; await Vue.nextTick();
+  requests[1].resolve({ events:[{ id:'stale' }], cursor:null, hasMore:false }); await more;
+  assert.deepEqual(state.events, []);
+  requests[2].resolve({ events:[records[0]], cursor:'new', hasMore:true });
+  await new Promise(resolve => setImmediate(resolve));
+  state.search = 'perdida'; assert.equal(state.visible.length, 1);
+  state.openDetail(state.visible[0]); await Vue.nextTick(); assert.equal(state.modalType, 'detail');
+  state.nextState = 'resuelto'; await state.saveState();
+  assert.equal(state.selected.id, 'first', 'failed state update preserves the detail');
+  failState = false; const saved = state.saveState();
+  await new Promise(resolve => setImmediate(resolve));
+  requests.at(-1).resolve({ events:[{ ...records[0], estado:'resuelto' }], cursor:null, hasMore:false }); await saved;
+  assert.equal(state.modalType, ''); assert.equal(writes.length, 2);
+  state.openAi(); await Vue.nextTick(); assert.equal(aiRequests.length, 0);
+  const oldAI = state.generateAi(); state.aiDate = '2026-10-01'; await Vue.nextTick();
+  finishAI({ text:'Old', fromCache:false }); await oldAI; assert.equal(state.aiText, '');
+  const newAI = state.generateAi(); finishAI({ text:'*Resumen* <script>alert(1)</script>', fromCache:true }); await newAI;
+  assert.ok(state.aiHtml.includes('&lt;script&gt;')); assert.ok(!state.aiHtml.includes('<script>'));
+  state.closeModal();
+  state.state = ''; state.search = ''; await Vue.nextTick();
+  requests.at(-1).resolve({ events:records, cursor:null, hasMore:false }); await new Promise(resolve => setImmediate(resolve));
+  state.exportScope = 'all'; await state.exportExcel();
+  assert.equal(downloads.length, 1); assert.ok(downloads[0].name.endsWith('_periodo.xlsx'));
+  const { default:ExcelJS } = await import('exceljs'); const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await downloads[0].blob.arrayBuffer());
+  assert.equal(workbook.worksheets[0].rowCount, 4, 'full period export includes all collected rows');
+  assert.equal(workbook.worksheets[0].getRow(2).getCell(2).value, 35001, 'exports preserve full machine ID');
+  profile.value = { role:'mecanico' }; await Vue.nextTick();
+  assert.deepEqual(requests.at(-1).sectors, ['TEJEDURIA']);
+  state.openDetail(eventView(records[0])); state.nextState = 'resuelto'; await state.saveState(); assert.equal(writes.length, 2);
+  app.unmount(); assert.deepEqual(errors.map(error => error.message), []);
+});
+
+test('history service walks every page and rejects unauthorized or conflicting state writes', async () => {
+  const source = fs.readFileSync(new URL('../src/services/historyService.js', import.meta.url), 'utf8');
+  const profile = Vue.ref({ role:'admin' }), reads = [], writes = [];
+  let serverState = 'pendiente';
+  const dependencies = {
+    'firebase/firestore': { doc:() => 'record', serverTimestamp:() => 'server-time', runTransaction:async (db, run) => run({ get:async () => ({ exists:() => true, data:() => ({ estado:serverState }) }), update:(ref, value) => writes.push(value) }) },
+    '../firebase/config':{ db:{} }, './authService':{ userProfile:profile },
+    './faultEvents':{ loadFaultEventsPage:async (db, sectors, options, cursor) => { reads.push(cursor); return cursor ? { events:[{ id:'b' }], hasMore:false, cursor:'b' } : { events:[{ id:'a' }], hasMore:true, cursor:'a' }; } },
+  };
+  const service = evaluate(source.replace(/export async function/g, 'async function') + '\nreturn { collectHistoryPages, updateHistoryState };', dependencies);
+  assert.deepEqual((await service.collectHistoryPages(['TEJEDURIA'], {})).map(record => record.id), ['a', 'b']);
+  assert.deepEqual(reads, [null, 'a']);
+  await assert.rejects(service.collectHistoryPages(null, {}, () => { throw new Error('Changed'); }), /Changed/);
+  await service.updateHistoryState({ id:'a', estado:'pendiente' }, 'resuelto');
+  assert.deepEqual(writes, [{ estado:'resuelto', updatedAt:'server-time' }]);
+  serverState = 'resuelto';
+  await assert.rejects(service.updateHistoryState({ id:'a', estado:'pendiente' }, 'en proceso'), /Otro usuario/);
+  profile.value = { role:'mecanico' };
+  await assert.rejects(service.updateHistoryState({ id:'a', estado:'resuelto' }, 'pendiente'), /administrador/);
+  assert.equal(writes.length, 1);
+});
 
 test('intervention management filters grouped requests and only takes permitted items once', async t => {
   const originalStorage = globalThis.localStorage;
@@ -436,7 +528,6 @@ test('real shift sheet auto-advances, selects arrow targets and preserves unsave
 });
 import * as faultUtilities from '../src/utils/faultEvents.js';
 import { getSectorScope } from '../src/utils/sectorScope.js';
-import { plantDate } from '../src/utils/plantTime.js';
 
 test('fault event panel handles live updates, filters, stale pages and scope changes', async () => {
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/FaultEventsPanel.vue', import.meta.url), 'utf8'));

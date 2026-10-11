@@ -278,13 +278,14 @@ const onTomarGrupo = async (grupo) => {
     <header class="management-header"><div><h1>Intervenciones</h1><p>Gestión de solicitudes · Prioridad más alta primero</p></div><button v-if="canDespacharIntervencion(userRole)" class="management-button primary" @click="router.push('/llamar')" v-tippy="'Registrar una nueva solicitud de intervención'"><Plus :size="16" />Nueva solicitud</button></header>
 
     <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
-    <div class="management-tabs bg-white border-b border-gray-100 px-2.5 py-2 flex items-center gap-1 sticky top-[54px] z-30">
+    <div class="management-toolbar">
+    <div class="management-tabs flex items-center gap-1" role="group" aria-label="Estado de intervenciones">
       <button
         v-for="tab in tabs"
         :key="tab.id"
         @click="filtroEstado = tab.id"
         :aria-pressed="filtroEstado === tab.id"
-        class="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap min-w-0"
+        class="flex items-center justify-center gap-1 px-2.5 py-1.5 text-[11px] font-bold transition-all whitespace-nowrap min-w-0"
         :class="filtroEstado === tab.id
           ? 'bg-gray-900 text-white shadow-sm'
           : 'bg-gray-100 text-gray-500 hover:bg-gray-200'"
@@ -309,6 +310,7 @@ const onTomarGrupo = async (grupo) => {
     <div class="presentation-switch" role="group" aria-label="Presentación de intervenciones">
       <button :aria-pressed="presentacion === 'table'" @click="presentacion = 'table'" v-tippy="'Ver la lista completa agrupada por máquina'">Tabla</button>
       <button :aria-pressed="presentacion === 'specialty'" @click="presentacion = 'specialty'" v-tippy="'Separar las solicitudes en Mecánico, Eléctrico y Calidad'">Por especialidad</button>
+    </div>
     </div>
     <div class="management-filters">
       <label class="management-search">Buscar<input v-model="busqueda" type="search" placeholder="Máquina, síntoma o persona…" /></label>
@@ -608,8 +610,14 @@ const onTomarGrupo = async (grupo) => {
 </template>
 
 <style scoped>
-.presentation-switch { display:flex; gap:4px; padding:4px; margin:8px 12px; width:fit-content; border:1px solid #e2e8f0; border-radius:8px; background:white; flex-shrink:0; }
-.presentation-switch button,.specialty-selector button { min-height:34px; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; color:#64748b; cursor:pointer; }
+.management-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; padding:6px 12px; background:white; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
+.management-tabs { min-width:0; }
+.management-tabs > button { min-height:32px; border-radius:4px; font-weight:600; }
+.management-tabs > button[aria-pressed="true"] { background:#eef2ff; color:#4338ca; box-shadow:none; }
+.management-tabs > button span { color:inherit; opacity:.75; margin-left:2px; }
+.presentation-switch { display:flex; gap:4px; padding:0 0 0 12px; margin:0; border-left:1px solid #e2e8f0; flex-shrink:0; }
+.presentation-switch button { min-height:32px; border-radius:4px; padding:6px 10px; font-size:12px; font-weight:600; color:#64748b; cursor:pointer; }
+.specialty-selector button { min-height:34px; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:600; color:#64748b; cursor:pointer; }
 .presentation-switch button[aria-pressed="true"],.specialty-selector button[aria-pressed="true"] { color:#4338ca; background:#eef2ff; }
 .presentation-switch button:focus-visible,.specialty-selector button:focus-visible { outline:2px solid #818cf8; outline-offset:1px; }
 .specialty-board { padding:10px 12px; }
@@ -662,8 +670,8 @@ const onTomarGrupo = async (grupo) => {
  .management-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; }
  .management-header h1 { font-size:19px; font-weight:650; color:#0f172a; }
  .management-header p { margin-top:2px; font-size:12px; color:#64748b; }
- .management-tabs { position:static; border:1px solid #e2e8f0; border-radius:9px; padding:6px; flex-shrink:0; }
- .management-tabs > button { min-height:34px; border-radius:7px; font-size:12px; }
+ .management-toolbar { border:1px solid #e2e8f0; border-radius:6px; padding:5px 6px; flex-wrap:nowrap; }
+ .management-tabs > button { font-size:12px; }
  .management-tabs > button[aria-pressed="true"] { background:#eef2ff; color:#4338ca; box-shadow:none; }
  .management-tabs > button:last-child:not([aria-pressed]) { display:none; }
  .management-filters { border:1px solid #e2e8f0; border-radius:9px; flex-shrink:0; }

@@ -129,14 +129,10 @@ const closeMenu = () => {
 };
 
 const openUserProfile = () => {
-  if (userRole.value === 'admin') {
-    router.push('/usuarios');
-    return;
-  }
   const profile = userProfile.value;
   Swal.fire({
     title: 'Mi perfil',
-    text: `${profile?.displayName || user.value?.displayName || 'Usuario'}\n${ROLE_LABEL[userRole.value] || userRole.value || 'Sin rol'}\nSectores: ${(profile?.sectoresAsignados || [profile?.sectorDefault]).filter(Boolean).join(', ') || 'Sin sector asignado'}`,
+    text: `${profile?.displayName || user.value?.displayName || 'Usuario'}\n${profile?.email || user.value?.email || 'Sin correo'}\nRol: ${ROLE_LABEL[userRole.value] || userRole.value || 'Sin rol'}\nSectores: ${(profile?.sectoresAsignados || [profile?.sectorDefault]).filter(Boolean).join(', ') || 'Sin sector asignado'}`,
     confirmButtonText: 'Cerrar',
   });
 };
@@ -570,8 +566,8 @@ const navigateTab = (action) => {
         <div class="w-full relative">
           <button
             @click="openUserProfile"
-            :aria-label="userRole === 'admin' ? 'Gestión de usuarios, perfiles y sectores' : 'Mi perfil'"
-            v-nav-tippy="{ title: userRole === 'admin' ? 'Usuarios y perfiles' : 'Mi perfil', description: userRole === 'admin' ? 'Abre la administración de usuarios, perfiles de rol y configuración de sectores.' : 'Muestra tu rol y los sectores asignados.' }"
+            aria-label="Mi perfil"
+            v-nav-tippy="{ title: 'Mi perfil', description: 'Muestra tu nombre, correo, rol y sectores de la sesión actual.' }"
             class="w-full flex justify-center items-center h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all border border-gray-200/50"
           >
             <User class="w-4 h-4" />

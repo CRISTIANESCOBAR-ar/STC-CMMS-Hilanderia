@@ -21,6 +21,8 @@ export function eventKindConfig(kind = 'faults') {
 export function eventView(event, kind = 'faults') {
   const config = eventKindConfig(kind);
   return { ...event,
+    numeroMaquinaDisplay: /^\d+$/.test(String(event.numeroMaquina ?? '').trim())
+      ? String(Number(String(event.numeroMaquina).trim().slice(-2))) : event.numeroMaquina || '—',
     tipoProblema: config.categories.find(category => category.value === event[config.categoryField])?.label || event[config.categoryField] || 'Sin categoría',
     motivo: kind === 'interventions' ? event.sintomaNombre || event.motivoDescripcion || 'Solicitud de asistencia' : event.motivo,
   };

@@ -67,7 +67,9 @@ const vNavTippy = {
 };
 
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, isNavigationFailure } from 'vue-router';
+import AccountPanel from './components/AccountPanel.vue';
+import { buildPreviewProfile } from './utils/previewProfile';
 import { authService, userRole, userProfile, previewSector } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge, BookMarked } from 'lucide-vue-next';
 import { ROLE_LABEL, ROLE_OPTIONS, SECTOR_OPTIONS, isJefeRole, getQuickActions } from './constants/organization';
@@ -86,55 +88,51 @@ const hasUpdate = ref(false);
 let updateCheckInterval = null;
 let unsubscribeAuth = null;
 
-// ── Vista Previa de Rol (solo admin) ──
-const realAdminRole = ref(null);
-const isPreviewMode = computed(() => realAdminRole.value !== null);
-const pendingPreviewRole = ref('');
-const pendingPreviewSector = ref(SECTOR_OPTIONS[0]);
-
-const startPreview = () => {
-  const role = pendingPreviewRole.value;
-  const sector = pendingPreviewSector.value;
-  if (!role || role === 'admin') return;
-  if (!realAdminRole.value) realAdminRole.value = userRole.value;
-  userRole.value = role;
-  previewSector.value = sector || SECTOR_OPTIONS[0];
-  closeMenu();
-  router.push(getDefaultRouteForUser(role, userProfile.value?.vistasPersonalizadas));
-};
-
-const applyPreview = () => {
-  const newRole = pendingPreviewRole.value;
-  const newSector = pendingPreviewSector.value;
-  if (!newRole || newRole === 'admin') return exitPreview();
-  const roleChanged = userRole.value !== newRole;
-  userRole.value = newRole;
-  previewSector.value = newSector || SECTOR_OPTIONS[0];
-  if (roleChanged) router.push(getDefaultRouteForUser(newRole, userProfile.value?.vistasPersonalizadas));
-};
-
-const exitPreview = () => {
-  if (realAdminRole.value) {
-    userRole.value = realAdminRole.value;
-    realAdminRole.value = null;
-    previewSector.value = null;
-    pendingPreviewRole.value = '';
-    pendingPreviewSector.value = SECTOR_OPTIONS[0];
-    router.push('/');
-  }
-};
+// Preview changes only the in-memory UI identity; Firebase authentication remains unchanged.
+const realAdminRole=ref(null),realProfile=ref(null),showAccount=ref(false),previewBusy=ref(false);
+const isPreviewMode=computed(() => realAdminRole.value!==null);
+let expectedPreviewProfile=null,accountTrigger;
+function clearPreviewState() { realAdminRole.value=null; realProfile.value=null; expectedPreviewProfile=null; previewSector.value=null; }
+watch(userProfile,profile => { if(isPreviewMode.value && profile!==expectedPreviewProfile) clearPreviewState(); });
+async function simulateProfile({ role,sector }) {
+  if(previewBusy.value) return;
+  const administrator=realProfile.value || userProfile.value;
+  let next; try { next=buildPreviewProfile(administrator,role,sector); } catch(failure) { Swal.fire('No se pudo simular',failure.message,'warning'); return; }
+  const previous={ role:userRole.value,profile:userProfile.value,sector:previewSector.value,adminRole:realAdminRole.value,administrator:realProfile.value };
+  previewBusy.value=true;
+  realProfile.value=administrator; realAdminRole.value='admin';
+  userProfile.value=next; expectedPreviewProfile=userProfile.value; userRole.value=role; previewSector.value=sector;
+  const appliedProfile=userProfile.value,owner=user.value?.uid;
+  try {
+    const result=await router.push(getDefaultRouteForUser(role,null));
+    if(isNavigationFailure(result) && result.type!==16) throw new Error('No se cambió el perfil porque la navegación fue cancelada. Guardá o descartá los cambios pendientes.');
+    showAccount.value=false; closeMenu();
+  } catch(failure) {
+    if(userProfile.value===appliedProfile && user.value?.uid===owner) { realProfile.value=previous.administrator; realAdminRole.value=previous.adminRole; userRole.value=previous.role; userProfile.value=previous.profile; expectedPreviewProfile=previous.adminRole ? userProfile.value:null; previewSector.value=previous.sector; }
+    else clearPreviewState();
+    Swal.fire('No se pudo cambiar la vista previa',failure.message,'error');
+  } finally { previewBusy.value=false; }
+}
+async function exitPreview() {
+  if(previewBusy.value || !realProfile.value) return;
+  const previous={ role:userRole.value,profile:userProfile.value,sector:previewSector.value,administrator:realProfile.value };
+  previewBusy.value=true;
+  const administrator=realProfile.value; clearPreviewState(); userProfile.value=administrator; userRole.value=administrator.role;
+  const appliedProfile=userProfile.value,owner=user.value?.uid;
+  try { const result=await router.push('/'); if(isNavigationFailure(result) && result.type!==16) throw new Error('La navegación fue cancelada. Guardá o descartá los cambios pendientes.'); showAccount.value=false; }
+  catch(failure) { if(userProfile.value===appliedProfile && user.value?.uid===owner) { realProfile.value=previous.administrator; realAdminRole.value='admin'; userProfile.value=previous.profile; expectedPreviewProfile=userProfile.value; userRole.value=previous.role; previewSector.value=previous.sector; } else clearPreviewState(); Swal.fire('No se pudo salir de la vista previa',failure.message,'error'); }
+  finally { previewBusy.value=false; }
+}
+function closeAccount() { if(previewBusy.value) return; showAccount.value=false; queueMicrotask(() => accountTrigger?.isConnected && accountTrigger.focus()); }
 
 const closeMenu = () => {
   isMenuOpen.value = false;
 };
 
-const openUserProfile = () => {
-  const profile = userProfile.value;
-  Swal.fire({
-    title: 'Mi perfil',
-    text: `${profile?.displayName || user.value?.displayName || 'Usuario'}\n${profile?.email || user.value?.email || 'Sin correo'}\nRol: ${ROLE_LABEL[userRole.value] || userRole.value || 'Sin rol'}\nSectores: ${(profile?.sectoresAsignados || [profile?.sectorDefault]).filter(Boolean).join(', ') || 'Sin sector asignado'}`,
-    confirmButtonText: 'Cerrar',
-  });
+const openUserProfile = event => {
+  accountTrigger=event?.currentTarget;
+  accountTrigger?._tippyInstance?.clearDelayTimeouts?.(); accountTrigger?._tippyInstance?.hide?.();
+  showAccount.value=true; closeMenu();
 };
 
 const firstNotice = createUpdateNoticeTracker();
@@ -218,8 +216,8 @@ onMounted(() => {
     user.value = currentUser;
     isAuthReady.value = true;
     if (!currentUser) {
-      realAdminRole.value = null;
-      pendingPreviewRole.value = '';
+      clearPreviewState();
+      showAccount.value=false;
     }
     
     if (!currentUser && router.currentRoute.value.meta.requiresAuth) {
@@ -330,7 +328,7 @@ const navigateTab = (action) => {
     />
   </div>
   
-  <div v-else :class="{ 'machine-workspace-shell': ['/', '/llamar', '/intervenciones', '/historico', '/sintomas', '/rondas', '/operarios', '/paros-anudado', '/usuarios', '/maquinas', '/shiftreport'].includes(currentPath) }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
+  <div v-else :inert="showAccount || undefined" :class="{ 'machine-workspace-shell': ['/', '/llamar', '/intervenciones', '/historico', '/sintomas', '/rondas', '/operarios', '/paros-anudado', '/usuarios', '/maquinas', '/shiftreport'].includes(currentPath) }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
     
     <!-- SIDEBAR DESKTOP (App Shell) -->
     <aside v-if="user" class="desktop-navigation hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-4 shadow-sm select-none z-50">
@@ -528,49 +526,16 @@ const navigateTab = (action) => {
 
       <div class="w-8 h-px bg-gray-200 mt-2 mb-3 shrink-0"></div>
 
-      <!-- Simulador de Rol (Desktop) -->
-      <div v-if="!isPreviewMode && (realAdminRole || userRole) === 'admin'" class="w-full px-2 mb-3 relative group">
-        <button class="w-full flex justify-center items-center h-10 rounded-xl bg-orange-50 text-orange-500 hover:bg-orange-100 transition-all border border-orange-200/50">
-          <Eye class="w-4 h-4" />
-        </button>
-        <div class="pointer-events-none absolute left-full ml-3 bottom-0 rounded-lg bg-white border border-gray-200 shadow-xl p-3 opacity-0 group-hover:opacity-100 transition-opacity z-50 flex flex-col gap-2 w-48 pointer-events-auto hover:pointer-events-auto">
-          <p class="text-[10px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-1">
-            <Eye class="w-3 h-3" /> Vista Previa
-          </p>
-          <select
-            v-model="pendingPreviewRole"
-            class="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
-          >
-            <option value="" disabled>Rol...</option>
-            <option v-for="r in ROLE_OPTIONS.filter(r => r.value !== 'admin')" :key="r.value" :value="r.value">{{ r.label }}</option>
-          </select>
-          <select
-            v-model="pendingPreviewSector"
-            class="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
-          >
-            <option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option>
-          </select>
-          <button
-            :disabled="!pendingPreviewRole"
-            @click="startPreview"
-            class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all"
-            :class="pendingPreviewRole ? 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95' : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
-          >
-            Simular
-          </button>
-        </div>
-      </div>
-
       <!-- User & Logout -->
       <div class="w-full px-2 flex flex-col items-center gap-2 relative shrink-0">
         <div class="w-full relative">
           <button
             @click="openUserProfile"
-            aria-label="Mi perfil"
-            v-nav-tippy="{ title: 'Mi perfil', description: 'Muestra tu nombre, correo, rol y sectores de la sesión actual.' }"
+             :aria-label="(realAdminRole || userRole) === 'admin' ? 'Mi perfil y vista previa' : 'Mi perfil'"
+            v-nav-tippy="{ title: (realAdminRole || userRole) === 'admin' ? 'Mi perfil y vista previa' : 'Mi perfil', description: 'Consulta tu sesión y, como administrador, simula los accesos de un rol y sector.' }"
             class="w-full flex justify-center items-center h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all border border-gray-200/50"
           >
-            <User class="w-4 h-4" />
+            <Eye v-if="isPreviewMode" class="w-4 h-4 text-orange-600" /><User v-else class="w-4 h-4" />
           </button>
         </div>
 
@@ -722,25 +687,7 @@ const navigateTab = (action) => {
                 <LogOut class="w-5 h-5 mr-3" /> Cerrar Sesión
               </button>
 
-              <div v-if="!isPreviewMode && (realAdminRole || userRole) === 'admin'" class="mt-3 px-2">
-                <div class="border border-orange-200 rounded-xl p-3 bg-orange-50/50">
-                  <p class="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Eye class="w-3 h-3" /> Vista Previa
-                  </p>
-                  <div class="flex gap-2 mb-2">
-                    <select v-model="pendingPreviewRole" class="flex-1 bg-white border border-orange-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500/20">
-                      <option value="" disabled>Rol...</option>
-                      <option v-for="r in ROLE_OPTIONS.filter(r => r.value !== 'admin')" :key="r.value" :value="r.value">{{ r.label }}</option>
-                    </select>
-                    <select v-model="pendingPreviewSector" class="bg-white border border-orange-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-orange-500/20">
-                      <option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option>
-                    </select>
-                  </div>
-                  <button :disabled="!pendingPreviewRole" @click="startPreview" class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black transition-all" :class="pendingPreviewRole ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-400'">
-                    Simular
-                  </button>
-                </div>
-              </div>
+              <button @click="openUserProfile" class="w-full flex items-center px-4 py-3 rounded-xl text-[15px] font-bold text-slate-600 hover:bg-gray-50"><User class="w-5 h-5 mr-3" />{{ (realAdminRole || userRole)==='admin' ? 'Mi perfil y vista previa':'Mi perfil' }}</button>
             </div>
           </div>
         </transition>
@@ -770,32 +717,11 @@ const navigateTab = (action) => {
       </div>
       
       <!-- 👁 Barra Vista Previa (admin only) -->
-      <div v-if="isPreviewMode" class="fixed bottom-0 inset-x-0 z-[99] bg-orange-500 text-white px-3 py-1.5 shadow-lg shadow-orange-900/30">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <Eye class="w-3.5 h-3.5 shrink-0 animate-pulse" />
-            <span class="text-[10px] font-black tracking-wide truncate">PREVIA</span>
-          </div>
-          <div class="flex items-center gap-1.5 shrink-0">
-            <select v-model="pendingPreviewRole" class="bg-orange-600 text-white text-[10px] font-bold rounded px-1 py-1 border border-orange-400 outline-none cursor-pointer max-w-[110px]">
-              <option v-for="r in ROLE_OPTIONS.filter(r => r.value !== 'admin')" :key="r.value" :value="r.value">{{ r.label }}</option>
-            </select>
-            <select v-model="pendingPreviewSector" class="bg-orange-600 text-white text-[10px] font-bold rounded px-1 py-1 border border-orange-400 outline-none cursor-pointer">
-              <option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option>
-            </select>
-            <button @click="applyPreview" class="px-2 py-1 bg-orange-700 text-white rounded text-[10px] font-black hover:bg-orange-800 transition-all active:scale-95 border border-orange-400">
-              Aplicar
-            </button>
-            <button @click="exitPreview" class="flex items-center gap-1 px-2 py-1 bg-white text-orange-600 rounded text-[10px] font-black hover:bg-orange-50 transition-all active:scale-95">
-              <EyeOff class="w-3 h-3" />
-              Salir
-            </button>
-          </div>
-        </div>
-      </div>
+      <div v-if="isPreviewMode" class="preview-status"><Eye class="w-4 h-4 shrink-0" /><span class="preview-label">Simulando: <strong>{{ ROLE_LABEL[userRole] || userRole }}</strong> · {{ previewSector }}</span><button @click="openUserProfile" :disabled="previewBusy">Cambiar perfil</button><button @click="exitPreview" :disabled="previewBusy"><EyeOff class="w-3.5 h-3.5" />Salir</button></div>
 
     </div>
   </div>
+<AccountPanel v-if="showAccount" :profile="realProfile || userProfile" :name="user?.displayName" :email="user?.email" :can-preview="(realAdminRole || userRole)==='admin'" :active="isPreviewMode" :active-role="isPreviewMode ? userRole:''" :active-sector="previewSector || ''" :busy="previewBusy" @close="closeAccount" @simulate="simulateProfile" @stop="exitPreview" />
 </template>
 
 <style scoped>
@@ -809,4 +735,8 @@ const navigateTab = (action) => {
   .machine-workspace-shell .mobile-navigation { display: none; }
   .machine-workspace-shell .app-workspace { padding-bottom: var(--desktop-bottom, 0px); }
 }
+</style>
+
+<style scoped>
+.preview-status{position:fixed;bottom:0;inset-inline:0;z-index:99;height:40px;padding:5px 12px;display:flex;align-items:center;gap:8px;background:#fff7ed;color:#9a3412;border-top:1px solid #fed7aa;font-size:12px}.preview-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-status button{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;min-height:28px;border:1px solid #fdba74;border-radius:4px;background:white;font-size:11px;font-weight:600;white-space:nowrap}.preview-status button:disabled{opacity:.4}
 </style>

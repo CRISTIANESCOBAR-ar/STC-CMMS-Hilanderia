@@ -1006,3 +1006,36 @@ test('user administration renders all tabs and keeps role/sector drafts isolated
   failLoad=true; await state.reloadAll(); assert.equal(state.isLoading,false); assert.match(state.loadError,/configuración/); failLoad=false; await state.reloadAll(); assert.equal(state.loadError,'');
   assert.deepEqual(errors,[]); app.unmount();
 });
+
+test('preview applies role sectors and defaults, restores on cancellation and never restores after logout', async () => {
+  const source=fs.readFileSync(new URL('../src/constants/organization.js',import.meta.url),'utf8');
+  const names=[...source.matchAll(/export const (\w+)/g)].map(match => match[1]);
+  const organization=evaluate(source.replace(/export const/g,'const')+`\nreturn { ${names.join(',')} };`,{ '../utils/plantTime':{ plantShift:() => 'A' } });
+  const builder=evaluate(fs.readFileSync(new URL('../src/utils/previewProfile.js',import.meta.url),'utf8').replace('export function','function')+'\nreturn { buildPreviewProfile };',{ '../constants/organization':organization }).buildPreviewProfile;
+  const administrator={ role:'admin',sectorDefault:'TEJEDURIA',sectoresAsignados:['TEJEDURIA','HILANDERIA'],alcance:'global',vistasPersonalizadas:['usuarios'],permisosPersonalizados:{ configSistema:true } };
+  assert.throws(() => builder({ role:'mecanico' },'inspector','TEJEDURIA'),/administración/);
+  assert.throws(() => builder(administrator,'unknown','TEJEDURIA'),/válidos/);
+  const profile=Vue.ref(administrator),role=Vue.ref('admin'),sector=Vue.ref(null),user=Vue.ref({ uid:'admin' });
+  let navigate=async () => undefined;
+  const appSource=fs.readFileSync(new URL('../src/App.vue',import.meta.url),'utf8');
+  const code=appSource.slice(appSource.indexOf('// Preview changes'),appSource.indexOf('const closeMenu'));
+  const preview=new Function('ref','computed','watch','userProfile','userRole','previewSector','user','buildPreviewProfile','router','getDefaultRouteForUser','isNavigationFailure','Swal','closeMenu',code+'\nreturn { simulateProfile,exitPreview,isPreviewMode,realProfile,previewBusy };')(Vue.ref,Vue.computed,Vue.watch,profile,role,sector,user,builder,{ push:path => navigate(path) },()=>'/patrulla',result=>Boolean(result?.type),{ fire:async () => {} },()=>{});
+  await preview.simulateProfile({ role:'inspector',sector:'HILANDERIA' }); assert.equal(role.value,'inspector'); assert.equal(profile.value.role,'inspector'); assert.deepEqual(profile.value.sectoresAsignados,['HILANDERIA']); assert.equal(profile.value.vistasPersonalizadas,null); assert.equal(profile.value.permisosPersonalizados,null); assert.equal(profile.value.alcance,'sector'); assert.equal(preview.isPreviewMode.value,true);
+  navigate=async () => ({ type:4 }); await preview.simulateProfile({ role:'auxiliar',sector:'TEJEDURIA' }); assert.equal(role.value,'inspector'); assert.equal(sector.value,'HILANDERIA');
+  navigate=async () => undefined; await preview.exitPreview(); assert.equal(role.value,'admin'); assert.deepEqual(profile.value.vistasPersonalizadas,['usuarios']); assert.equal(preview.isPreviewMode.value,false);
+  let rejectNavigation; navigate=() => new Promise((resolve,reject) => { rejectNavigation=reject; });
+  const changing=preview.simulateProfile({ role:'auxiliar',sector:'TEJEDURIA' });
+  user.value=null; profile.value=null; role.value=null; await Vue.nextTick(); rejectNavigation(new Error('Signed out')); await changing;
+  assert.equal(profile.value,null); assert.equal(role.value,null); assert.equal(preview.isPreviewMode.value,false); assert.equal(preview.previewBusy.value,false);
+});
+
+test('account panel displays configured role views and emits one role/sector simulation request', async () => {
+  const source=fs.readFileSync(new URL('../src/constants/organization.js',import.meta.url),'utf8'); const names=[...source.matchAll(/export const (\w+)/g)].map(match => match[1]);
+  const organization=evaluate(source.replace(/export const/g,'const')+`\nreturn { ${names.join(',')} };`,{ '../utils/plantTime':{ plantShift:() => 'A' } });
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/AccountPanel.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'account-test' }),template=compileTemplate({ id:'account-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } }); assert.deepEqual(template.errors,[]);
+  const dependencies={ vue:Vue,'lucide-vue-next':icons,'../constants/organization':organization,'../utils/tooltipDirective':{ vTippy },'../services/profileService':{ getEffectiveVistas:()=>['shiftreport','operarios'],getEffectivePermisos:()=>({ verCalidad:true,configSistema:false }),getEffectiveSectorDefault:()=> 'TEJEDURIA' } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(),app=renderer.createApp(component,{ canPreview:true,profile:{ role:'admin',nombre:'Administrador',sectoresAsignados:['TEJEDURIA'] } }),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root);
+  const state=root._vnode.component.setupState; state.role='auxiliar'; state.chooseRole(); await Vue.nextTick(); assert.equal(state.sector,'TEJEDURIA'); assert.deepEqual(state.views.map(view=>view.slug),['shiftreport','operarios']); assert.equal(state.permissions.length,1); assert.deepEqual(errors,[]); app.unmount();
+});

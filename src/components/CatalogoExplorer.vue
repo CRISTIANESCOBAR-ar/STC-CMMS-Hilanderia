@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { createLatestLoad } from '../utils/latestLoad';
 import { maquinaService } from '../services/maquinaService';
 import { catalogoService } from '../services/catalogoService';
@@ -7,33 +7,16 @@ import { MOTIVOS_POR_TIPO, MOTIVOS_DEFAULT } from '../constants/motivos';
 import { getMotivosFirestore, updateCategoriaMotivos } from '../services/motivosService';
 import { userRole } from '../services/authService';
 import Swal from 'sweetalert2';
-import tippy from 'tippy.js';
+import { vTippy } from '../utils/tooltipDirective';
+import { onBeforeRouteLeave } from 'vue-router';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light-border.css';
 import {
   ChevronRight, ChevronDown, BookOpen, Wrench, Zap,
   CheckCircle2, XCircle, ClipboardList, Loader2, Info,
   ChevronUp, BookMarked, Settings2, Eye, Pencil, Plus, Trash2, Save, X,
-  ArrowLeft, ToggleLeft, ToggleRight, GripVertical, EyeOff
+  ArrowLeft, ToggleLeft, ToggleRight, GripVertical, EyeOff, Search
 } from 'lucide-vue-next';
-
-// ── Directiva v-tippy ─────────────────────────────────────────────────────────
-const vTippy = {
-  mounted(el, binding) {
-    tippy(el, {
-      content: binding.value,
-      theme: 'light-border',
-      duration: [120, 100],
-      placement: binding.arg || 'top',
-    });
-  },
-  updated(el, binding) {
-    if (el._tippy) el._tippy.setContent(binding.value);
-  },
-  unmounted(el) {
-    if (el._tippy) el._tippy.destroy();
-  },
-};
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 const maquinas       = ref([]);
@@ -66,6 +49,9 @@ onUnmounted(() => { machineLoader.invalidate(); catalogLoader.invalidate(); });
 const tipoSeleccionado  = ref(null);
 const modeloSeleccionado = ref(null);
 const tabActiva         = ref('catalogo'); // 'catalogo' | 'motivos' | 'maquinas'
+const searchCatalog=ref(''),viewerDialog=ref(null),editorDialog=ref(null),editorInitial=ref('');
+const normalize=value=>String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+let modalTrigger;
 const filtroProc        = ref(null);      // null | 'con' | 'sin'
 const pasoMobile        = ref('tipos');   // 'tipos' | 'modelos' | 'detalle'
 
@@ -112,7 +98,9 @@ const modelosDelTipo = computed(() => {
 });
 
 // ── Selección de Tipo ─────────────────────────────────────────────────────────
-const seleccionarTipo = (tipo) => {
+const seleccionarTipo = async (tipo) => {
+  if(tipoSeleccionado.value===tipo || writeBusy.value) return;
+  if(hasDrafts.value && !await discardAll()) return;
   if (tipoSeleccionado.value === tipo) return;
   catalogLoader.invalidate();
   cargandoCat.value = false;
@@ -132,6 +120,9 @@ const seleccionarTipo = (tipo) => {
 
 // ── Selección de Modelo ───────────────────────────────────────────────────────
 const seleccionarModelo = async (modelo) => {
+  if(writeBusy.value || modeloSeleccionado.value===modelo && hasDrafts.value) return;
+  if(hasDrafts.value && !await discardAll()) return;
+  searchCatalog.value='';
   modeloSeleccionado.value = modelo;
   catalogoItems.value = [];
   seccionesExpandidas.value = new Set();
@@ -153,7 +144,8 @@ const catalogoEstructura = computed(() => {
     : filtroProc.value === 'con'
       ? visibles.filter(i => Array.isArray(i.procedimiento) && i.procedimiento.length > 0)
       : visibles.filter(i => !Array.isArray(i.procedimiento) || i.procedimiento.length === 0);
-  itemsFiltrados.forEach(item => {
+  const searched=itemsFiltrados.filter(item=>!searchCatalog.value.trim() || normalize([item.denominacion,item.numeroCatalogo,item.numeroArticulo,item.seccion,item.grupo].join(' ')).includes(normalize(searchCatalog.value.trim())));
+  searched.forEach(item => {
     const sec = item.seccion || 'Sin sección';
     const grp = String(item.grupo || 'Sin grupo');
     if (!mapa[sec]) mapa[sec] = {};
@@ -238,6 +230,7 @@ const iniciarEditMotivos = (cat) => {
 };
 
 const cancelarEditMotivos = () => {
+  if(writeBusy.value) return;
   motivoEditCat.value = null;
   motivoEditLista.value = [];
 };
@@ -259,6 +252,7 @@ const toggleVisible = (idx) => {
 };
 
 const guardarMotivos = async () => {
+  if(writeBusy.value || userRole.value!=='admin') return;
   guardandoMotivos.value = true;
   try {
     await updateCategoriaMotivos(
@@ -301,26 +295,33 @@ const maquinasSinModelo = computed(() => {
 
 // ── Viewer de procedimiento ───────────────────────────────────────────────────
 const abrirViewer = (item) => {
+  modalTrigger=globalThis.document?.activeElement;
   itemViewer.value = item;
   showViewer.value = true;
 };
 
 // ── Editor CRUD de procedimiento ──────────────────────────────────────────────
 const abrirEditor = (item) => {
+  if(writeBusy.value || userRole.value!=='admin') return;
+  modalTrigger=globalThis.document?.activeElement;
   editandoItem.value = item;
   editandoPasos.value = (item.procedimiento || []).map(p => ({ ...p }));
+  editorInitial.value=JSON.stringify(editandoPasos.value);
   showEditor.value = true;
 };
 
 const agregarPaso = () => {
+  if(writeBusy.value) return;
   editandoPasos.value.push({ texto: '', imagenUrl: null });
 };
 
 const eliminarPaso = (i) => {
+  if(writeBusy.value) return;
   editandoPasos.value.splice(i, 1);
 };
 
 const guardarEdicion = async () => {
+  if(writeBusy.value || userRole.value!=='admin' || !editandoItem.value) return;
   const pasosFiltrados = editandoPasos.value.filter(p => p.texto?.trim());
   guardando.value = true;
   try {
@@ -336,6 +337,7 @@ const guardarEdicion = async () => {
   }
 };// ── CRUD Catálogo ─────────────────────────────────────────────────────────
 const catIniciarEdicion = (item) => {
+  if(writeBusy.value) return;
   catEditando.value = {
     id: item.id,
     denominacion: item.denominacion || '',
@@ -344,10 +346,10 @@ const catIniciarEdicion = (item) => {
     visible: item.visible !== false,
   };
 };
-const catCancelarEdicion = () => { catEditando.value = null; };
+const catCancelarEdicion = () => { if(!writeBusy.value) catEditando.value = null; };
 
 const catGuardarEdicion = async () => {
-  if (!catEditando.value) return;
+  if (!catEditando.value || writeBusy.value || userRole.value!=='admin') return;
   catGuardando.value = true;
   const { id, ...campos } = catEditando.value;
   try {
@@ -364,6 +366,8 @@ const catGuardarEdicion = async () => {
 };
 
 const catToggleVisible = async (item) => {
+  if(writeBusy.value || userRole.value!=='admin') return;
+  catGuardando.value=true;
   const newVisible = item.visible === false;
   try {
     await catalogoService.toggleVisibleItem(item.id, newVisible);
@@ -371,16 +375,17 @@ const catToggleVisible = async (item) => {
     if (idx !== -1) catalogoItems.value[idx] = { ...catalogoItems.value[idx], visible: newVisible };
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Error', text: e.message });
-  }
+  } finally { catGuardando.value=false; }
 };
 
 const catAbrirNuevo = (seccion, grupo) => {
+  if(writeBusy.value) return;
   catNuevoForm.value = { seccion, grupo, denominacion: '', numeroCatalogo: '', numeroArticulo: '' };
 };
-const catCancelarNuevo = () => { catNuevoForm.value = null; };
+const catCancelarNuevo = () => { if(!writeBusy.value) catNuevoForm.value = null; };
 
 const catCrearItem = async () => {
-  if (!catNuevoForm.value?.denominacion?.trim()) return;
+  if (!catNuevoForm.value?.denominacion?.trim() || writeBusy.value || userRole.value!=='admin') return;
   catGuardando.value = true;
   try {
     const datos = {
@@ -416,10 +421,42 @@ const catEliminar = async (item) => {
     Swal.fire({ icon: 'error', title: 'Error', text: e.message });
   }
 };
+const editorDirty=computed(()=>showEditor.value && JSON.stringify(editandoPasos.value)!==editorInitial.value);
+const writeBusy=computed(()=>guardando.value || catGuardando.value || guardandoMotivos.value);
+const hasDrafts=computed(()=>editorDirty.value || !!catEditando.value || !!catNuevoForm.value || !!motivoEditCat.value);
+async function closeEditor() {
+  if(writeBusy.value) return;
+  if(editorDirty.value && !(await Swal.fire({ title:'¿Descartar cambios del procedimiento?',text:'Los pasos todavía no se guardaron.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Seguir editando' })).isConfirmed) return;
+  showEditor.value=false;
+}
+async function discardAll() {
+  if(writeBusy.value) return false;
+  if(hasDrafts.value && !(await Swal.fire({ title:'¿Descartar los formularios abiertos?',text:'Se perderán los cambios que todavía no se guardaron.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Cancelar' })).isConfirmed) return false;
+  showEditor.value=false; catEditando.value=null; catNuevoForm.value=null; motivoEditCat.value=null; return true;
+}
+function closeViewer() { showViewer.value=false; }
+async function typeSelect(event) { await seleccionarTipo(event.target.value); event.target.value=tipoSeleccionado.value || ''; }
+async function modelSelect(event) { await seleccionarModelo(event.target.value); event.target.value=modeloSeleccionado.value || ''; }
+function modalKey(event) {
+  if(event.key==='Escape') { event.stopPropagation(); showEditor.value ? closeEditor():closeViewer(); }
+  if(event.key!=='Tab') return;
+  const dialog=showEditor.value ? editorDialog.value:viewerDialog.value;
+  const nodes=[...(dialog?.querySelectorAll('button:not(:disabled),textarea:not(:disabled),input:not(:disabled)') || [])].filter(node=>node.getClientRects().length);
+  const first=nodes[0],last=nodes.at(-1),active=globalThis.document?.activeElement;
+  if(!first) { event.preventDefault(); return; }
+  if(event.shiftKey && (active===first || !nodes.includes(active))) { event.preventDefault(); last.focus(); }
+  else if(!event.shiftKey && (active===last || !nodes.includes(active))) { event.preventDefault(); first.focus(); }
+}
+watch([showViewer,showEditor],async ([viewer,editor])=>{ await nextTick(); if(viewer || editor) (editor ? editorDialog.value:viewerDialog.value)?.focus?.(); else if(modalTrigger?.isConnected) modalTrigger.focus(); });
+watch(searchCatalog,()=>{ if(searchCatalog.value.trim()) expandirTodo(); });
+function beforeUnload(event) { if(writeBusy.value || hasDrafts.value) { event.preventDefault(); event.returnValue=''; } }
+globalThis.window?.addEventListener('beforeunload',beforeUnload);
+onUnmounted(()=>globalThis.window?.removeEventListener('beforeunload',beforeUnload));
+onBeforeRouteLeave(()=>writeBusy.value ? false : hasDrafts.value ? discardAll():true);
 </script>
 
 <template>
-  <div class="flex flex-col h-screen bg-gray-50 overflow-hidden">
+  <div class="catalog-page catalog-style" :inert="showViewer || showEditor || writeBusy || undefined">
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
     <div class="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shrink-0">
@@ -427,13 +464,13 @@ const catEliminar = async (item) => {
       <button
         v-if="pasoMobile !== 'tipos'"
         @click="pasoMobile === 'detalle' ? (pasoMobile = 'modelos') : (pasoMobile = 'tipos', tipoSeleccionado = null, modeloSeleccionado = null, catalogoItems = [])"
-        class="sm:hidden p-1 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+        class="md:hidden p-1 -ml-1 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
       >
         <ArrowLeft class="w-5 h-5" />
       </button>
-      <BookMarked class="w-5 h-5 text-indigo-600 hidden sm:block" />
+      <BookMarked class="w-5 h-5 text-indigo-600 hidden md:block" />
       <!-- Breadcrumb mobile -->
-      <div class="flex-1 sm:hidden">
+      <div class="flex-1 md:hidden">
         <h1 class="font-bold text-gray-800 text-base leading-tight">
           <span v-if="pasoMobile === 'tipos'">Explorador de Catálogo</span>
           <span v-else-if="pasoMobile === 'modelos'">{{ tipoSeleccionado }}</span>
@@ -443,7 +480,8 @@ const catEliminar = async (item) => {
         <p v-else-if="pasoMobile === 'detalle'" class="text-xs text-gray-400">{{ tipoSeleccionado }}</p>
       </div>
       <!-- Título normal desktop -->
-      <h1 class="font-bold text-gray-800 text-base hidden sm:block">Explorador de Catálogo</h1>
+      <h1 class="font-bold text-gray-800 text-base hidden md:block">Explorador de Catálogo</h1>
+      <div v-if="modeloSeleccionado && tabActiva==='catalogo'" class="catalog-search"><Search /><input v-model="searchCatalog" aria-label="Buscar denominación, catálogo o artículo" placeholder="Buscar pieza, catálogo o artículo…" /></div>
       <span v-if="!cargandoMaq" class="ml-auto text-xs text-gray-400">
         {{ maquinas.length }} máquinas · {{ tiposDisponibles.length }} tipos
       </span>
@@ -454,11 +492,13 @@ const catEliminar = async (item) => {
       <button @click="cargarMaquinas" class="mt-2 underline font-semibold">Reintentar carga de máquinas</button>
     </div>
 
+    <div class="compact-selectors"><label>Tipo<select :value="tipoSeleccionado || ''" :disabled="writeBusy" @change="typeSelect"><option value="" disabled>Seleccionar</option><option v-for="option in tiposDisponibles" :key="option.tipo" :value="option.tipo">{{ option.tipo }}</option></select></label><label>Modelo<select :value="modeloSeleccionado || ''" :disabled="writeBusy || !tipoSeleccionado" @change="modelSelect"><option value="" disabled>Seleccionar</option><option v-for="model in modelosDelTipo" :key="model">{{ model }}</option></select></label></div>
+<p v-if="modeloSeleccionado && tabActiva==='catalogo' && !cargandoCat && catalogoItems.length && !catalogoEstructura.length" class="catalog-empty-search" role="status">No hay piezas que coincidan con los filtros.</p>
     <!-- ── Layout DESKTOP: 3 columnas ──────────────────────────────────────── -->
-    <div class="hidden sm:flex flex-1 overflow-hidden">
+    <div class="catalog-desktop hidden md:flex flex-1 overflow-hidden min-h-0">
 
       <!-- COLUMNA 1: Tipos ──────────────────────────────────────────────────── -->
-      <div class="w-40 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
+      <div class="catalog-types w-40 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
         <div class="p-2 border-b border-gray-100">
           <p class="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Tipo</p>
         </div>
@@ -487,7 +527,7 @@ const catEliminar = async (item) => {
       </div>
 
       <!-- COLUMNA 2: Modelos ────────────────────────────────────────────────── -->
-      <div class="w-44 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
+      <div class="catalog-models w-44 shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
         <div class="p-2 border-b border-gray-100">
           <p class="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Modelo</p>
         </div>
@@ -547,7 +587,7 @@ const catEliminar = async (item) => {
 
         <template v-else>
           <!-- Cabecera del modelo -->
-          <div class="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 py-3">
+          <div class="model-toolbar sticky top-0 bg-white border-b border-gray-200 z-10 px-4 py-3">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h2 class="font-bold text-gray-800">{{ modeloSeleccionado }}</h2>
@@ -557,7 +597,7 @@ const catEliminar = async (item) => {
               <!-- Stats / Filtros -->
               <div v-if="statsModelo.total > 0" class="flex gap-2 text-xs flex-wrap">
                 <button
-                  @click="filtroProc = filtroProc === null ? null : null; filtroProc = null"
+                  @click="filtroProc = null"
                   class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors"
                   :class="filtroProc === null ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
                 >
@@ -624,6 +664,7 @@ const catEliminar = async (item) => {
             </div>
 
             <template v-else>
+              
               <!-- Acciones expandir/colapsar -->
               <div class="flex justify-end gap-2 mb-3">
                 <button @click="expandirTodo" class="text-xs text-indigo-600 hover:underline flex items-center gap-1">
@@ -1043,7 +1084,7 @@ const catEliminar = async (item) => {
     </div>
 
     <!-- ── Layout MOBILE: drill-down paso a paso ───────────────────────────── -->
-    <div class="sm:hidden flex-1 overflow-hidden flex flex-col">
+    <div class="md:hidden flex-1 overflow-hidden flex flex-col">
 
       <!-- PASO 1: Lista de Tipos -->
       <div v-if="pasoMobile === 'tipos'" class="flex-1 overflow-y-auto">
@@ -1397,10 +1438,10 @@ const catEliminar = async (item) => {
     <Transition name="fade">
       <div
         v-if="showViewer && itemViewer"
-        class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
-        @click.self="showViewer = false"
+        class="catalog-overlay catalog-style fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        @click.self="closeViewer"
       >
-        <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[85vh] flex flex-col">
+        <div ref="viewerDialog" role="dialog" aria-modal="true" aria-label="Procedimiento" tabindex="-1" @keydown="modalKey" class="catalog-viewer bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[85vh] flex flex-col">
           <!-- Header -->
           <div class="p-4 border-b border-gray-100 flex items-start justify-between shrink-0">
             <div class="flex-1 min-w-0 pr-3">
@@ -1421,7 +1462,7 @@ const catEliminar = async (item) => {
                 </span>
               </div>
             </div>
-            <button @click="showViewer = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar'">
+            <button @click="closeViewer" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar'">
               <X class="w-4 h-4" />
             </button>
           </div>
@@ -1469,7 +1510,7 @@ const catEliminar = async (item) => {
             >
               <Pencil class="w-4 h-4" /> Editar
             </button>
-            <button @click="showViewer = false" class="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm">
+            <button @click="closeViewer" class="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm">
               Cerrar
             </button>
           </div>
@@ -1483,10 +1524,10 @@ const catEliminar = async (item) => {
     <Transition name="fade">
       <div
         v-if="showEditor && editandoItem"
-        class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
-        @click.self="showEditor = false"
+        class="catalog-overlay catalog-style fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
+        @click.self="closeEditor"
       >
-        <div class="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
+        <div ref="editorDialog" role="dialog" aria-modal="true" aria-label="Editar procedimiento" tabindex="-1" @keydown="modalKey" class="catalog-editor bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
           <!-- Header editor -->
           <div class="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
             <div>
@@ -1496,7 +1537,7 @@ const catEliminar = async (item) => {
               <h3 class="text-sm font-black text-gray-800 leading-tight mt-0.5">{{ editandoItem.denominacion }}</h3>
               <p class="text-xs text-gray-400 mt-0.5">{{ editandoItem.seccion }} · Grupo {{ editandoItem.grupo }}</p>
             </div>
-            <button @click="showEditor = false" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar sin guardar'">
+            <button @click="closeEditor" class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors shrink-0" v-tippy="'Cerrar sin guardar'">
               <X class="w-4 h-4" />
             </button>
           </div>
@@ -1541,7 +1582,7 @@ const catEliminar = async (item) => {
           <!-- Footer editor -->
           <div class="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 flex gap-2 shrink-0">
             <button
-              @click="showEditor = false"
+              @click="closeEditor"
               class="flex-none px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
             >
               Cancelar
@@ -1565,4 +1606,9 @@ const catEliminar = async (item) => {
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>
+<style scoped>
+.catalog-page{height:100%;min-height:0;display:flex;flex-direction:column;background:#f8fafc;overflow:hidden;color:#334155;font-size:13px}.catalog-page>div:first-child{padding:10px 16px;flex-wrap:wrap;gap:10px}.catalog-page>div:first-child h1{font-size:19px;font-weight:700}.catalog-desktop>div:last-child{min-width:0;min-height:0}.catalog-types{width:145px}.catalog-models{width:185px}.catalog-models :deep(.truncate){white-space:normal;overflow-wrap:anywhere}.catalog-search{position:relative;flex:1;min-width:200px;max-width:360px;margin-left:auto}.catalog-search svg{position:absolute;left:10px;top:10px;width:16px;height:16px;color:#94a3b8}.catalog-search input{width:100%;padding-left:33px!important}.compact-selectors{display:none;padding:9px 12px;gap:10px;border-bottom:1px solid #e2e8f0;background:white}.compact-selectors label{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b}.compact-selectors select{max-width:290px}.model-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px}.model-toolbar>div:first-child{display:contents}.model-toolbar>div:last-child{margin-top:0!important;margin-left:auto}.model-toolbar h2{font-size:17px;font-weight:700}.catalog-empty-search{padding:18px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;border-radius:5px;font-size:13px;margin-bottom:12px}.catalog-style :deep(.rounded-2xl){border-radius:7px}.catalog-style :deep(.rounded-xl),.catalog-style :deep(.rounded-lg){border-radius:5px}.catalog-style :deep(.rounded-full:not([class*="w-6"])){border-radius:4px}.catalog-style :deep(.font-black){font-weight:600}.catalog-style :deep(.text-gray-400){color:#64748b}.catalog-style :deep([class*="text-[10px]"]){font-size:11px;line-height:1.5}.catalog-style :deep(.tracking-widest),.catalog-style :deep(.tracking-wider){letter-spacing:.02em}.catalog-style :deep(input),.catalog-style :deep(select),.catalog-style :deep(textarea){min-height:34px;border:1px solid #cbd5e1;border-radius:5px;padding:7px 9px;font-size:13px;min-width:0}.catalog-style :deep(button[class*="px-"]){min-height:32px;border-radius:5px}.catalog-style :deep(button:disabled){opacity:.4;cursor:not-allowed}.catalog-style :deep(button:focus-visible),.catalog-style :deep(input:focus-visible),.catalog-style :deep(select:focus-visible),.catalog-style :deep(textarea:focus-visible){outline:2px solid #60a5fa;outline-offset:2px}.catalog-overlay{padding:16px;background:rgba(15,23,42,.4);backdrop-filter:none}.catalog-overlay .catalog-viewer{width:min(900px,100%);max-width:900px;max-height:calc(100dvh - 32px);border-radius:9px}.catalog-overlay .catalog-editor{width:min(1000px,100%);max-width:1000px;max-height:calc(100dvh - 32px);border-radius:9px}.catalog-overlay :deep(h3){font-size:17px;font-weight:700}.catalog-overlay :deep(img){max-height:420px;background:#f8fafc}.catalog-overlay :deep(textarea){min-height:90px;line-height:1.6}.catalog-overlay :deep(.bg-gray-900.text-white){background:#2563eb}.catalog-page :deep(li p.text-sm.font-medium){font-size:14px;font-weight:600;color:#334155}.catalog-page :deep(th){background:#f1f5f9;color:#475569;font-size:11px}.catalog-page :deep(td){overflow-wrap:anywhere}.catalog-page :deep(.p-4){padding:12px}
+@media(min-width:768px) and (max-width:1100px){.catalog-types,.catalog-models{display:none}.compact-selectors{display:flex;flex-wrap:wrap}.compact-selectors label{flex:1}.compact-selectors select{width:100%;max-width:none}.catalog-search{max-width:330px}.model-toolbar>div:last-child{margin-left:0}.catalog-overlay .catalog-editor{width:min(850px,100%)}}
+@media(max-width:767px){.catalog-page>div:first-child{padding:10px}.catalog-page>div:first-child h1{font-size:17px}.catalog-search{max-width:none;flex-basis:100%;order:2}.catalog-overlay{padding:10px;align-items:center}.catalog-overlay .catalog-viewer,.catalog-overlay .catalog-editor{max-height:calc(100dvh - 20px);border-radius:8px}.catalog-overlay :deep(img){max-height:300px}.catalog-page :deep(.p-4){padding:10px}}
 </style>

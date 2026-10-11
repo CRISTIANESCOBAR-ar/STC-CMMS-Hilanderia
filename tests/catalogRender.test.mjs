@@ -299,22 +299,23 @@ test('intervention detail modal preserves dirty diagnosis on snapshots and failu
   app.unmount(); assert.deepEqual(errors.map(error => error.message), []);
 });
 
-test('real catalog template renders loading, data and model changes for admin without Vue errors', async () => {
+test('real catalog template renders loading, search, data and model changes for admin without Vue errors', async () => {
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/CatalogoExplorer.vue', import.meta.url), 'utf8'));
   const script = compileScript(descriptor, { id: 'catalog-render-test' });
   const template = compileTemplate({ id: 'catalog-render-test', source: descriptor.template.content,
     compilerOptions: { bindingMetadata: script.bindings } });
   assert.deepEqual(template.errors, []);
-  let finish;
+  let finish,confirm=false,failSave=true; const procedureWrites=[];
   const dependencies = {
-    vue: Vue, 'lucide-vue-next': icons,
+    // The in-memory host verifies Vue rendering and editing, not browser CSS animations.
+    vue: { ...Vue,Transition:{ props:['name'],setup:(_, { slots })=>()=>slots.default?.() } }, 'lucide-vue-next': icons, 'vue-router':{ onBeforeRouteLeave() {} },'../utils/tooltipDirective':{ vTippy },
     '../utils/latestLoad': { createLatestLoad },
     '../services/maquinaService': { maquinaService: { obtenerMaquinasOnce: async () => [{ tipo: 'TELAR', modelo: 'M1' }, { tipo: 'TELAR', modelo: 'M2' }] } },
-    '../services/catalogoService': { catalogoService: { obtenerPorModelo: () => new Promise(resolve => { finish = resolve; }) } },
+    '../services/catalogoService': { catalogoService: { obtenerPorModelo: () => new Promise(resolve => { finish = resolve; }),actualizarProcedimiento:async(id,steps)=>{ procedureWrites.push({ id,steps }); if(failSave) throw new Error('Offline'); } } },
     '../constants/motivos': { MOTIVOS_POR_TIPO: {}, MOTIVOS_DEFAULT: {} },
     '../services/motivosService': { getMotivosFirestore: async () => null, updateCategoriaMotivos() {} },
     '../services/authService': { userRole: Vue.ref('admin') },
-    sweetalert2: { fire: async () => ({}) }, 'tippy.js': () => ({}),
+    sweetalert2: { fire: async () => ({ isConfirmed:confirm }) }, 'tippy.js': () => ({}),
   };
   const component = evaluate(script.content, dependencies);
   component.render = evaluate(template.code, dependencies);
@@ -331,7 +332,11 @@ test('real catalog template renders loading, data and model changes for admin wi
   finish([{ id: 'part1', seccion: 'Motor', grupo: '1', denominacion: 'Pieza', procedimiento: [] }]);
   await loading;
   await Vue.nextTick();
-  assert.equal(state.catalogoItems.length, 1);
+  assert.equal(state.catalogoItems.length, 1); state.searchCatalog='PIEZA'; assert.equal(state.catalogoEstructura.length,1); state.searchCatalog='inexistente'; assert.equal(state.catalogoEstructura.length,0); state.searchCatalog='';
+  state.abrirEditor(state.catalogoItems[0]); state.editandoPasos.push({ texto:'Paso nuevo',imagenUrl:null });
+  await state.guardarEdicion(); assert.equal(state.showEditor,true); assert.equal(state.editorDirty,true); assert.equal(state.editandoPasos[0].texto,'Paso nuevo');
+  await state.closeEditor(); assert.equal(state.showEditor,true); await state.seleccionarModelo('M2'); assert.equal(state.modeloSeleccionado,'M1');
+  failSave=false; await state.guardarEdicion(); assert.equal(state.showEditor,false); assert.equal(procedureWrites.length,2); assert.equal(state.catalogoItems[0].procedimiento[0].texto,'Paso nuevo');
   const next = state.seleccionarModelo('M2');
   await Vue.nextTick();
   finish([]);

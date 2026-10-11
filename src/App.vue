@@ -328,7 +328,7 @@ const navigateTab = (action) => {
     />
   </div>
   
-  <div v-else :inert="showAccount || undefined" :class="{ 'machine-workspace-shell': ['/', '/llamar', '/intervenciones', '/historico', '/sintomas', '/rondas', '/operarios', '/paros-anudado', '/usuarios', '/patrulla', '/maquinas', '/shiftreport'].includes(currentPath) }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
+  <div v-else :inert="showAccount || undefined" :class="{ 'machine-workspace-shell': ['/', '/llamar', '/intervenciones', '/historico', '/sintomas', '/rondas', '/operarios', '/paros-anudado', '/usuarios', '/patrulla', '/catalogo', '/maquinas', '/shiftreport'].includes(currentPath) }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
     
     <!-- SIDEBAR DESKTOP (App Shell) -->
     <aside v-if="user" class="desktop-navigation hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-4 shadow-sm select-none z-50">

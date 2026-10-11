@@ -330,3 +330,11 @@ pruebas del servicio en entorno piloto.
 - La consulta existente por sector sigue leyendo documentos del sector antes de filtrar cerradas en cliente; queda pendiente acotar esa lectura en servidor como bloque de rendimiento, sin confundirlo con paginación ya implementada en /llamar.
 - Prueba del componente Vue real: filtros, agrupación, permisos mixtos, envío duplicado, error/reintento y respuesta atrasada. No cambian reglas, índices ni estructura de documentos. Rollback mediante revert del commit y despliegue de Hosting.
 - Pendiente revisión visual del usuario en las resoluciones de planta. Patrulla se posterga hasta disponer del registro del inspector.
+
+### V6 — Intervenciones por especialidad
+
+- Selector Tabla / Por especialidad con preferencia local al navegador; Tabla es inicial. Usa la misma suscripción y acciones, sin duplicar lecturas al cambiar presentación.
+- Tres columnas Mecánico, Eléctrico y Calidad desde 981 px, con scroll independiente y tarjetas agrupadas por máquina, ordenadas por prioridad dentro de cada especialidad. Estilo compacto entre 981 y 1199 px. Categorías antiguas no reconocidas se muestran en una sección adicional, sin ocultar solicitudes.
+- Por debajo de 981 px, selector de especialidad con cantidades y una columna visible; aprovecha el espacio sin comprimir tres tarjetas lado a lado. Los filtros comunes de estado, sector, asignación y búsqueda se conservan; el filtro de categoría solo aplica a Tabla y conserva su selección al volver.
+- Las tarjetas muestran número corto de máquina, prioridad, estado, síntoma, observaciones resumidas, asignado, antigüedad y foto disponible; Detalle abre la descripción completa en la ruta existente. Tomar grupo se limita a la máquina y especialidad visibles, respetando permisos.
+- Prueba del componente real ampliada para verificar distribución por especialidad, persistencia, reutilización de suscripción, conservación del filtro y recuperación de categorías antiguas. Pendiente aprobación visual del usuario; rollback mediante revert y Hosting.

@@ -50,7 +50,11 @@ function host({ missingDesktopPortal = false } = {}) {
   return { renderer, root: node('root'), body };
 }
 
-test('intervention management filters grouped requests and only takes permitted items once', async () => {
+test('intervention management filters grouped requests and only takes permitted items once', async t => {
+  const originalStorage = globalThis.localStorage;
+  const stored = new Map();
+  globalThis.localStorage = { getItem:key => stored.get(key), setItem:(key, value) => stored.set(key, value) };
+  t.after(() => { if (originalStorage === undefined) delete globalThis.localStorage; else globalThis.localStorage = originalStorage; });
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/IntervencionesView.vue', import.meta.url), 'utf8'));
   const script = compileScript(descriptor, { id: 'intervention-management-test' });
   const template = compileTemplate({ id: 'intervention-management-test', source: descriptor.template.content,
@@ -96,6 +100,17 @@ test('intervention management filters grouped requests and only takes permitted 
   state.limpiarFiltros();
   state.filtroTipo = 'CALIDAD';
   assert.equal(state.intervencionesFiltered.length, 1);
+  state.presentacion = 'specialty';
+  await Vue.nextTick();
+  assert.equal(subscriptions.length, 1, 'switching presentation reuses the subscription');
+  assert.equal(stored.get('cmms.interventions.presentation'), 'specialty');
+  assert.deepEqual(state.columnasEspecialidad.map(column => [column.id, column.count]), [['MECANICO', 1], ['ELECTRICO', 0], ['CALIDAD', 1]]);
+  assert.equal(state.columnasEspecialidad[0].grupos[0].items[0].id, 'mechanic');
+  assert.equal(state.columnasEspecialidad[2].grupos[0].items[0].id, 'quality');
+  state.presentacion = 'table';
+  await Vue.nextTick();
+  assert.equal(state.filtroTipo, 'CALIDAD', 'category selection survives presentation changes');
+  assert.equal(state.intervencionesFiltered.length, 1);
   state.limpiarFiltros();
   const taking = state.onTomarGrupo(state.grupos[0]);
   await new Promise(resolve => setImmediate(resolve));
@@ -113,6 +128,14 @@ test('intervention management filters grouped requests and only takes permitted 
   subscriptions[1].callback(requests);
   await Vue.nextTick();
   assert.equal(state.loading, false);
+  state.limpiarFiltros(); state.filtroEstado = 'TODO'; state.presentacion = 'specialty';
+  subscriptions[1].callback([...requests, { id:'unknown', tipoIntervencion:'LEGACY', numeroMaquina:35002, estado:'PENDIENTE' }]);
+  await Vue.nextTick();
+  assert.equal(state.columnasEspecialidad.at(-1).id, 'OTHER', 'legacy categories are not silently hidden');
+  state.especialidadActiva = 'OTHER';
+  subscriptions[1].callback(requests);
+  await Vue.nextTick();
+  assert.equal(state.especialidadActiva, 'MECANICO');
   app.unmount();
   assert.deepEqual(errors.map(error => error.message), []);
 });

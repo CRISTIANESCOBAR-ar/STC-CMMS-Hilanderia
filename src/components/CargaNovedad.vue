@@ -810,7 +810,7 @@ const enviarNotaTurno = async () => {
           </div>
         </div>
 
-        <div class="px-4 pt-4 pb-3 border-b border-gray-100">
+        <div class="fault-observations px-4 pt-4 pb-3 border-b border-gray-100">
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
             <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
@@ -819,7 +819,7 @@ const enviarNotaTurno = async () => {
             v-model="observaciones"
             rows="2"
             placeholder="Describa el problema..."
-            class="w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15 resize-none outline-none"></textarea>
+            class="fault-observations-input w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-blue-500 focus:border-blue-500 block p-2.5 shadow-sm min-h-15 resize-none outline-none"></textarea>
         </div>
 
         <div v-if="imagenPreview" class="px-4 py-4 mb-16 animate-in fade-in duration-300">
@@ -1086,14 +1086,19 @@ const enviarNotaTurno = async () => {
   .fault-page-heading p { font-size:12px; color:#64748b; }
   .fault-view-tabs { display:none; }
   .fault-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(350px,390px) minmax(0,1fr); gap:14px; }
-  .fault-form-panel { width:100%; max-width:none; margin:0; padding:0; overflow:auto; min-height:0; border:1px solid #dce3ec; border-radius:8px; background:white; }
-  .fault-form-heading { display:block; padding:12px 14px; }
+  .fault-form-panel { width:100%; max-width:none; margin:0; padding:0; overflow:auto; min-height:0; border:1px solid #dce3ec; border-radius:8px; background:white; display:flex; flex-direction:column; }
+  .fault-form-heading { display:block; flex-shrink:0; padding:12px 14px; }
   .fault-form-heading h2 { color:#0f172a; font-size:17px; font-weight:600; margin-bottom:10px; }
   .fault-category-select { display:flex; gap:6px; }
   .fault-category-select button,.fault-view-tabs button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 12px; border:1px solid #dce3ec; border-radius:6px; font-size:13px; color:#475569; cursor:pointer; }
   .fault-category-select button { flex:1; }
   .fault-category-select button[aria-pressed=true],.fault-view-tabs button[aria-pressed=true] { background:#eef2ff; color:#4338ca; border-color:#a5b4fc; }
-  .fault-form { border-bottom:0; }
+  .fault-form { border-bottom:0; flex:1; display:flex; flex-direction:column; }
+  .fault-form fieldset { flex:1; display:flex; flex-direction:column; }
+  .fault-form fieldset > div { flex-shrink:0; }
+  .fault-form .fault-observations { flex:1; display:flex; flex-direction:column; }
+  .fault-observations > div { flex-shrink:0; }
+  .fault-observations-input { flex:1; min-height:100px; }
   .fault-form :deep(select),.fault-form :deep(textarea) { font-size:13px; font-weight:450; }
   .fault-form :deep(label) { letter-spacing:normal; }
   .fault-form :deep(.font-black),.fault-form :deep(.font-extrabold) { font-weight:600; }

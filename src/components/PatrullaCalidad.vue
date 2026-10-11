@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { userProfile, userRole } from '../services/authService';
@@ -7,6 +7,13 @@ import { getTurnoActual, getTurnoLabel, isPatrullaOperador } from '../constants/
 import { cargarPatrullaActiva, cargarPatrullasTurnoActual, cargarPatrullaPorId, reabrirRonda, autoCompletarRondaEvaluacion } from '../services/patrullaService';
 import { ArrowLeft, ScanLine, Eye, ClipboardCheck, AlertTriangle as AlertIcon, Lock, CheckCircle2, Circle, Loader2, Gauge, RotateCcw, History, Scissors, UserCheck, EyeOff, ChevronDown, ChevronUp } from 'lucide-vue-next';
 import RegistroRoturas from './RegistroRoturas.vue';
+import PatrullaPlanilla from './PatrullaPlanilla.vue';
+const desktopSheet=ref(typeof window!=='undefined' && window.innerWidth>=768);
+const sheetPending=ref(false);
+const resizeSheet=()=>{ if(!sheetPending.value) desktopSheet.value=window.innerWidth>=768; };
+function sheetPendingChanged(value) { sheetPending.value=value; if(!value) resizeSheet(); }
+onMounted(()=>window.addEventListener('resize',resizeSheet));
+onUnmounted(()=>window.removeEventListener('resize',resizeSheet));
 import RegistroMuestrasAnudados from './RegistroMuestrasAnudados.vue';
 import RegistroParoDefecto from './RegistroParoDefecto.vue';
 import PruebaTramaNegra from './PruebaTramaNegra.vue';
@@ -235,6 +242,8 @@ onMounted(async () => {
 </script>
 
 <template>
+  <PatrullaPlanilla v-if="desktopSheet && !subVista" :patrulla="patrullaData" :can-edit="puedeEditar" :coverage="cubriendo" :patrol-options="todasPatrullas" :observer="esObservador" @changed="patrullaData=$event" @pending="sheetPendingChanged" @select="seleccionarPatrulla" @coverage="cubriendo=!cubriendo" />
+  <template v-else>
   <!-- Navbar portal: back + turno + nombre + ronda + obs btn -->
   <Teleport to="#navbar-header-portal">
     <div class="flex items-center gap-1.5 min-w-0">
@@ -519,4 +528,5 @@ onMounted(async () => {
       </div>
     </Teleport>
   </div>
+  </template>
 </template>

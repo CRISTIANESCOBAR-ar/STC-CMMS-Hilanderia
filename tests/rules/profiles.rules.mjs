@@ -491,3 +491,19 @@ test('operator master is admin-only while auxiliary schedules can be saved and c
   assert.deepEqual((await getDoc(reference)).data().horarios,{});
   await assertFails(deleteDoc(reference));
 });
+
+test('patrol sheet transactions save round six and evaluation atomically with inspector permissions', async () => {
+  await approve('sheet-inspector','inspector','TEJEDURIA'); await approve('sheet-aux','auxiliar','TEJEDURIA');
+  const firestore=await import('firebase/firestore');
+  const { stablePatrol,patrolSummary }=await import('../../src/utils/patrolSheet.js');
+  const source=(await readFile(new URL('../../src/services/patrolSheetService.js',import.meta.url),'utf8')).replace(/^import.*;\r?\n/gm,'').replace('export async function','async function')+'\nreturn { savePatrolSheet };';
+  const db=identity('sheet-inspector').firestore(),reference=doc(db,'patrullas/sheet-record');
+  await assertSucceeds(setDoc(reference,{ sector:'TEJEDURIA',inspectorUid:'sheet-inspector',fecha:'2026-10-11',turno:'C',fechaCriterio:'inicio_turno',estado:'en_curso',createdAt:serverTimestamp(),rondas:{ ronda_1:{ completada:true,datos:{ a:{ roU:1.3,roT:10.5 } } },ronda_2:{ completada:true },ronda_3:{ completada:true },ronda_4:{ completada:true },ronda_5:{ completada:true } } }));
+  const makeService=database=>new Function('doc','runTransaction','db','stablePatrol','patrolSummary',source)(firestore.doc,firestore.runTransaction,database,stablePatrol,patrolSummary);
+  const service=makeService(db);
+  await assertSucceeds(service.savePatrolSheet('sheet-record','ronda_6',{}, { a:{ roU:2.3,roT:8 } },true,{ rutaId:'route' }));
+  const saved=(await getDoc(reference)).data(); assert.equal(saved.inspectorUid,'sheet-inspector'); assert.equal(saved.fecha,'2026-10-11'); assert.equal(saved.rondas.ronda_7.completada,true); assert.deepEqual(saved.rondas.ronda_7.resumen,{ mejoras:1,empeoramientos:1,leves:0,iguales:0 });
+  await assert.rejects(service.savePatrolSheet('sheet-record','ronda_6',{}, {},false),/cambió/);
+  const readonly=makeService(identity('sheet-aux').firestore()); await assertFails(readonly.savePatrolSheet('sheet-record','ronda_6',saved.rondas.ronda_6,{},false,{},true));
+  await assertSucceeds(service.savePatrolSheet('sheet-record','ronda_1',saved.rondas.ronda_1,{},false,{},true)); assert.equal((await getDoc(reference)).data().rondas.ronda_7.completada,false);
+});

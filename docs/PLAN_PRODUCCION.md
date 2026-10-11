@@ -243,3 +243,12 @@ pruebas del servicio en entorno piloto.
 - En /maquinas, desde 768 px se usa navegación lateral compacta y se ocultan cabecera/barra rápida móviles. Otras vistas mantienen su comportamiento hasta adaptar sus portales.
 - Exportar se cierra antes de ejecutar la descarga, al pulsar fuera y con Escape; Escape devuelve el foco al botón. Listeners liberados al salir de la vista.
 - 40 pruebas correctas, incluyendo selección de exportación, cierre exterior y Escape. Validación visual del ajuste pendiente en las PC del usuario.
+
+### V1 — Modal Ver catálogo
+
+- Diálogo limitado al espacio de pantalla, con ancho máximo de 1440 px y alto máximo de 900 px.
+- Tabla en panel interior con márgenes, borde y scroll propio en ambos ejes; cabecera, filtros y pie permanecen visibles. Se elimina el alto fijo de tabla de 384 px.
+- Tipografía Inter/system, datos de 13 px, encabezados de 12 px, botones comunes de 36 px y controles de edición uniformes.
+- Filtros con columnas flexibles que no ensanchan el modal; distribución reducida para pantallas pequeñas. Denominaciones extensas pueden partirse dentro de la celda.
+- Prueba del componente real incluye apertura del catálogo, registro con texto extenso, edición/cancelación, filtros vacíos y cierre sin errores Vue. 40 pruebas correctas y build correcto.
+- Ensayo visual pendiente en las resoluciones de planta; cambios de presentación, sin modificación de permisos o datos remotos.

@@ -909,56 +909,53 @@ const exportCatalogToExcel = async () => {
     </div>
 
     <!-- Modal Catálogo -->
-          <div v-if="showCatalogModal" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm overflow-y-auto">
-            <div class="bg-white rounded-lg w-full max-w-6xl shadow-2xl overflow-hidden my-4">
-              <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50">
+          <div v-if="showCatalogModal" class="catalog-overlay">
+            <div class="catalog-dialog" role="dialog" aria-modal="true" aria-labelledby="machine-catalog-title">
+              <div class="catalog-header">
                 <div class="flex items-center gap-4 flex-wrap">
                   <div>
-                    <h3 class="text-2xl font-black text-gray-800 tracking-tight">Catálogo — {{ catalogoModelo }}</h3>
-                    <p class="text-xs text-gray-500 font-bold tracking-widest mt-1">{{ catalogoCargando ? 'Cargando...' : filteredCatalogo.length + ' registros encontrados' }}</p>
+                    <h3 id="machine-catalog-title" class="catalog-title">Catálogo — {{ catalogoModelo }}</h3>
+                    <p class="catalog-subtitle">{{ catalogoCargando ? 'Cargando...' : filteredCatalogo.length + ' registros encontrados' }}</p>
                   </div>
                   <div v-if="catalogoModelosDisponibles.length > 1" class="flex items-center gap-2">
-                    <label class="text-xs font-black text-gray-500 uppercase">Modelo</label>
+                    <label class="catalog-label">Modelo</label>
                     <select
                       :value="catalogoModelo"
                       @change="cargarCatalogoModelo($event.target.value)"
-                      class="bg-white border border-emerald-200 rounded-md px-3 py-1.5 text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm"
+                      class="cmms-control catalog-model" aria-label="Modelo de catálogo"
                     >
                       <option v-for="m in catalogoModelosDisponibles" :key="m" :value="m">{{ m }}</option>
                     </select>
                   </div>
                 </div>
-                <button @click="closeCatalogModal" class="p-2 hover:bg-white rounded-md transition-colors"><X class="w-6 h-6 text-gray-500" /></button>
+                <button @click="closeCatalogModal" class="cmms-button catalog-icon-button" aria-label="Cerrar catálogo"><X :size="18" /></button>
               </div>
-              <div class="p-4 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-stretch">
-                <div class="flex-1">
-                  <label class="text-xs font-bold text-gray-500 block mb-1">Buscar</label>
-                  <input v-model="catalogoSearchQuery" type="text" placeholder="Denominación, artículo, catálogo..." class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+              <div class="catalog-filters">
+                <div class="catalog-filter">
+                  <label class="catalog-label">Buscar</label>
+                  <input v-model="catalogoSearchQuery" type="text" placeholder="Denominación, artículo, catálogo..." class="cmms-control" aria-label="Buscar en el catálogo" />
                 </div>
-                <div class="flex-1">
-                  <label class="text-xs font-bold text-gray-500 block mb-1">Sección</label>
-                  <select v-model="catalogoSectionFilter" class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                <div class="catalog-filter">
+                  <label class="catalog-label">Sección</label>
+                  <select v-model="catalogoSectionFilter" class="cmms-control" aria-label="Sección del catálogo">
                     <option value="">Todos</option>
                     <option v-for="s in catalogoSectionsDisponibles" :key="s" :value="s">{{ s }}</option>
                   </select>
                 </div>
-                <div class="flex-1">
-                  <label class="text-xs font-bold text-gray-500 block mb-1" :class="{ 'opacity-50': !catalogoSectionFilter }">Grupo</label>
-                  <select v-model="catalogoGroupFilter" :disabled="!catalogoSectionFilter" class="w-full bg-white border border-gray-200 p-2.5 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                <div class="catalog-filter">
+                  <label class="catalog-label" :class="{ 'opacity-50': !catalogoSectionFilter }">Grupo</label>
+                  <select v-model="catalogoGroupFilter" :disabled="!catalogoSectionFilter" class="cmms-control" aria-label="Grupo del catálogo">
                     <option value="">Todos</option>
                     <option v-for="g in catalogoGroupsDisponibles" :key="g" :value="g">{{ g }}</option>
                   </select>
                 </div>
-                <div class="flex items-end gap-2">
-                  <button @click="exportCatalogToExcel" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-sm transition-colors shadow-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-                    Excel
-                  </button>
+                <div class="catalog-filter-actions">
+                  <button @click="exportCatalogToExcel" class="cmms-button" :disabled="catalogoCargando"><Download :size="16" />Exportar</button>
                 </div>
               </div>
-              <div class="overflow-x-auto max-h-96">
-                <table class="w-full text-sm text-left border-collapse">
-                  <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
+              <div class="catalog-data"><div class="catalog-table-scroll" tabindex="0" aria-label="Datos del catálogo; desplazamiento dentro del modal">
+                <table class="catalog-table"><caption class="sr-only">Piezas y artículos del catálogo {{ catalogoModelo }}</caption>
+                  <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 tracking-widest shadow-sm">
                     <tr>
                       <th class="px-3 py-3 bg-gray-50 w-20">Sección</th>
                       <th class="px-3 py-3 bg-gray-50 w-16">Grupo</th>
@@ -979,8 +976,8 @@ const exportCatalogToExcel = async () => {
                         <td class="px-3 py-2"><input v-model="editingCatalogRow.numeroCatalogo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
                         <td class="px-3 py-2"><input v-model="editingCatalogRow.numeroArticulo" type="text" class="w-full bg-white border border-blue-300 rounded px-2 py-1 text-xs outline-none" /></td>
                         <td v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-2"><div class="flex justify-center gap-1">
-                          <button v-if="userRole === 'admin'" @click="saveCatalogEdit" class="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"><Check class="w-3 h-3" /></button>
-                          <button v-if="userRole === 'admin'" @click="cancelCatalogEdit" class="p-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300 transition-colors"><X class="w-3 h-3" /></button>
+                          <button v-if="userRole === 'admin'" @click="saveCatalogEdit" class="cmms-button cmms-button-primary catalog-icon-button" aria-label="Guardar fila"><Check class="w-4 h-4" /></button>
+                          <button v-if="userRole === 'admin'" @click="cancelCatalogEdit" class="cmms-button catalog-icon-button" aria-label="Cancelar edición"><X class="w-4 h-4" /></button>
                         </div></td>
                       </template>
                       <template v-else>
@@ -991,17 +988,20 @@ const exportCatalogToExcel = async () => {
                         <td class="px-3 py-2 text-xs text-gray-500">{{ item.numeroCatalogo }}</td>
                         <td class="px-3 py-2 text-xs text-gray-500">{{ item.numeroArticulo }}</td>
                         <td v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-2"><div class="flex justify-center gap-1">
-                          <button v-if="userRole === 'admin'" @click="startCatalogEdit(item)" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Editar fila"><Edit3 class="w-3 h-3" /></button>
-                          <button v-if="item.id" @click="openProcedimientoEditor(item)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors" :title="item.procedimiento?.length ? 'Editar procedimiento (' + item.procedimiento.length + ' pasos)' : 'Agregar procedimiento'"><BookOpen class="w-3 h-3" /></button>
+                          <button v-if="userRole === 'admin'" @click="startCatalogEdit(item)" class="cmms-button catalog-icon-button" aria-label="Editar fila" title="Editar fila"><Edit3 class="w-4 h-4" /></button>
+                          <button v-if="item.id" @click="openProcedimientoEditor(item)" class="cmms-button catalog-icon-button" aria-label="Gestionar procedimiento" :title="item.procedimiento?.length ? 'Editar procedimiento (' + item.procedimiento.length + ' pasos)' : 'Agregar procedimiento'"><BookOpen class="w-4 h-4" /></button>
                         </div></td>
                       </template>
                     </tr>
+                    <tr v-if="!filteredCatalogo.length"><td :colspan="userRole === 'admin' || userRole === 'jefe_sector' ? 7 : 6" class="catalog-empty">{{ catalogoCargando ? 'Cargando catálogo…' : 'No hay registros para los filtros seleccionados.' }}</td></tr>
                   </tbody>
                 </table>
               </div>
-              <div class="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-                <button @click="closeCatalogModal" class="py-2.5 px-4 border border-gray-200 rounded-md font-bold text-gray-700 hover:bg-white transition-colors">Cerrar</button>
               </div>
+              <footer class="catalog-footer">
+                <span aria-live="polite">{{ filteredCatalogo.length }} registros</span>
+                <button @click="closeCatalogModal" class="cmms-button">Cerrar</button>
+              </footer>
             </div>
           </div>
     <!-- Modal Editor de Procedimiento -->
@@ -1131,4 +1131,34 @@ const exportCatalogToExcel = async () => {
 @media (max-width:1100px) { .machines-workspace { padding:12px; gap:10px; } .machines-view span { display:none; } .machines-search { flex-basis:200px; } }
 @media (max-width:850px) { .machines-workspace { padding:8px; gap:8px; } .machines-heading h1 { font-size:19px; } .machines-eyebrow { display:none; } .machines-search { flex-basis:100%; } .machines-type { flex:1; max-width:none; } .machines-view { margin-left:auto; } .machines-actions { gap:5px; } .cmms-button { padding:6px 8px; } }
 @media (max-width:550px) { .machines-header { gap:8px; } .machines-actions { width:100%; } .machines-actions .cmms-button { font-size:12px; } .machines-page-size { display:none; } .machines-footer { gap:6px; } .machines-pagination .cmms-button:first-child,.machines-pagination .cmms-button:last-child { display:none; } .cmms-segment button { padding:4px 7px; } }
+/* Catalog dialog owns both scroll axes; header, filters and footer stay visible. */
+.catalog-overlay { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; padding:16px; background:#0f172a99; backdrop-filter:blur(4px); }
+.catalog-dialog { display:flex; flex-direction:column; width:min(1440px,100%); height:min(900px,100%); min-width:0; min-height:0; overflow:hidden; background:#fff; border:1px solid #dce3ec; border-radius:10px; box-shadow:0 24px 64px #0f172a33; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+.catalog-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
+.catalog-title { font-size:20px; line-height:1.3; font-weight:600; color:#0f172a; }
+.catalog-subtitle { font-size:12px; color:#64748b; margin-top:4px; }
+.catalog-label { display:block; font-size:12px; font-weight:500; color:#64748b; margin-bottom:5px; }
+.catalog-filters { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) auto; align-items:end; gap:10px; padding:12px 20px; flex-shrink:0; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+.catalog-filter { min-width:0; }
+.catalog-filter .cmms-control { width:100%; min-width:0; }
+.catalog-dialog .cmms-control:disabled { opacity:.5; cursor:not-allowed; }
+.catalog-model { max-width:200px; }
+.catalog-filter-actions { display:flex; align-items:end; }
+.catalog-data { flex:1; min-height:0; min-width:0; display:flex; padding:12px 20px; overflow:hidden; }
+.catalog-table-scroll { flex:1; min-height:0; min-width:0; overflow:auto; border:1px solid #dce3ec; border-radius:7px; scrollbar-gutter:stable; }
+.catalog-table-scroll:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
+.catalog-table { width:100%; min-width:720px; border-collapse:separate; border-spacing:0; text-align:left; font-size:13px; font-variant-numeric:tabular-nums; }
+.catalog-table thead { position:sticky; top:0; z-index:2; }
+.catalog-table th { padding:11px 12px; background:#f8fafc; font-size:12px; font-weight:600; letter-spacing:0; white-space:nowrap; color:#64748b; border-bottom:1px solid #dce3ec; }
+.catalog-table td { padding:8px 12px; height:44px; font-size:13px; font-weight:400; color:#475569; border-bottom:1px solid #edf1f6; overflow-wrap:anywhere; }
+.catalog-table tbody tr:nth-child(even) { background:#fbfcfe; }
+.catalog-table tbody tr:hover { background:#f0f4ff; }
+.catalog-table td:nth-child(4) { min-width:220px; color:#334155; }
+.catalog-table input { min-width:72px; font-size:13px; padding:6px 8px; }
+.catalog-table td:nth-child(4) input { min-width:180px; }
+.catalog-icon-button { width:36px; min-width:36px; padding:7px; }
+.catalog-empty { text-align:center; padding:32px !important; color:#64748b; }
+.catalog-footer { padding:12px 20px; border-top:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; color:#64748b; font-size:12px; }
+@media (max-width:850px) { .catalog-overlay { padding:8px; } .catalog-header,.catalog-footer { padding:12px; } .catalog-filters { padding:10px 12px; gap:8px; } .catalog-data { padding:10px 12px; } .catalog-title { font-size:18px; } }
+@media (max-width:550px) { .catalog-filters { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .catalog-filter:first-child { grid-column:1/-1; } .catalog-filter-actions { grid-column:1/-1; justify-content:flex-end; } }
 </style>

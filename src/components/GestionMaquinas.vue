@@ -6,7 +6,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { catalogoService } from '../services/catalogoService';
 import { compressImage } from '../utils/imageCompressor';
-import { Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BookOpen, Camera } from 'lucide-vue-next';
+import { Search, Edit3, Trash2, X, Check, Settings2, LayoutGrid, Table2, Save, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BookOpen, Camera, Plus, Download } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -56,7 +56,7 @@ const isSavingProcedimiento = ref(false);
 const uploadingPasoIndex = ref(null);
 const showModal = ref(false);
 const isEditing = ref(false);
-const viewMode = ref('cards');
+const viewMode = ref('table');
 
 const editingRowId = ref(null);
 const editingRow = ref({});
@@ -577,146 +577,42 @@ const exportCatalogToExcel = async () => {
 </script>
 
 <template>
-  <div class="h-[calc(100vh-120px)] bg-gray-50 flex flex-col overflow-hidden">
-    <main class="flex-1 max-w-7xl mx-auto w-full px-2 pt-0 lg:pt-4 pb-2 flex flex-col space-y-1 lg:space-y-3 overflow-hidden">
-
-      <!-- Portal para Navbar (Desktop) -->
-      <Teleport to="#navbar-actions">
-        <div class="hidden lg:flex items-center w-full gap-2">
-          <div class="flex items-center gap-2 shrink-0">
-            <div class="bg-indigo-500 p-1 rounded-md text-white shadow-sm">
-              <Settings2 class="w-4 h-4" />
-            </div>
-            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Catálogo</span>
-          </div>
-
-          <div class="relative flex-1 min-w-0 max-w-52">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Buscar..."
-              class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-100 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 rounded-md text-xs text-gray-700 outline-none transition-all placeholder:text-gray-400 shadow-sm"
-            />
-          </div>
-
-          <div class="flex items-center gap-1 shrink-0">
-            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tipo</label>
-            <select
-              v-model="tipoFilter"
-              class="h-8 w-28 px-2 bg-white border border-slate-100 text-gray-700 text-xs font-bold rounded-md outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 shadow-sm"
-            >
-              <option value="">Todos</option>
-              <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
-            </select>
-          </div>
-
-          <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-white text-sm font-medium shrink-0 shadow-sm">
-            <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150">Todas</button>
-            <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-green-50 text-green-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150 border-l border-slate-200">Activas</button>
-            <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50'" class="px-2 py-1 transition-colors duration-150 border-l border-slate-200">Inactivas</button>
-          </div>
-
-          <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-white shrink-0 shadow-sm">
-            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium transition-colors duration-150">
-              <LayoutGrid class="w-4 h-4" /><span>Tarjetas</span>
-            </button>
-            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'" class="inline-flex items-center gap-1 px-2 py-1 text-sm font-medium transition-colors duration-150 border-l border-slate-200">
-              <Table2 class="w-4 h-4" /><span>Tabla</span>
-            </button>
-          </div>
-
-          <div class="flex items-center gap-1 shrink-0 ml-auto">
-            <button
-              v-if="userRole === 'admin'"
-              @click="openAddModal"
-              data-tippy-content="Agregar máquina"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-              <span>Agregar</span>
-            </button>
-            <button
-              @click="exportMaquinasToExcel"
-              data-tippy-content="Exportar listado de máquinas (XLSX)"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-              <span>Máquinas</span>
-            </button>
-            <button
-              @click="exportToExcel"
-              data-tippy-content="Exportar catálogo R-60 (XLSX)"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg>
-              <span>Catálogo</span>
-            </button>
-            <button
-              @click="openCatalogModal"
-              data-tippy-content="Ver/gestionar catálogo R-60"
-              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-              <span>Ver</span>
-            </button>
-          </div>
+  <div class="machines-page">
+    <main class="machines-workspace">
+      <header class="machines-header">
+        <div class="machines-heading"><div class="machines-eyebrow">Activos de planta</div><h1>Máquinas <span>{{ maquinas.length }}</span></h1></div>
+        <div class="machines-actions">
+          <button class="cmms-button" @click="openCatalogModal()"><BookOpen :size="16" />Ver catálogo</button>
+          <details class="machines-export"><summary class="cmms-button"><Download :size="16" />Exportar</summary><div class="machines-export-menu"><button @click="exportMaquinasToExcel">Listado de máquinas · XLSX</button><button @click="exportToExcel">Catálogo R-60 · XLSX</button></div></details>
+          <button v-if="userRole === 'admin'" class="cmms-button cmms-button-primary" @click="openAddModal"><Plus :size="16" />Agregar máquina</button>
         </div>
-      </Teleport>
-
-      <!-- Portal para Navbar (Mobile) -->
-      <Teleport to="#navbar-mobile-portal">
-        <div class="lg:hidden flex items-center gap-1">
-          <label class="text-[10px] font-black text-gray-300 uppercase">Tipo</label>
-          <select v-model="tipoFilter" class="h-7 max-w-26 bg-white border border-slate-100 text-gray-700 text-[10px] px-1.5 rounded-md shadow-sm">
-            <option value="">Todos</option>
-            <option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option>
-          </select>
-          <button @click="exportMaquinasToExcel" data-tippy-content="Exportar máquinas" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"></path><polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"></polyline><line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
-          <button @click="exportToExcel" data-tippy-content="Exportar catálogo R-60" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
-          <button @click="openCatalogModal" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.375-9.375z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
-          <button v-if="userRole === 'admin'" @click="openAddModal" data-tippy-content="Agregar máquina" class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"></line><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"></line></svg></button>
-        </div>
-      </Teleport>
-
-      <div class="lg:hidden bg-white border border-slate-100 rounded-md p-2 flex flex-col gap-2 shrink-0">
-        <div class="relative">
-          <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input v-model="searchQuery" type="text" placeholder="Buscar..." class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-slate-100 rounded-md text-xs outline-none" />
-        </div>
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex border border-slate-100 rounded-md overflow-hidden text-[10px] font-bold">
-            <button @click="activoFilter = 'all'" :class="activoFilter === 'all' ? 'bg-gray-600 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1">Todas</button>
-            <button @click="activoFilter = 'activas'" :class="activoFilter === 'activas' ? 'bg-emerald-600 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1 border-l border-slate-100">Activas</button>
-            <button @click="activoFilter = 'inactivas'" :class="activoFilter === 'inactivas' ? 'bg-red-500 text-white' : 'bg-gray-50 text-gray-500'" class="px-2 py-1 border-l border-slate-100">Inactivas</button>
-          </div>
-          <div class="flex border border-slate-100 rounded-md overflow-hidden bg-gray-50">
-            <button @click="viewMode = 'cards'" :class="viewMode === 'cards' ? 'bg-indigo-600 text-white' : 'text-gray-500'" class="p-1.5"><LayoutGrid class="w-3.5 h-3.5" /></button>
-            <button @click="viewMode = 'table'" :class="viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-gray-500'" class="p-1.5 border-l border-slate-100"><Table2 class="w-3.5 h-3.5" /></button>
-          </div>
-        </div>
+      </header>
+      <div class="machines-filters" aria-label="Filtros de máquinas">
+        <label class="machines-search"><Search :size="17" /><input v-model="searchQuery" placeholder="Buscar máquina, nombre o ubicación…" aria-label="Buscar máquinas" /></label>
+        <select v-model="tipoFilter" class="cmms-control machines-type" aria-label="Tipo de máquina"><option value="">Todos los tipos</option><option v-for="tipo in tipoFilterOptions" :key="tipo" :value="tipo">{{ tipo }}</option></select>
+        <div class="cmms-segment" aria-label="Estado de producción"><button v-for="filter in [{ value: 'all', label: 'Todas' }, { value: 'activas', label: 'Activas' }, { value: 'inactivas', label: 'Inactivas' }]" :key="filter.value" @click="activoFilter = filter.value" :aria-pressed="activoFilter === filter.value" :class="{ selected: activoFilter === filter.value }">{{ filter.label }}</button></div>
+        <div class="cmms-segment machines-view" aria-label="Presentación"><button @click="viewMode = 'table'" :aria-pressed="viewMode === 'table'" :class="{ selected: viewMode === 'table' }" title="Tabla"><Table2 :size="17" /><span>Tabla</span></button><button @click="viewMode = 'cards'" :aria-pressed="viewMode === 'cards'" :class="{ selected: viewMode === 'cards' }" title="Tarjetas"><LayoutGrid :size="17" /><span>Tarjetas</span></button></div>
       </div>
-
-
       <div v-if="isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
-        <p class="font-bold text-xs tracking-widest">Cargando catálogo...</p>
+        <p class="font-bold text-xs tracking-widest">Cargando máquinas...</p>
       </div>
 
       <template v-else>
-        <div v-if="viewMode === 'cards'" class="flex-1 overflow-y-auto pr-1">
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div v-if="!filteredMaquinas.length" class="machines-empty"><Search :size="28" /><h2>No hay máquinas para mostrar</h2><p>Probá con otro texto, tipo o estado.</p><button class="cmms-button" @click="searchQuery = ''; tipoFilter = ''; activoFilter = 'all'">Limpiar filtros</button></div>
+        <div v-else-if="viewMode === 'cards'" class="machines-cards-scroll">
+          <div class="machines-cards">
             <div
               v-for="m in paginatedMaquinas" :key="m.id"
-              :class="!(m.activo ?? true) ? 'opacity-60 border-dashed' : 'hover:border-indigo-300'"
-              class="relative bg-white p-4 rounded-md shadow-sm border border-gray-200 flex flex-col group transition-all min-h-27.5"
+              :class="!(m.activo ?? true) ? 'border-dashed' : 'hover:border-indigo-300'"
+              class="machine-card relative bg-white p-4 border border-gray-200 flex flex-col group transition-all"
             >
               <!-- Cuerpo Principal -->
               <div class="space-y-2 flex-1 pr-14">
                 <div class="flex items-center space-x-2 flex-wrap gap-y-1">
-                  <span class="px-2 py-1 bg-emerald-50 text-[10px] font-black text-emerald-700 rounded shrink-0 border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span>
-                  <span class="px-2 py-1 bg-gray-100 text-xs font-black text-gray-500 rounded shrink-0">{{ m.tipo }}</span>
-                  <span class="text-xl font-black text-gray-800 truncate">{{ m.maquina }}</span>
+                  <span class="px-2 py-1 bg-emerald-50 text-[10px] font-semibold text-emerald-700 rounded shrink-0 border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span>
+                  <span class="px-2 py-1 bg-gray-100 text-xs font-semibold text-gray-500 rounded shrink-0">{{ m.tipo }}</span>
+                  <span class="text-xl font-semibold text-gray-800 truncate">{{ m.maquina }}</span>
                 </div>
                 <p class="text-sm font-bold text-gray-600 line-clamp-1 italic">{{ m.nombre_maquina || 'Sin nombre' }}</p>
                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400 font-bold uppercase tracking-tight mt-1">
@@ -724,13 +620,13 @@ const exportCatalogToExcel = async () => {
                   <span class="shrink-0">Lado: {{ m.lado }}</span>
                 </div>
                 <div class="flex flex-wrap gap-1.5 pt-0.5">
-                  <span class="px-2 py-0.5 text-[10px] font-black rounded border bg-sky-50 text-sky-700 border-sky-200">
+                  <span class="px-2 py-0.5 text-[10px] font-semibold rounded border bg-sky-50 text-sky-700 border-sky-200">
                     GRP: {{ m.grp_tear || '---' }}
                   </span>
-                  <span class="px-2 py-0.5 text-[10px] font-black rounded border bg-amber-50 text-amber-700 border-amber-200">
+                  <span class="px-2 py-0.5 text-[10px] font-semibold rounded border bg-amber-50 text-amber-700 border-amber-200">
                     CMEST: {{ m.g_cmest || '---' }}
                   </span>
-                  <span v-if="m.orden_patrulla" class="px-2 py-0.5 text-[10px] font-black rounded border bg-violet-50 text-violet-700 border-violet-200">
+                  <span v-if="m.orden_patrulla" class="px-2 py-0.5 text-[10px] font-semibold rounded border bg-violet-50 text-violet-700 border-violet-200">
                     PAT: {{ m.orden_patrulla }}
                   </span>
                 </div>
@@ -740,16 +636,16 @@ const exportCatalogToExcel = async () => {
                     :class="(m.activo ?? true)
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-red-50 text-red-500 border-red-200'"
-                    class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border"
+                    class="text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full border"
                   >{{ (m.activo ?? true) ? 'En producción' : 'Fuera de producción' }}</span>
                 </div>
               </div>
 
               <!-- Botones de Acción (Admin) -->
-              <div v-if="userRole === 'admin'" class="absolute top-3 right-3 flex flex-col space-y-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+              <div v-if="userRole === 'admin'" class="absolute top-3 right-3 flex flex-col space-y-2 opacity-100">
                 <!-- Toggle Activo estilo "Crítico" -->
                 <button
-                  @click="toggleActivo(m)"
+                  :aria-label="`Máquina ${m.maquina}: ${(m.activo ?? true) ? 'activa; desactivar' : 'inactiva; activar'}`" :aria-pressed="m.activo ?? true" @click="toggleActivo(m)"
                   :data-tippy-content="(m.activo ?? true) ? 'Marcar inactiva' : 'Marcar activa'"
                   class="flex items-center gap-1 px-1.5 py-1.5 rounded-md border transition-all shadow-sm"
                   :class="(m.activo ?? true)
@@ -758,7 +654,7 @@ const exportCatalogToExcel = async () => {
                 >
                   <span
                     class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors"
-                    :class="(m.activo ?? true) ? 'bg-red-500' : 'bg-gray-300'"
+                    :class="(m.activo ?? true) ? 'bg-emerald-600' : 'bg-gray-300'"
                   >
                     <span
                       class="inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform"
@@ -766,23 +662,24 @@ const exportCatalogToExcel = async () => {
                     ></span>
                   </span>
                 </button>
-                <button @click="openEditModal(m)" class="p-2 text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Edit3 class="w-4 h-4" /></button>
-                <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Trash2 class="w-4 h-4" /></button>
+                <button :aria-label="`Editar máquina ${m.maquina}`" @click="openEditModal(m)" class="p-2 text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Edit3 class="w-4 h-4" /></button>
+                <button :aria-label="`Eliminar máquina ${m.maquina}`" @click="deleteMaquina(m.id)" class="p-2 text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-100 rounded-md transition-colors shadow-sm"><Trash2 class="w-4 h-4" /></button>
               </div>
             </div>
           </div>
         </div>
 
         <!-- TABLA INLINE (Ocupa todo el alto) -->
-        <div v-else class="flex-1 bg-white rounded-md shadow-sm border border-gray-100 overflow-hidden flex flex-col min-h-0">
-          <div class="overflow-auto flex-1 min-h-0">
-            <table class="w-full text-sm text-left border-collapse">
-              <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-black text-gray-500 tracking-widest shadow-sm">
+        <div v-else class="machines-table-panel">
+          <div class="machines-table-scroll" tabindex="0" aria-label="Listado de máquinas; desplazamiento horizontal disponible">
+            <table class="machines-table"><caption class="sr-only">Máquinas de planta, datos técnicos y estado de producción</caption>
+              <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 tracking-widest shadow-sm">
                 <tr>
-                  <th class="px-4 py-4 bg-gray-50 w-30">Tipo</th>
-                  <th class="px-4 py-4 bg-gray-50 w-30">Sector</th>
-                  <th class="px-4 py-4 bg-gray-50 w-25">ID Máq.</th>
+                  <th class="machine-identity" scope="col">ID Máq.</th>
                   <th class="px-4 py-4 bg-gray-50 min-w-50">Nombre</th>
+                  <th class="px-4 py-4 bg-gray-50 w-28 text-center">Activo</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Sector</th>
+                  <th class="px-4 py-4 bg-gray-50 w-30">Tipo</th>
                   <th class="px-4 py-4 bg-gray-50 w-20">Local</th>
                   <th class="px-4 py-4 bg-gray-50 w-20">Lado</th>
                   <th class="px-4 py-4 bg-gray-50 w-30">Modelo</th>
@@ -790,143 +687,95 @@ const exportCatalogToExcel = async () => {
                   <th class="px-4 py-4 bg-gray-50 w-24">GRP_TEAR</th>
                   <th class="px-4 py-4 bg-gray-50 w-24">G_CMEST</th>
                   <th class="px-4 py-4 bg-gray-50 w-20">Ord.Pat.</th>
-                  <th class="px-4 py-4 bg-gray-50 w-28 text-center">Activo</th>
                   <th v-if="userRole === 'admin'" class="px-4 py-4 text-center bg-gray-50 w-25">Acciones</th>
-                </tr>
+</tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
                 <tr
                   v-for="m in paginatedMaquinas" :key="m.id"
                   :class="[
                     editingRowId === m.id ? 'bg-indigo-50' : 'hover:bg-gray-50/50',
-                    !(m.activo ?? true) ? 'opacity-60' : ''
+                    !(m.activo ?? true) ? 'machine-inactive' : ''
                   ]"
                   class="transition-colors"
                 >
                   <template v-if="editingRowId === m.id">
-                    <td class="px-4 py-3"><select v-model="editingRow.tipo" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="t in tiposOptions" :key="t">{{ t }}</option></select></td>
-                    <td class="px-4 py-3"><select v-model="editingRow.sector" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option></select></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.maquina" type="number" class="w-24 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.nombre_maquina" type="text" class="w-full min-w-40 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.local_fisico" type="text" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><select v-model="editingRow.lado" class="bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option value="U">U</option><option value="A">A</option><option value="B">B</option></select></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.modelo" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.nro_serie" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.grp_tear" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model="editingRow.g_cmest" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
-                    <td class="px-4 py-3"><input v-model.number="editingRow.orden_patrulla" type="number" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" placeholder="—" /></td>
-                    <!-- Toggle activo edición inline -->
-                    <td class="px-4 py-3 text-center">
+                  <td class="machine-identity"><input v-model="editingRow.maquina" type="number" class="w-24 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.nombre_maquina" type="text" class="w-full min-w-40 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3 text-center">
                       <button type="button" @click="editingRow.activo = !editingRow.activo" class="flex items-center gap-2 mx-auto">
-                        <span class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors" :class="editingRow.activo ? 'bg-red-500' : 'bg-gray-300'">
+                        <span class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors" :class="editingRow.activo ? 'bg-emerald-600' : 'bg-gray-300'">
                           <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="editingRow.activo ? 'translate-x-4.5' : 'translate-x-0.5'"></span>
                         </span>
                         <span class="text-xs font-bold" :class="editingRow.activo ? 'text-emerald-600' : 'text-gray-400'">{{ editingRow.activo ? 'Activa' : 'Inactiva' }}</span>
                       </button>
                     </td>
-                    <td v-if="userRole === 'admin'" class="px-4 py-3">
+                  <td class="px-4 py-3"><select v-model="editingRow.sector" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="s in SECTOR_OPTIONS" :key="s" :value="s">{{ s }}</option></select></td>
+                  <td class="px-4 py-3"><select v-model="editingRow.tipo" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option v-for="t in tiposOptions" :key="t">{{ t }}</option></select></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.local_fisico" type="text" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><select v-model="editingRow.lado" class="bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none"><option value="U">U</option><option value="A">A</option><option value="B">B</option></select></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.modelo" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.nro_serie" type="text" class="w-full bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.grp_tear" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><input v-model="editingRow.g_cmest" type="text" class="w-20 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" /></td>
+                  <td class="px-4 py-3"><input v-model.number="editingRow.orden_patrulla" type="number" class="w-16 bg-white border border-indigo-300 rounded-md px-3 py-2 text-sm outline-none" placeholder="—" /></td>
+                  <td v-if="userRole === 'admin'" class="px-4 py-3">
                       <div class="flex justify-center space-x-2">
-                        <button @click="saveInlineEdit" class="p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"><Save class="w-4 h-4" /></button>
-                        <button @click="cancelInlineEdit" class="p-2 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"><X class="w-4 h-4" /></button>
+                        <button aria-label="Guardar cambios" @click="saveInlineEdit" class="p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"><Save class="w-4 h-4" /></button>
+                        <button aria-label="Cancelar edición" @click="cancelInlineEdit" class="p-2 bg-gray-200 text-gray-600 rounded-md hover:bg-gray-300 transition-colors"><X class="w-4 h-4" /></button>
                       </div>
                     </td>
-                  </template>
+</template>
                   <template v-else>
-                    <td class="px-4 py-4"><span class="px-2.5 py-1 bg-gray-100 text-xs font-black text-gray-600 rounded-md">{{ m.tipo }}</span></td>
-                    <td class="px-4 py-4"><span class="px-2.5 py-1 bg-emerald-50 text-xs font-black text-emerald-700 rounded-md border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span></td>
-                    <td class="px-4 py-4 font-black text-gray-800 text-base">{{ m.maquina }}</td>
-                    <td class="px-4 py-4 text-gray-700 font-medium text-sm">{{ m.nombre_maquina }}</td>
-                    <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.local_fisico }}</td>
-                    <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.lado }}</td>
-                    <td class="px-4 py-4 text-gray-500 text-sm">{{ m.modelo || '—' }}</td>
-                    <td class="px-4 py-4 text-gray-500 text-sm">{{ m.nro_serie || '—' }}</td>
-                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.grp_tear || '—' }}</td>
-                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.g_cmest || '—' }}</td>
-                    <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.orden_patrulla ?? '—' }}</td>
-                    <!-- Columna Activo (solo lectura / toggle admin) -->
-                    <td class="px-4 py-4 text-center">
+                  <td class="machine-identity font-semibold">{{ m.maquina }}</td>
+                  <td class="px-4 py-4 text-gray-700 font-medium text-sm">{{ m.nombre_maquina }}</td>
+                  <td class="px-4 py-4 text-center">
                       <button
                         v-if="userRole === 'admin'"
                         type="button"
-                        @click="toggleActivo(m)"
+                        :aria-label="`Máquina ${m.maquina}: ${(m.activo ?? true) ? 'activa; desactivar' : 'inactiva; activar'}`" :aria-pressed="m.activo ?? true" @click="toggleActivo(m)"
                         :data-tippy-content="(m.activo ?? true) ? 'En producción — clic para desactivar' : 'Fuera de producción — clic para activar'"
                         class="flex items-center gap-2 mx-auto"
                       >
-                        <span class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors" :class="(m.activo ?? true) ? 'bg-red-500' : 'bg-gray-300'">
+                        <span class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors" :class="(m.activo ?? true) ? 'bg-emerald-600' : 'bg-gray-300'">
                           <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="(m.activo ?? true) ? 'translate-x-4.5' : 'translate-x-0.5'"></span>
                         </span>
-                        <span class="text-[10px] font-black" :class="(m.activo ?? true) ? 'text-emerald-600' : 'text-gray-400'">{{ (m.activo ?? true) ? 'Activa' : 'Inactiva' }}</span>
+                        <span class="text-[10px] font-semibold" :class="(m.activo ?? true) ? 'text-emerald-600' : 'text-gray-400'">{{ (m.activo ?? true) ? 'Activa' : 'Inactiva' }}</span>
                       </button>
-                      <span v-else :class="(m.activo ?? true) ? 'text-emerald-600' : 'text-gray-400'" class="text-[10px] font-black">{{ (m.activo ?? true) ? 'Activa' : 'Inactiva' }}</span>
+                      <span v-else :class="(m.activo ?? true) ? 'text-emerald-600' : 'text-gray-400'" class="text-[10px] font-semibold">{{ (m.activo ?? true) ? 'Activa' : 'Inactiva' }}</span>
                     </td>
-                    <td v-if="userRole === 'admin'" class="px-4 py-4">
+                  <td class="px-4 py-4"><span class="px-2.5 py-1 bg-emerald-50 text-xs font-semibold text-emerald-700 rounded-md border border-emerald-100">{{ m.sector || DEFAULT_SECTOR }}</span></td>
+                  <td class="px-4 py-4"><span class="px-2.5 py-1 bg-gray-100 text-xs font-semibold text-gray-600 rounded-md">{{ m.tipo }}</span></td>
+                  <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.local_fisico }}</td>
+                  <td class="px-4 py-4 text-gray-600 font-bold text-sm">{{ m.lado }}</td>
+                  <td class="px-4 py-4 text-gray-500 text-sm">{{ m.modelo || '—' }}</td>
+                  <td class="px-4 py-4 text-gray-500 text-sm">{{ m.nro_serie || '—' }}</td>
+                  <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.grp_tear || '—' }}</td>
+                  <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.g_cmest || '—' }}</td>
+                  <td class="px-4 py-4 text-gray-500 text-sm font-semibold">{{ m.orden_patrulla ?? '—' }}</td>
+                  <td v-if="userRole === 'admin'" class="px-4 py-4">
                       <div class="flex justify-center space-x-2">
-                        <button @click="startInlineEdit(m)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-4 h-4" /></button>
-                        <button @click="deleteMaquina(m.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-4 h-4" /></button>
+                        <button :aria-label="`Editar máquina ${m.maquina}`" @click="startInlineEdit(m)" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"><Edit3 class="w-4 h-4" /></button>
+                        <button :aria-label="`Eliminar máquina ${m.maquina}`" @click="deleteMaquina(m.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 class="w-4 h-4" /></button>
                       </div>
                     </td>
-                  </template>
+</template>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="text-[11px] text-gray-400 font-bold uppercase tracking-widest">
-              {{ filteredMaquinas.length }} máquinas encontradas
-            </div>
-            
-            <!-- Controles de Paginación -->
-            <div class="flex items-center space-x-1">
-              <button 
-                @click="goToFirst" 
-                :disabled="currentPage === 1"
-                class="p-2 rounded-md hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-500"
-              >
-                <ChevronsLeft class="w-4 h-4" />
-              </button>
-              <button 
-                @click="goToPrev" 
-                :disabled="currentPage === 1"
-                class="p-2 rounded-md hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-500"
-              >
-                <ChevronLeft class="w-4 h-4" />
-              </button>
-              
-              <div class="bg-white border border-gray-200 px-3 py-1.5 rounded-md text-xs font-bold text-gray-600">
-                Página {{ currentPage }} de {{ totalPages }}
-              </div>
-
-              <button 
-                @click="goToNext" 
-                :disabled="currentPage === totalPages"
-                class="p-2 rounded-md hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-500"
-              >
-                <ChevronRight class="w-4 h-4" />
-              </button>
-              <button 
-                @click="goToLast" 
-                :disabled="currentPage === totalPages"
-                class="p-2 rounded-md hover:bg-white border border-transparent hover:border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-gray-500"
-              >
-                <ChevronsRight class="w-4 h-4" />
-              </button>
-            </div>
-          </div>
         </div>
-        
-        <!-- Paginación para Modo Tarjetas -->
-        <div v-if="viewMode === 'cards'" class="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-md shadow-sm border border-gray-100 gap-4 mt-2">
-          <div class="text-[11px] text-gray-400 font-bold uppercase tracking-widest">
-            {{ filteredMaquinas.length }} máquinas
-          </div>
-          <div class="flex items-center space-x-1">
-            <button @click="goToFirst" :disabled="currentPage === 1" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronsLeft class="w-4 h-4" /></button>
-            <button @click="goToPrev" :disabled="currentPage === 1" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronLeft class="w-4 h-4" /></button>
-            <div class="px-3 py-1.5 text-xs font-bold text-gray-600">Pág {{ currentPage }} / {{ totalPages }}</div>
-            <button @click="goToNext" :disabled="currentPage === totalPages" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronRight class="w-4 h-4" /></button>
-            <button @click="goToLast" :disabled="currentPage === totalPages" class="p-2 rounded-md hover:bg-gray-50 disabled:opacity-30 text-gray-500 transition-colors border border-gray-100"><ChevronsRight class="w-4 h-4" /></button>
-          </div>
-        </div>
+        <footer class="machines-footer">
+          <div class="machines-results" aria-live="polite">{{ filteredMaquinas.length ? (currentPage - 1) * itemsPerPage + 1 : 0 }}–{{ Math.min(currentPage * itemsPerPage, filteredMaquinas.length) }} de {{ filteredMaquinas.length }} máquinas</div>
+          <label class="machines-page-size">Filas <select v-model.number="itemsPerPage" class="cmms-control"><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label>
+          <nav class="machines-pagination" aria-label="Paginación de máquinas">
+            <button class="cmms-button" @click="goToFirst" :disabled="currentPage === 1" aria-label="Primera página"><ChevronsLeft :size="16" /></button>
+            <button class="cmms-button" @click="goToPrev" :disabled="currentPage === 1" aria-label="Página anterior"><ChevronLeft :size="16" /></button>
+            <span>{{ currentPage }} / {{ totalPages }}</span>
+            <button class="cmms-button" @click="goToNext" :disabled="currentPage === totalPages" aria-label="Página siguiente"><ChevronRight :size="16" /></button>
+            <button class="cmms-button" @click="goToLast" :disabled="currentPage === totalPages" aria-label="Última página"><ChevronsRight :size="16" /></button>
+          </nav>
+        </footer>
       </template>
     </main>
 
@@ -1187,3 +1036,67 @@ const exportCatalogToExcel = async () => {
 </template>
 
 
+
+<style scoped>
+.machines-page { height:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:#f5f7fa; color:#334155; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+.machines-workspace { width:100%; flex:1; min-height:0; display:flex; flex-direction:column; gap:12px; padding:16px 20px; overflow:hidden; }
+.machines-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; flex-shrink:0; }
+.machines-eyebrow { font-size:11px; font-weight:600; color:#64748b; margin-bottom:2px; }
+.machines-heading h1 { font-size:22px; line-height:1.3; font-weight:650; color:#0f172a; display:flex; align-items:center; gap:10px; }
+.machines-heading h1 span { font-size:12px; background:#e8edf5; color:#475569; padding:3px 8px; border-radius:6px; }
+.machines-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.cmms-button { min-height:36px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:7px 11px; border:1px solid #d8e0ea; border-radius:6px; background:white; color:#334155; font-size:13px; font-weight:550; cursor:pointer; line-height:20px; white-space:nowrap; }
+.cmms-button:hover { background:#f1f5f9; border-color:#b8c5d6; }
+.cmms-button-primary { background:#4f46e5; color:white; border-color:#4f46e5; }
+.cmms-button-primary:hover { background:#4338ca; border-color:#4338ca; }
+.cmms-button:disabled { opacity:.35; cursor:default; }
+.cmms-button:focus-visible,.cmms-control:focus-visible,.machines-search:focus-within,.cmms-segment button:focus-visible,.machines-table-scroll:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
+.machines-export { position:relative; }
+.machines-export summary { list-style:none; }
+.machines-export summary::-webkit-details-marker { display:none; }
+.machines-export-menu { position:absolute; right:0; top:calc(100% + 6px); width:230px; z-index:40; padding:5px; border:1px solid #d8e0ea; background:white; border-radius:8px; box-shadow:0 8px 24px #0f172a18; }
+.machines-export-menu button { width:100%; text-align:left; padding:10px; font-size:13px; cursor:pointer; }
+.machines-export-menu button:hover { background:#eef2ff; }
+.machines-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex-shrink:0; }
+.machines-search { display:flex; align-items:center; gap:8px; padding:0 11px; min-height:36px; flex:1 1 240px; background:white; border:1px solid #d8e0ea; border-radius:6px; color:#64748b; }
+.machines-search input { width:100%; min-width:0; outline:none; font-size:13px; padding:7px 0; color:#334155; }
+.cmms-control { min-height:36px; border:1px solid #d8e0ea; border-radius:6px; background:white; padding:6px 10px; font-size:13px; color:#334155; }
+.machines-type { max-width:180px; }
+.cmms-segment { display:flex; background:#e9edf3; padding:3px; border-radius:7px; gap:2px; }
+.cmms-segment button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:30px; padding:4px 10px; border-radius:5px; font-size:13px; color:#64748b; cursor:pointer; }
+.cmms-segment button.selected { background:white; color:#4338ca; box-shadow:0 1px 3px #0f172a15; font-weight:600; }
+.machines-table-panel { flex:1; min-height:0; overflow:hidden; background:white; border:1px solid #dce3ec; border-radius:8px; display:flex; flex-direction:column; }
+.machines-table-scroll { flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable; }
+.machines-table { width:100%; min-width:1230px; border-collapse:separate; border-spacing:0; font-size:13px; text-align:left; font-variant-numeric:tabular-nums; }
+.machines-table thead { position:sticky; top:0; z-index:20; box-shadow:0 1px 0 #dce3ec; }
+.machines-table th { padding:11px 12px; background:#f8fafc; color:#64748b; font-weight:600; font-size:12px; letter-spacing:0; white-space:nowrap; border-bottom:1px solid #dce3ec; }
+.machines-table td { padding:8px 12px; height:45px; border-bottom:1px solid #edf1f6; color:#475569; background:white; }
+.machines-table tbody tr:nth-child(even) td { background:#fbfcfe; }
+.machines-table tbody tr:hover td { background:#f0f4ff; }
+.machines-table tbody tr.bg-indigo-50 td { background:#eef2ff; }
+.machines-table .machine-identity { position:sticky; left:0; z-index:2; min-width:100px; color:#0f172a; border-right:1px solid #e2e8f0; }
+.machines-table th.machine-identity { z-index:22; }
+.machines-table td span { font-weight:500; }
+.machines-table .machine-inactive td { color:#64748b; }
+.machines-table td button:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
+.machines-table td button { min-height:30px; }
+.machines-table td input,.machines-table td select { font-size:13px; padding:6px 8px; }
+.machines-cards-scroll { flex:1; min-height:0; overflow:auto; }
+.machines-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.machine-card { border-radius:8px; min-height:210px; }
+.machine-card p { font-style:normal; font-weight:500; color:#475569; }
+.machine-card .text-\[9px\],.machine-card .text-\[10px\] { font-size:11px; letter-spacing:0; }
+.machines-footer { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex-shrink:0; font-size:12px; color:#64748b; }
+.machines-results { margin-right:auto; }
+.machines-page-size { display:flex; align-items:center; gap:6px; }
+.machines-page-size select { min-height:32px; padding:4px 8px; }
+.machines-pagination { display:flex; align-items:center; gap:4px; }
+.machines-pagination .cmms-button { min-height:32px; padding:5px 7px; }
+.machines-pagination span { min-width:56px; text-align:center; color:#334155; font-variant-numeric:tabular-nums; }
+.machines-empty { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:white; border:1px solid #dce3ec; border-radius:8px; color:#64748b; }
+.machines-empty h2 { font-size:16px; font-weight:600; color:#334155; }
+.machines-empty p { font-size:13px; }
+@media (max-width:1100px) { .machines-workspace { padding:12px; gap:10px; } .machines-view span { display:none; } .machines-search { flex-basis:200px; } }
+@media (max-width:850px) { .machines-workspace { padding:8px; gap:8px; } .machines-heading h1 { font-size:19px; } .machines-eyebrow { display:none; } .machines-search { flex-basis:100%; } .machines-type { flex:1; max-width:none; } .machines-view { margin-left:auto; } .machines-actions { gap:5px; } .cmms-button { padding:6px 8px; } }
+@media (max-width:550px) { .machines-header { gap:8px; } .machines-actions { width:100%; } .machines-actions .cmms-button { font-size:12px; } .machines-page-size { display:none; } .machines-footer { gap:6px; } .machines-pagination .cmms-button:first-child,.machines-pagination .cmms-button:last-child { display:none; } .cmms-segment button { padding:4px 7px; } }
+</style>

@@ -221,3 +221,18 @@ pruebas del servicio en entorno piloto.
 - 40 pruebas unitarias correctas. El renderer de prueba no valida CSS, extensiones ni navegador real; comprobar escritorio/tablet y navegación al salir en piloto.
 - No cambia roles ni reglas. El perfil mostrado por el usuario es Administrador Global; TEJEDURIA no limita el alcance del rol admin.
 - El sitio público debe recibir un nuevo build para incorporar la corrección; no se desplegó automáticamente.
+
+### V1 — Primera vista: Gestión de Máquinas
+
+- Tabla inicial, ancho completo sin max-width y alto ajustado al espacio del shell (sin restar 120 px).
+- Identificación y nombre primero, estado de producción a continuación. ID fijo al desplazar horizontalmente; cabecera fija y paginación fuera del área de desplazamiento.
+- Tipografía Inter/system de 13 px en tabla, filas de 45 px, separadores suaves y estados legibles sin bajar la opacidad de toda la fila.
+- Cabecera única para escritorio y pantallas pequeñas; botones de 36 px, acción principal Agregar, catálogo secundario y exportaciones agrupadas.
+- Tarjetas distribuidas por ancho disponible, acciones accesibles sin depender del hover; selector de 25/50/100 filas y mensaje al no encontrar resultados.
+- Filtros tolerantes a datos legacy; búsqueda incluye ubicación. Cambio de tamaño de página reinicia la paginación y reducción de resultados limita la página actual.
+- Prueba del componente real: carga, tabla, tarjetas, filtros vacíos, apertura del formulario y desmontaje, incluso sin portal de escritorio. No cambia reglas, roles ni datos remotos.
+- Validación funcional: 40 pruebas unitarias; build de frontend. Advertencias de tamaño de bundles preexistentes permanecen en E1.
+- Validación visual pendiente en 1920×1200, 1360×768, 1024×768 y 800×600: el navegador integrado no conecta con el servidor local (timeout). No considerar V1 aprobado visualmente hasta el ensayo del usuario.
+- Patrón para siguientes vistas: padding 8/12/20 px según ancho, área de datos flex con min-height:0, desplazamiento interno, controles de 36 px y botones con icono más texto cuando haya espacio.
+- Próximos bloques: aprobar esta vista; trasladar el patrón a históricos/órdenes; revisar formularios y paneles. R3 y recuperación ante cortes siguen pendientes antes de ampliar producción.
+- Reversión: revertir únicamente el commit de V1, compilar y desplegar hosting:main; no requiere rollback de base de datos.

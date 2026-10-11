@@ -18,10 +18,14 @@ function evaluate(code, dependencies) {
   return new Function('dependencies', code.replace('export default', 'return').replace('export function render', 'return function render'))(dependencies);
 }
 
+// The in-memory renderer supplies the DOM types used by Vue v-model focus checks.
+globalThis.Document ??= class Document {};
+globalThis.ShadowRoot ??= class ShadowRoot {};
+
 function host({ missingDesktopPortal = false } = {}) {
   const node = (type, text = '') => ({ type, text, children: [], parent: null,
     tagName: type.toUpperCase(), options: [], addEventListener() {}, removeEventListener() {},
-    setAttribute() {}, removeAttribute() {}, getAttribute() { return null; } });
+    getRootNode() { return { activeElement: null }; }, setAttribute() {}, removeAttribute() {}, getAttribute() { return null; } });
   const body = node('body');
   const insert = (child, parent, anchor) => {
     if (child.parent) child.parent.children.splice(child.parent.children.indexOf(child), 1);
@@ -84,7 +88,7 @@ test('real catalog template renders loading, data and model changes for admin wi
   assert.deepEqual(errors.map(error => error.message), []);
 });
 
-test('machine view reproduces emitsOptions with missing portal and renders with restored target', async () => {
+test('machine view renders table, cards and empty filters without depending on desktop portal', async () => {
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/GestionMaquinas.vue', import.meta.url), 'utf8'));
   const script = compileScript(descriptor, { id: 'machine-render-test' });
   const template = compileTemplate({ id: 'machine-render-test', source: descriptor.template.content,
@@ -118,13 +122,27 @@ test('machine view reproduces emitsOptions with missing portal and renders with 
     finish({ docs: [{ id: 'machine1', data: () => ({ tipo: 'TELAR', maquina: 35001, sector: 'TEJEDURIA' }) }] });
     await new Promise(resolve => setImmediate(resolve));
     findings.push(errors);
-    if (!missingDesktopPortal) {
+    {
       assert.equal(root._vnode.component.setupState.isLoading, false);
       assert.equal(root._vnode.component.setupState.maquinas.length, 1);
+      const state = root._vnode.component.setupState;
+      assert.equal(state.viewMode, 'table');
+      state.showModal = true;
+      await Vue.nextTick();
+      state.showModal = false;
+      state.viewMode = 'cards';
+      await Vue.nextTick();
+      state.searchQuery = 'does-not-exist';
+      await Vue.nextTick();
+      assert.equal(state.filteredMaquinas.length, 0);
+      state.searchQuery = '';
+      state.itemsPerPage = 50;
+      await Vue.nextTick();
+      assert.equal(state.currentPage, 1);
       app.unmount();
     }
   }
-  assert.ok(findings[0].some(message => message.includes('emitsOptions')), JSON.stringify(findings));
+  assert.deepEqual(findings[0], []);
   assert.deepEqual(findings[1], []);
   const shell = fs.readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8');
   assert.ok(shell.indexOf('id="navbar-actions"') < shell.indexOf('<router-view>'));

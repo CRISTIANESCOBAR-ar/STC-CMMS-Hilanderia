@@ -37,9 +37,10 @@ export function useMaquinasList(options = {}) {
       if (tipoFilter.value && m.tipo !== tipoFilter.value) return false;
       return (
         String(m.maquina).toLowerCase().includes(q) ||
-        m.tipo.toLowerCase().includes(q) ||
-        m.nombre_maquina?.toLowerCase().includes(q) ||
+        String(m.tipo || '').toLowerCase().includes(q) ||
+        String(m.nombre_maquina || '').toLowerCase().includes(q) ||
         String(m.sector || '').toLowerCase().includes(q) ||
+        String(m.local_fisico || '').toLowerCase().includes(q) ||
         String(m.grp_tear || '').toLowerCase().includes(q) ||
         String(m.g_cmest || '').toLowerCase().includes(q)
       );
@@ -63,8 +64,12 @@ export function useMaquinasList(options = {}) {
     return filteredMaquinas.value.slice(start, start + itemsPerPage.value);
   });
 
-  watch([searchQuery, activoFilter, tipoFilter], () => {
+  watch([searchQuery, activoFilter, tipoFilter, itemsPerPage], () => {
     currentPage.value = 1;
+  });
+
+  watch(totalPages, (pages) => {
+    if (currentPage.value > pages) currentPage.value = pages;
   });
 
   const goToFirst = () => { currentPage.value = 1; };

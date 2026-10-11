@@ -1,4 +1,6 @@
 import { saveManualShiftChanges } from '../../src/services/shiftReportWrites.js';
+import { faultEventsQuery, loadFaultEventsPage } from '../../src/services/faultEvents.js';
+import { Timestamp } from 'firebase/firestore';
 import { before, after, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -30,6 +32,33 @@ async function approve(uid, role = 'mecanico', sector = 'HILANDERIA', extra = {}
 }
 const novelty = (uid, sector = 'HILANDERIA') => ({
   sector, estado: 'pendiente', creadoPorUid: uid, createdAt: serverTimestamp(),
+});
+
+test('fault event pagination enforces sectors, time windows and older pending state', async () => {
+  await approve('reader');
+  await environment.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all(Array.from({ length: 55 }, (_, i) => setDoc(doc(db, `novedades/event-${String(i).padStart(2, '0')}`), {
+      sector:'HILANDERIA', estado:'pendiente', tipoProblema:i % 2 ? 'Eléctrico' : 'Mecánico', createdAt:Timestamp.fromDate(new Date('2026-10-11T10:00:00Z')),
+    })));
+    await setDoc(doc(db, 'novedades/other-sector'), { sector:'TEJEDURIA', estado:'pendiente', createdAt:Timestamp.fromDate(new Date('2026-10-11T10:00:00Z')) });
+    await setDoc(doc(db, 'novedades/older'), { sector:'HILANDERIA', estado:'pendiente', createdAt:Timestamp.fromDate(new Date('2026-10-10T10:00:00Z')) });
+    await setDoc(doc(db, 'novedades/resolved'), { sector:'HILANDERIA', estado:'resuelto', createdAt:Timestamp.fromDate(new Date('2026-10-10T10:00:00Z')) });
+  });
+  const db = identity('reader').firestore();
+  const options = { period:'today', order:'asc', now:new Date('2026-10-11T12:00:00Z') };
+  const first = await assertSucceeds(getDocs(faultEventsQuery(db, ['HILANDERIA'], options)));
+  assert.equal(first.size, 50);
+  const next = await loadFaultEventsPage(db, ['HILANDERIA'], options, first.docs.at(-1));
+  assert.equal(next.events.length, 5);
+  assert.equal(next.hasMore, false);
+  assert.equal(new Set([...first.docs.map(doc => doc.id), ...next.events.map(event => event.id)]).size, 55);
+  const filtered = await getDocs(faultEventsQuery(db, ['HILANDERIA'], { ...options, category:'Eléctrico', state:'pendiente' }));
+  assert.equal(filtered.size, 27);
+  assert.ok(filtered.docs.every(doc => doc.data().tipoProblema === 'Eléctrico'));
+  await assertFails(getDocs(faultEventsQuery(db, null, options)));
+  const older = await getDocs(faultEventsQuery(db, ['HILANDERIA'], { ...options, period:'older' }));
+  assert.deepEqual(older.docs.map(doc => doc.id), ['older']);
 });
 const intervention = (uid, sector = 'HILANDERIA', type = 'MECANICO') => ({
   sector, tipoIntervencion: type, estado: 'PENDIENTE', creadoPorUid: uid,

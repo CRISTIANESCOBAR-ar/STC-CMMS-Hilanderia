@@ -1,28 +1,32 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
+import { vTippy } from '../utils/tooltipDirective';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 import { collection, getDocs, doc, updateDoc, getDoc, setDoc, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { userRole } from '../services/authService';
-import { 
-  Users, 
-  ShieldCheck, 
-  Shield, 
-  Mail, 
-  Calendar, 
-  Search, 
-  Save, 
-  Building2, 
-  UserCog, 
-  Settings, 
-  Plus, 
-  Trash2, 
-  ChevronDown, 
-  ChevronUp, 
-  Eye, 
-  X, 
-  Filter, 
-  User, 
-  Check, 
+import {
+  Users,
+  ShieldCheck,
+  Shield,
+  Mail,
+  Calendar,
+  Search,
+  Save,
+  Building2,
+  UserCog,
+  Settings,
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  X,
+  Filter,
+  User,
+  Check,
   AlertCircle,
   Undo2,
   Pencil,
@@ -30,28 +34,29 @@ import {
   MapPin,
   LogIn,
   Lock,
-  LayoutGrid
+  LayoutGrid,
+  RefreshCw
 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
-import { 
-  DEFAULT_SECTOR, 
-  ROLE_OPTIONS as DEFAULT_ROLES, 
-  SECTOR_OPTIONS as DEFAULT_SECTORS, 
-  isJefeRole, 
-  normalizeSectorValue, 
-  sanitizeSectorList, 
-  ROLE_PROFILES, 
-  NIVEL_CONFIG, 
-  VISTA_OPTIONS, 
-  VISTA_LABEL, 
+import {
+  DEFAULT_SECTOR,
+  ROLE_OPTIONS as DEFAULT_ROLES,
+  SECTOR_OPTIONS as DEFAULT_SECTORS,
+  isJefeRole,
+  normalizeSectorValue,
+  sanitizeSectorList,
+  ROLE_PROFILES,
+  NIVEL_CONFIG,
+  VISTA_OPTIONS,
+  VISTA_LABEL,
   PERMISO_LABELS,
   ROLE_SECTOR_DEFAULT
 } from '../constants/organization';
-import { 
-  profileOverrides, 
-  loadProfiles, 
-  saveProfiles, 
-  getEffectiveVistas, 
+import {
+  profileOverrides,
+  loadProfiles,
+  saveProfiles,
+  getEffectiveVistas,
   getEffectivePermisos,
   getDefaultRoute,
   getEffectiveDescripcion,
@@ -66,7 +71,28 @@ const filterRole = ref('');
 const activeTab = ref('usuarios'); // 'usuarios' | 'perfiles' | 'config'
 const selectedUser = ref(null);
 const editSnapshot = ref('');
-const drawerOpen = ref(false);
+const drawerOpen = ref(false), modal = ref(null), savingUser = ref(false), loadError = ref(''), saveError = ref(''), filterSector = ref('');
+let previousFocus;
+const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+async function closeUser() {
+  if(savingUser.value) return false;
+  if(isDirty.value && !(await Swal.fire({ title:'¿Descartar cambios?',text:'El usuario tiene cambios de configuración sin guardar.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Seguir editando' })).isConfirmed) return false;
+  discardChanges(); drawerOpen.value=false; selectedUser.value=null; saveError.value=''; nextTick(() => previousFocus?.isConnected && previousFocus.focus()); return true;
+}
+function modalKeyboard(event) {
+  if(event.key==='Escape') { event.stopPropagation(); closeUser(); }
+  if(event.key!=='Tab') return;
+  const nodes=[...(modal.value?.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled)') || [])].filter(node => node.getClientRects().length);
+  const first=nodes[0],last=nodes.at(-1),active=globalThis.document?.activeElement;
+  if(!first) { event.preventDefault(); return; }
+  if(event.shiftKey && (active===first || !nodes.includes(active))) { event.preventDefault(); last.focus(); }
+  else if(!event.shiftKey && (active===last || !nodes.includes(active))) { event.preventDefault(); first.focus(); }
+}
+function beforeUnload(event) { if(isDirty.value || savingUser.value) { event.preventDefault(); event.returnValue=''; } }
+globalThis.window?.addEventListener('beforeunload',beforeUnload);
+onUnmounted(() => globalThis.window?.removeEventListener('beforeunload',beforeUnload));
+onBeforeRouteLeave(async () => savingUser.value ? false : !drawerOpen.value || await closeUser());
+
 
 const perfilesViewMode = ref('resumen'); // 'resumen' | 'editor'
 
@@ -78,7 +104,7 @@ const rolesByNivel = computed(() => {
     estrategico: { label: 'Estratégico',  color: 'emerald', roles: [] },
     global:      { label: 'Global',       color: 'amber',   roles: [] },
   };
-  
+
   for (const role of activeRoles.value) {
     let desc = '';
     let nivel = 'operativo';
@@ -152,11 +178,12 @@ const loadConfig = async () => {
     const snap = await getDoc(doc(db, 'config', 'organization'));
     if (snap.exists()) {
       const data = snap.data();
-      if (data.roles?.length) dynamicRoles.value = data.roles;
-      if (data.sectores?.length) dynamicSectors.value = data.sectores;
+      dynamicRoles.value = Array.isArray(data.roles) ? data.roles : [];
+      dynamicSectors.value = Array.isArray(data.sectores) ? data.sectores : [];
     }
   } catch (e) {
     console.error('Error cargando config:', e);
+    throw e;
   }
 };
 
@@ -282,11 +309,11 @@ const addRoleFromPerfiles = async () => {
     }
   });
   if (!formValues) return;
-  
+
   // 1. Agregar a dynamicRoles y persistir config
   dynamicRoles.value.push({ value: formValues.id, label: formValues.label });
   await saveConfig();
-  
+
   // 2. Crear perfil editable con defaults
   editableProfiles.value[formValues.id] = {
     descripcion: '',
@@ -296,7 +323,7 @@ const addRoleFromPerfiles = async () => {
     permisos: { verCalidad: false, crearFalla: false, cerrarOrden: false, configSistema: false },
   };
   await saveProfileChanges();
-  
+
   // 3. Cambiar a modo editor y expandir
   perfilesViewMode.value = 'editor';
   expandedProfile.value = formValues.id;
@@ -340,7 +367,7 @@ const getRoleColor = (role) => {
 };
 
 const normalizarUsuario = (user) => {
-  const role = user.role || 'mecanico';
+  const role = user.role || 'pendiente';
   const sectorDefault = normalizeSectorValue(user.sectorDefault || DEFAULT_SECTOR);
   const sectoresAsignados = sanitizeSectorList(user.sectoresAsignados, sectorDefault);
   const jefeDeSectores = isJefeRole(role)
@@ -362,31 +389,32 @@ const normalizarUsuario = (user) => {
 };
 
 const cargarUsuarios = async () => {
-  isLoading.value = true;
+  if(savingUser.value) return;
+  isLoading.value = true; loadError.value='';
   try {
-    const q = query(collection(db, 'usuarios'), orderBy('createdAt', 'desc'));
+    const q = collection(db, 'usuarios');
     const snap = await getDocs(q);
-    usuarios.value = snap.docs.map(d => normalizarUsuario({ id: d.id, ...d.data() }));
+    usuarios.value = snap.docs.map(d => normalizarUsuario({ ...d.data(), id:d.id })).sort((a,b) => (b.createdAt?.seconds || 0)-(a.createdAt?.seconds || 0));
   } catch (e) {
     console.error("Error cargando usuarios:", e);
-    Swal.fire('Error', 'No se pudieron cargar los usuarios', 'error');
+    loadError.value='No se pudieron cargar los usuarios. Reintentá.';
   } finally {
     isLoading.value = false;
   }
 };
 
 const filteredUsuarios = computed(() => {
-  const s = searchQuery.value.toLowerCase();
+  const s = normalize(searchQuery.value.trim());
   return usuarios.value.filter((u) => {
-    const email = String(u.email || '').toLowerCase();
-    const name = String(u.displayName || '').toLowerCase();
-    const nombre = String(u.nombre || '').toLowerCase();
-    const apellido = String(u.apellido || '').toLowerCase();
-    
+    const email = normalize(u.email);
+    const name = normalize(u.displayName);
+    const nombre = normalize(u.nombre);
+    const apellido = normalize(u.apellido);
+
     const matchesSearch = email.includes(s) || name.includes(s) || nombre.includes(s) || apellido.includes(s);
     const matchesRole = !filterRole.value || u.role === filterRole.value;
-    
-    return matchesSearch && matchesRole;
+
+    return matchesSearch && matchesRole && (!filterSector.value || u.sectorDefault===filterSector.value || u.sectoresAsignados?.includes(filterSector.value));
   });
 });
 
@@ -412,10 +440,14 @@ const isDirty = computed(() => {
   return JSON.stringify(currentSnap) !== editSnapshot.value;
 });
 
+const structuredCloneUser = user => ({ ...user, sectoresAsignados:[...(user.sectoresAsignados || [])],jefeDeSectores:[...(user.jefeDeSectores || [])],vistasPersonalizadas:Array.isArray(user.vistasPersonalizadas) ? [...user.vistasPersonalizadas]:null,permisosPersonalizados:user.permisosPersonalizados ? { ...user.permisosPersonalizados }:null });
 const selectUser = (user) => {
-  selectedUser.value = user;
-  editSnapshot.value = JSON.stringify(getUserSnapshot(user));
+  if(savingUser.value) return;
+  previousFocus=globalThis.document?.activeElement; saveError.value='';
+  selectedUser.value = structuredCloneUser(user);
+  editSnapshot.value = JSON.stringify(getUserSnapshot(selectedUser.value));
   drawerOpen.value = true;
+  nextTick(() => modal.value?.focus?.());
 };
 
 const discardChanges = () => {
@@ -434,6 +466,7 @@ const discardChanges = () => {
 };
 
 const guardarConfiguracion = async (user) => {
+  if(savingUser.value) return;
   if (userRole.value !== 'admin') {
     Swal.fire('Acceso Denegado', 'Solo administradores pueden gestionar usuarios', 'warning');
     return;
@@ -456,40 +489,42 @@ const guardarConfiguracion = async (user) => {
     permisosPersonalizados: (user.permisosPersonalizados && typeof user.permisosPersonalizados === 'object') ? user.permisosPersonalizados : null,
   };
 
+  savingUser.value=true; saveError.value='';
   try {
     await updateDoc(doc(db, 'usuarios', user.id), payload);
     Object.assign(user, payload);
+    const saved=usuarios.value.find(item => item.id===user.id); if(saved) Object.assign(saved,payload);
     editSnapshot.value = JSON.stringify(getUserSnapshot(user));
     Swal.fire({ icon: 'success', title: 'Guardado', text: 'Configuración actualizada', timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' });
   } catch (e) {
-    Swal.fire('Error', 'No se pudo actualizar el usuario', 'error');
-  }
+    saveError.value=e.message || 'No se pudo actualizar el usuario. Se conservan los cambios.';
+  } finally { savingUser.value=false; }
 };
 
-onMounted(async () => {
-  await loadConfig();
-  await loadProfiles();
-  initEditableProfiles();
-  await cargarUsuarios();
-});
+async function reloadAll() {
+  if(savingUser.value) return;
+  isLoading.value=true; loadError.value='';
+  try { await loadConfig(); await loadProfiles(); initEditableProfiles(); await cargarUsuarios(); } catch(failure) { loadError.value='No se pudo cargar la configuración. Reintentá antes de modificar roles o sectores.'; isLoading.value=false; }
+}
+onMounted(reloadAll);
 </script>
 
 <template>
-  <div class="h-full bg-gray-50 flex flex-col overflow-hidden">
+  <div class="users-page users-style" :inert="drawerOpen || undefined">
     <!-- Header / Navigation -->
     <header class="bg-white border-b border-gray-200 px-4 py-2 shrink-0 shadow-xs">
-      <div class="max-w-[1800px] w-full mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="users-header">
         <!-- Compact Title -->
         <div class="flex items-center gap-2">
           <div class="bg-indigo-600 p-1.5 rounded-lg text-white shadow-sm shadow-indigo-100">
             <Users class="w-4 h-4" />
           </div>
-          <h1 class="text-sm font-black text-gray-800 tracking-tight leading-none hidden sm:block">Gestión de Usuarios</h1>
+          <h1 class="text-sm font-black text-gray-800 tracking-tight leading-none">Gestión de Usuarios</h1>
         </div>
 
         <!-- Segmented Tab Bar Control -->
         <div class="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200 shrink-0 self-start sm:self-center">
-          <button 
+          <button
             @click="activeTab = 'usuarios'"
             :class="activeTab === 'usuarios' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
@@ -500,7 +535,7 @@ onMounted(async () => {
               {{ filteredUsuarios.length }}
             </span>
           </button>
-          <button 
+          <button
             @click="activeTab = 'perfiles'"
             :class="activeTab === 'perfiles' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
@@ -508,7 +543,7 @@ onMounted(async () => {
             <Shield class="w-3.5 h-3.5" />
             <span>Perfiles de Rol</span>
           </button>
-          <button 
+          <button
             @click="activeTab = 'config'"
             :class="activeTab === 'config' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
@@ -520,9 +555,10 @@ onMounted(async () => {
       </div>
     </header>
 
+<p v-if="loadError" class="user-error" role="alert">{{ loadError }} <button @click="reloadAll">Reintentar</button></p>
     <!-- Main Workspace -->
-    <main class="flex-1 max-w-[1800px] w-full mx-auto p-4 overflow-hidden min-h-0">
-      
+    <main class="users-workspace">
+
       <!-- LOADING STATE -->
       <div v-if="isLoading" class="h-full flex flex-col items-center justify-center text-gray-400">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"></div>
@@ -530,102 +566,508 @@ onMounted(async () => {
       </div>
 
       <!-- TABS CONTENTS -->
-      <div v-else class="h-full flex flex-col min-h-0">
-        
-        <!-- ── TAB 1: USUARIOS (MASTER-DETAIL) ── -->
-        <div v-if="activeTab === 'usuarios'" class="h-full flex gap-5 min-h-0">
-          
-          <!-- MASTER PANEL (List View) -->
-          <div class="w-full lg:w-[350px] shrink-0 bg-white border border-gray-200 rounded-2xl shadow-xs flex flex-col overflow-hidden min-h-0">
-            <!-- Search & Filters Header -->
-            <div class="p-3.5 border-b border-gray-100 space-y-2.5 shrink-0 bg-gray-50/50">
-              <div class="relative">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="Buscar nombre o email..."
-                  class="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all font-medium"
-                />
-                <button 
-                  v-if="searchQuery" 
-                  @click="searchQuery = ''" 
-                  class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X class="w-3 h-3" />
-                </button>
-              </div>
+      <div v-else-if="!loadError" class="h-full flex flex-col min-h-0">
 
-              <!-- Filter by Role -->
-              <div class="flex items-center gap-1.5">
-                <Filter class="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                <select
-                  v-model="filterRole"
-                  class="flex-1 bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-600 outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
-                >
-                  <option value="">Todos los Roles</option>
-                  <option value="pendiente">Pendientes de aprobación</option>
-                  <option v-for="r in activeRoles" :key="r.value" :value="r.value">{{ r.label }}</option>
-                </select>
+        <!-- ── TAB 1: USUARIOS (MASTER-DETAIL) ── -->
+        <div v-if="activeTab === 'usuarios'" class="h-full flex min-h-0">
+
+<div class="users-list-panel"><div class="users-filters"><div class="users-search"><Search /><input v-model="searchQuery" aria-label="Buscar usuarios" placeholder="Buscar nombre o correo…" /></div><select v-model="filterRole" aria-label="Filtrar rol"><option value="">Todos los roles</option><option value="pendiente">Pendientes de aprobación</option><option v-for="role in activeRoles" :key="role.value" :value="role.value">{{ role.label }}</option></select><select v-model="filterSector" aria-label="Filtrar sector"><option value="">Todos los sectores</option><option v-for="sector in activeSectors" :key="sector">{{ sector }}</option></select><button class="user-btn" :disabled="isLoading" @click="cargarUsuarios"><RefreshCw />Actualizar</button></div><div class="users-table-scroll"><table class="users-table"><colgroup><col /><col style="width:22%" /><col style="width:23%" /><col style="width:18%" /><col style="width:65px" /></colgroup><thead><tr><th>Usuario / correo</th><th>Rol</th><th>Sectores</th><th>Acceso</th><th>Editar</th></tr></thead><tbody><tr v-for="user in filteredUsuarios" :key="user.id"><td><strong>{{ user.nombre && user.apellido ? `${user.nombre} ${user.apellido}` : user.displayName || user.nombre || 'Sin nombre' }}</strong><small>{{ user.email || 'Sin correo' }}</small></td><td><span class="user-badge" :class="{ pending:user.role==='pendiente' }">{{ roleLabel[user.role] || user.role }}</span></td><td><strong>{{ user.sectorDefault }}</strong><small>Asignados: {{ (user.sectoresAsignados || []).join(', ') || '—' }}</small><small v-if="user.jefeDeSectores?.length">A cargo: {{ user.jefeDeSectores.join(', ') }}</small></td><td><span>{{ user.alcance==='global' ? 'Global':'Por sector' }}</span><small>{{ Array.isArray(user.vistasPersonalizadas) ? `${user.vistasPersonalizadas.length} vistas personalizadas`:'Según perfil de rol' }}</small></td><td><button class="user-icon" v-tippy="'Editar datos, rol, sectores y accesos'" aria-label="Editar usuario" @click="selectUser(user)"><Pencil /></button></td></tr></tbody></table><p v-if="!filteredUsuarios.length" class="users-empty">No hay usuarios que coincidan con los filtros.</p></div><footer>{{ filteredUsuarios.length }} de {{ usuarios.length }} usuarios</footer></div>
+
+
+        </div>
+
+        <!-- ── TAB 2: PERFILES DE ROL (ACCORDIONS & RESUMEN) ── -->
+        <div v-else-if="activeTab === 'perfiles'" class="flex-1 overflow-y-auto space-y-5 mx-auto w-full p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
+
+          <!-- Tab Title & Toggle -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-4">
+            <div>
+              <h3 class="text-base font-black text-gray-800 flex items-center gap-2">
+                <ShieldCheck class="w-5 h-5 text-indigo-600" />
+                Perfiles de Rol — Vistas y Permisos Predeterminados
+                <span class="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full ml-1">{{ activeRoles.length }} roles</span>
+              </h3>
+              <p class="text-[11px] text-gray-400 font-medium mt-1">Configura las vistas y permisos iniciales de cada cargo y edita su metadata operativa.</p>
+            </div>
+
+            <!-- Selector de Vista -->
+            <div class="flex items-center gap-3 self-start sm:self-center shrink-0">
+              <button
+                @click="addRoleFromPerfiles"
+                class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus class="w-3.5 h-3.5" /> Nuevo Perfil
+              </button>
+              <div class="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200">
+                <button
+                @click="perfilesViewMode = 'resumen'"
+                :class="perfilesViewMode === 'resumen' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
+                class="px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <LayoutGrid class="w-3.5 h-3.5" />
+                Resumen
+              </button>
+              <button
+                @click="perfilesViewMode = 'editor'"
+                :class="perfilesViewMode === 'editor' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
+                class="px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Pencil class="w-3.5 h-3.5" />
+                Editar
+              </button>
+            </div>
+            </div>
+          </div>
+
+          <!-- MODO RESUMEN: Vista General Tabla / Cards -->
+          <div v-if="perfilesViewMode === 'resumen'" class="space-y-6 animate-fade-in">
+            <!-- Leyenda compacta -->
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-indigo-50/40 px-4 py-3 rounded-2xl border border-indigo-100/60 text-xs font-bold text-indigo-800 shrink-0">
+              <div class="flex items-center gap-2">
+                <AlertCircle class="w-4 h-4 text-indigo-600 shrink-0" />
+                <span class="font-extrabold uppercase tracking-wider text-[10px]">Leyenda Permisos Especiales</span>
+              </div>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-indigo-700">
+                <span><strong>VC</strong> = Ver Calidad</span>
+                <span><strong>CF</strong> = Crear Falla</span>
+                <span><strong>CO</strong> = Cerrar Orden</span>
+                <span><strong>CS</strong> = Config. Sistema</span>
               </div>
             </div>
 
-            <!-- List scroll area -->
-            <div class="flex-1 overflow-y-auto divide-y divide-gray-50 p-2 space-y-1">
-              <div
-                v-for="user in filteredUsuarios"
-                :key="user.id"
-                @click="selectUser(user)"
-                :class="[
-                  selectedUser?.id === user.id 
-                    ? 'bg-indigo-50/55 border-indigo-200 shadow-2xs' 
-                    : 'hover:bg-gray-50 border-transparent'
-                ]"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all"
+            <!-- Grilla/Tabla por cada nivel -->
+            <div v-for="[nivelKey, nivelGroup] in rolesByNivel" :key="nivelKey" class="space-y-3">
+              <!-- Separador nivel -->
+              <div class="flex items-center gap-2.5 pt-2 px-3 py-2 rounded-xl"
+                :class="{
+                  'bg-blue-50/50':    nivelKey === 'operativo',
+                  'bg-violet-50/50':  nivelKey === 'mandos',
+                  'bg-emerald-50/50': nivelKey === 'estrategico',
+                  'bg-amber-50/50':   nivelKey === 'global',
+                }"
               >
-                <!-- Avatar & Shield Badge -->
-                <div :class="[getRoleColor(user.role).bg, getRoleColor(user.role).text]" class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-2xs font-black text-xs">
-                  <ShieldCheck v-if="user.role === 'admin'" class="w-4.5 h-4.5" />
-                  <UserCog v-else-if="isJefeRole(user.role) || user.role === 'gerente_produccion'" class="w-4.5 h-4.5" />
-                  <span v-else>{{ (user.nombre || user.displayName || 'U').substring(0,2).toUpperCase() }}</span>
-                </div>
-
-                <!-- Identity text -->
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center justify-between gap-1">
-                    <p class="text-xs font-black text-gray-800 truncate">{{ user.nombre && user.apellido ? `${user.nombre} ${user.apellido}` : (user.displayName || 'Sin nombre') }}</p>
-                    <!-- Indicator dot for dirty state on this user -->
-                    <span 
-                      v-if="selectedUser?.id === user.id && isDirty"
-                      class="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"
-                      title="Tiene cambios sin guardar"
-                    ></span>
-                  </div>
-                  <p class="text-[10px] text-gray-400 font-medium truncate mt-0.5">{{ user.email }}</p>
-                  
-                  <!-- Badges info -->
-                  <div class="flex items-center gap-1.5 mt-1">
-                    <span :class="getRoleColor(user.role).badge" class="px-1.5 py-0.5 text-[9px] font-black rounded-md border shrink-0">
-                      {{ roleLabel[user.role] || user.role }}
-                    </span>
-                    <span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 text-[9px] font-black rounded-md shrink-0 uppercase">
-                      {{ user.sectorDefault }}
-                    </span>
-                  </div>
-                </div>
+                <span class="text-base font-extrabold">{{ NIVEL_CONFIG[nivelKey]?.emoji || '⚙️' }}</span>
+                <h4 class="text-xs font-black uppercase tracking-wider text-gray-500">{{ NIVEL_CONFIG[nivelKey]?.label || nivelGroup.label }}</h4>
+                <div class="flex-1 h-px bg-gray-100/70"></div>
               </div>
 
-              <!-- Empty Results -->
-              <div v-if="filteredUsuarios.length === 0" class="py-12 px-4 text-center text-gray-400">
-                <Users class="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                <p class="text-xs font-bold">No se encontraron usuarios</p>
-                <p class="text-[10px] text-gray-400 mt-1">Probá con otro término de búsqueda</p>
+              <!-- Vista Desktop: Tabla -->
+              <div class="hidden md:block overflow-x-auto border border-gray-150 rounded-2xl shadow-2xs bg-white">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-gray-50/75 text-[10px] font-black text-gray-400 uppercase border-b border-gray-150">
+                      <th class="py-3 px-4">Rol / cargo</th>
+                      <th class="py-3 px-4">Descripción</th>
+                      <th class="py-3 px-4 text-center">Sector predeterminado</th>
+                      <th class="py-3 px-4 text-center">Vistas</th>
+                      <th class="py-3 px-4 text-center">Permisos (VC · CF · CO · CS)</th>
+                      <th class="py-3 px-4">Entrada</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100 text-xs">
+                    <tr
+                      v-for="role in nivelGroup.roles"
+                      :key="role.value"
+                      class="hover:bg-gray-50/30 transition-colors border-l-3"
+                      :class="{
+                        'border-l-blue-400':    nivelKey === 'operativo',
+                        'border-l-violet-400':  nivelKey === 'mandos',
+                        'border-l-emerald-400': nivelKey === 'estrategico',
+                        'border-l-amber-400':   nivelKey === 'global',
+                      }"
+                    >
+                      <td class="py-3.5 px-4 font-black text-gray-800 whitespace-nowrap">
+                        {{ role.label }}
+                      </td>
+                      <td v-if="role.descripcion" class="py-3.5 px-4 text-gray-600 font-medium" v-tippy="role.descripcion">
+                        {{ role.descripcion }}
+                      </td>
+                      <td v-else class="py-3.5 px-4">
+                        <span class="text-gray-350 italic text-[11px] flex items-center gap-1">
+                          <Pencil class="w-3 h-3" /> Sin descripción —
+                          <button @click="perfilesViewMode = 'editor'; expandedProfile = role.value" class="text-indigo-500 hover:text-indigo-700 underline cursor-pointer">editar</button>
+                        </span>
+                      </td>
+                      <td class="py-3.5 px-4 text-center">
+                        <span class="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded-lg text-[9px] font-black text-gray-600 uppercase">
+                          {{ role.sectorDefault }}
+                        </span>
+                      </td>
+                      <td class="py-3.5 px-4 text-center">
+                        <span
+                          class="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg cursor-help relative group"
+                        >
+                          {{ role.value === 'admin' ? '*' : role.effectiveVistas.length }}
+                          <!-- Tooltip al hacer hover -->
+                          <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 whitespace-nowrap max-w-xs transition-all pointer-events-none">
+                            <span class="block border-b border-gray-700 pb-1 mb-1 text-[8px] font-black text-indigo-400 uppercase">Pantallas Habilitadas</span>
+                            <span v-if="role.value === 'admin'" class="block">Todas las vistas (*)</span>
+                            <span v-else-if="role.effectiveVistas.length === 0" class="block text-gray-400">Ninguna</span>
+                            <span v-else v-for="v in role.effectiveVistas" :key="v" class="block text-left">
+                              · {{ VISTA_LABEL[v] || v }}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
+                      <td class="py-3.5 px-4 text-center font-bold text-xs select-none">
+                        <div class="flex items-center justify-center gap-2">
+                          <span
+                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
+                            :class="role.effectivePermisos.verCalidad ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
+                          >VC</span>
+                          <span
+                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
+                            :class="role.effectivePermisos.crearFalla ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
+                          >CF</span>
+                          <span
+                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
+                            :class="role.effectivePermisos.cerrarOrden ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
+                          >CO</span>
+                          <span
+                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
+                            :class="role.effectivePermisos.configSistema ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
+                          >CS</span>
+                        </div>
+                      </td>
+                      <td class="py-3.5 px-4 text-gray-500 font-mono text-[11px] font-bold">
+                        {{ role.defaultRoute }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Vista Mobile: Grid de Tarjetas -->
+              <div class="grid grid-cols-1 gap-3 md:hidden">
+                <div
+                  v-for="role in nivelGroup.roles"
+                  :key="role.value"
+                  class="bg-gray-50/50 border border-gray-150 rounded-2xl p-4 space-y-3"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="font-extrabold text-sm text-gray-800">{{ role.label }}</span>
+                    <span class="px-2 py-0.5 bg-white border border-gray-200 rounded-lg text-[9px] font-black text-gray-600 uppercase">
+                      🏭 {{ role.sectorDefault }}
+                    </span>
+                  </div>
+
+                  <p class="text-xs text-gray-500 font-medium leading-relaxed">
+                    {{ role.descripcion || 'Sin descripción asignada' }}
+                  </p>
+
+                  <div class="flex flex-wrap gap-2 text-[10px] font-bold">
+                    <span class="px-2.5 py-1 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700">
+                      👁️ {{ role.value === 'admin' ? '*' : role.effectiveVistas.length }} vistas
+                    </span>
+                    <span class="px-2.5 py-1 bg-gray-100 border border-gray-200 rounded-xl text-gray-600 font-mono">
+                      🚪 {{ role.defaultRoute }}
+                    </span>
+                  </div>
+
+                  <!-- Permisos móviles -->
+                  <div class="border-t border-gray-100 pt-2.5 flex gap-1.5">
+                    <span
+                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
+                      :class="role.effectivePermisos.verCalidad ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
+                    >VC</span>
+                    <span
+                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
+                      :class="role.effectivePermisos.crearFalla ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
+                    >CF</span>
+                    <span
+                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
+                      :class="role.effectivePermisos.cerrarOrden ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
+                    >CO</span>
+                    <span
+                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
+                      :class="role.effectivePermisos.configSistema ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
+                    >CS</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- DETAIL PANEL (Desktop View) -->
-          <div class="hidden lg:flex flex-1 bg-white border border-gray-200 rounded-2xl shadow-xs flex-col overflow-hidden min-h-0">
+          <!-- MODO EDITOR: Accordion de Configuración -->
+          <div v-else class="space-y-3 animate-fade-in">
+            <div
+              v-for="role in editableRoleList"
+              :key="role.value"
+              class="border rounded-2xl overflow-hidden shadow-3xs transition-all duration-200"
+              :class="expandedProfile === role.value ? 'border-indigo-300 bg-white ring-1 ring-indigo-100/50' : 'border-gray-200 bg-gray-50/20 hover:bg-gray-50/50'"
+            >
+              <!-- Cabecera del Accordion -->
+              <button
+                @click="toggleProfileExpand(role.value)"
+                class="w-full flex flex-col sm:flex-row sm:items-center justify-between px-5 py-4 text-left cursor-pointer gap-2"
+              >
+                <div class="flex items-center gap-3">
+                  <span class="text-base leading-none">
+                    {{ NIVEL_CONFIG[editableProfiles[role.value]?.nivel]?.emoji || '🔧' }}
+                  </span>
+                  <div class="min-w-0">
+                    <span class="text-xs font-black text-gray-800 block sm:inline-block mr-2">{{ role.label }}</span>
+                    <span
+                      v-if="editableProfiles[role.value]?.nivel"
+                      class="inline-block px-2 py-0.5 text-[8px] font-black uppercase rounded-md tracking-wider"
+                      :class="{
+                        'bg-blue-50 text-blue-600 border border-blue-200':     editableProfiles[role.value].nivel === 'operativo',
+                        'bg-violet-50 text-violet-600 border border-violet-200': editableProfiles[role.value].nivel === 'mandos',
+                        'bg-emerald-50 text-emerald-600 border border-emerald-200': editableProfiles[role.value].nivel === 'estrategico',
+                      }"
+                    >
+                      {{ NIVEL_CONFIG[editableProfiles[role.value].nivel]?.label }}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
+                  <span class="text-[10px] text-gray-400 font-bold bg-white border border-gray-150 px-2 py-0.5 rounded-lg">
+                    {{ (editableProfiles[role.value]?.vistas || []).length }} vistas
+                  </span>
+                  <ChevronUp v-if="expandedProfile === role.value" class="w-4 h-4 text-indigo-500" />
+                  <ChevronDown v-else class="w-4 h-4 text-gray-400" />
+                </div>
+              </button>
+
+              <!-- Cuerpo Expandido -->
+              <div v-if="expandedProfile === role.value" class="px-5 pb-5 pt-1 space-y-5 border-t border-gray-100 bg-white">
+
+                <!-- Descripción -->
+                <div class="space-y-1.5">
+                  <label class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Pencil class="w-3.5 h-3.5" />
+                    Descripción Funcional del Cargo
+                  </label>
+                  <textarea
+                    :value="editableProfiles[role.value]?.descripcion"
+                    @change="updateProfileField(role.value, 'descripcion', $event.target.value)"
+                    rows="2"
+                    class="w-full bg-gray-50 border border-gray-250 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-750 outline-none focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100 transition-all resize-none leading-relaxed"
+                    placeholder="Escribe la función principal de este rol en la planta..."
+                  ></textarea>
+                </div>
+
+                <!-- ⚙️ Configuración Operativa -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-b border-gray-100 py-4 my-2">
+
+                  <!-- Nivel Select -->
+                  <div class="space-y-1.5">
+                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers class="w-3.5 h-3.5 text-gray-400" />
+                      Nivel Jerárquico
+                    </label>
+                    <select
+                      :value="editableProfiles[role.value]?.nivel"
+                      @change="updateProfileField(role.value, 'nivel', $event.target.value)"
+                      class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                    >
+                      <option v-for="(cfg, key) in NIVEL_CONFIG" :key="key" :value="key">
+                        {{ cfg.emoji }} {{ cfg.label }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Sector Default Select -->
+                  <div class="space-y-1.5">
+                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin class="w-3.5 h-3.5 text-gray-400" />
+                      Sector Default
+                    </label>
+                    <select
+                      :value="editableProfiles[role.value]?.sectorDefault"
+                      @change="updateProfileField(role.value, 'sectorDefault', $event.target.value)"
+                      class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                    >
+                      <option v-for="sec in activeSectors" :key="sec" :value="sec">
+                        🏭 {{ sec }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Entrada Default (Read-only) -->
+                  <div class="space-y-1.5">
+                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <LogIn class="w-3.5 h-3.5 text-gray-400" />
+                      Entrada Inicial
+                    </label>
+                    <div class="w-full bg-gray-50 border border-gray-150 rounded-xl px-3 py-2 text-xs font-mono text-gray-500 select-none flex items-center gap-1.5 h-[34px]">
+                      <span>🚪</span>
+                      <span class="font-bold">{{ getDefaultRoute(role.value) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Vistas Checkboxes -->
+                <div class="space-y-2">
+                  <span class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <LayoutGrid class="w-3.5 h-3.5" />
+                    Vistas Habilitadas
+                  </span>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <label
+                      v-for="vista in VISTA_OPTIONS"
+                      :key="vista.slug"
+                      class="flex items-center gap-2.5 p-2.5 border rounded-xl hover:bg-indigo-50/20 cursor-pointer select-none transition-all duration-150"
+                      :class="editableProfiles[role.value]?.vistas?.includes(vista.slug) ? 'border-indigo-200 bg-indigo-50/10' : 'border-gray-150 bg-gray-50/30'"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="editableProfiles[role.value]?.vistas?.includes(vista.slug)"
+                        @change="toggleVista(role.value, vista.slug)"
+                        class="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
+                      />
+                      <span class="text-xs font-bold text-gray-700 truncate">{{ vista.label }}</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 🔐 Permisos Checkboxes -->
+                <div class="space-y-2 pt-2 border-t border-gray-100">
+                  <span class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lock class="w-3.5 h-3.5" />
+                    Permisos Especiales
+                  </span>
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <label
+                      v-for="(label, key) in PERMISO_LABELS"
+                      :key="key"
+                      class="flex items-center gap-2.5 p-2.5 border rounded-xl hover:bg-emerald-50/20 cursor-pointer select-none transition-all duration-150"
+                      :class="editableProfiles[role.value]?.permisos?.[key] ? 'border-emerald-250 bg-emerald-50/10' : 'border-gray-150 bg-gray-50/30'"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="editableProfiles[role.value]?.permisos?.[key]"
+                        @change="togglePermiso(role.value, key)"
+                        class="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
+                      />
+                      <span class="text-xs font-bold text-gray-700 truncate">{{ label }}</span>
+                    </label>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── TAB 3: CONFIGURACIÓN DINÁMICA (ROLES & SECTORES) ── -->
+        <div v-else-if="activeTab === 'config'" class="config-panels">
+
+          <!-- ROLES CONFIG -->
+          <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col h-fit">
+            <div class="mb-4">
+              <h3 class="text-sm font-black text-gray-800">Funciones (Roles) del Sistema</h3>
+              <p class="text-[10px] text-gray-400 font-medium mt-1">Crea o elimina cargos disponibles para el personal.</p>
+            </div>
+
+            <!-- List of current roles -->
+            <div class="flex flex-wrap gap-1.5 mb-4">
+              <span
+                v-for="(r, i) in activeRoles"
+                :key="r.value"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-xl"
+              >
+                {{ r.label }}
+                <!-- Disallow deleting admin role for safety -->
+                <button
+                  v-if="r.value !== 'admin'"
+                  @click="removeRole(i)"
+                  class="text-indigo-400 hover:text-red-500 transition-colors ml-1 p-0.5 rounded-md hover:bg-indigo-100 cursor-pointer"
+                >
+                  <Trash2 class="w-3 h-3" />
+                </button>
+              </span>
+            </div>
+
+            <!-- Form to add new role -->
+            <div class="space-y-2 border-t border-gray-100 pt-4">
+              <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Agregar Cargo</span>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input
+                  v-model="newRoleValue"
+                  type="text"
+                  placeholder="ID (ej: supervisor_hilado)"
+                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-indigo-400"
+                />
+                <input
+                  v-model="newRoleLabel"
+                  type="text"
+                  placeholder="Etiqueta (ej: Supervisor Hilado)"
+                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-indigo-400"
+                />
+                <button
+                  @click="addRole"
+                  class="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
+                >
+                  <Plus class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTORES CONFIG -->
+          <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col h-fit">
+            <div class="mb-4">
+              <h3 class="text-sm font-black text-gray-800">Sectores Disponibles</h3>
+              <p class="text-[10px] text-gray-400 font-medium mt-1">Administra los sectores o áreas operativas de la fábrica.</p>
+            </div>
+
+            <!-- List of current sectors -->
+            <div class="flex flex-wrap gap-1.5 mb-4">
+              <span
+                v-for="(s, i) in activeSectors"
+                :key="s"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold rounded-xl"
+              >
+                {{ s }}
+                <button
+                  @click="removeSector(i)"
+                  class="text-emerald-400 hover:text-red-500 transition-colors ml-1 p-0.5 rounded-md hover:bg-emerald-100 cursor-pointer"
+                >
+                  <Trash2 class="w-3 h-3" />
+                </button>
+              </span>
+            </div>
+
+            <!-- Form to add sector -->
+            <div class="space-y-2 border-t border-gray-100 pt-4">
+              <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Agregar Sector</span>
+              <div class="flex gap-2">
+                <input
+                  v-model="newSector"
+                  type="text"
+                  placeholder="Nombre del sector (ej: TINTORERIA)"
+                  @keydown.enter="addSector"
+                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-emerald-400"
+                />
+                <button
+                  @click="addSector"
+                  class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
+                >
+                  <Plus class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Reset Seed Defaults Button -->
+            <div v-if="!dynamicRoles.length || !dynamicSectors.length" class="mt-4 pt-3 border-t border-gray-50 text-center">
+              <button
+                @click="seedDefaults"
+                class="text-[10px] font-black text-indigo-600 hover:underline tracking-wider uppercase cursor-pointer"
+              >
+                Cargar configuración por defecto
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+<Teleport to="body"><div v-if="drawerOpen && selectedUser" class="user-backdrop users-style" @click.self="closeUser">          <!-- DETAIL PANEL (Desktop View) -->
+          <div ref="modal" role="dialog" aria-modal="true" aria-label="Editar usuario" tabindex="-1" @keydown="modalKeyboard" class="user-modal">
             <!-- Empty state right side -->
             <div v-if="!selectedUser" class="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400">
               <div class="bg-gray-50 p-4 rounded-full border border-gray-100 mb-3">
@@ -658,7 +1100,7 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2"><button @click="closeUser" :disabled="savingUser" class="user-icon" v-tippy="'Cerrar editor'" aria-label="Cerrar editor"><X class="w-4 h-4" /></button>
                   <span class="px-2.5 py-1 bg-white border border-gray-200 text-gray-500 rounded-xl text-[10px] font-black flex items-center gap-1">
                     <Calendar class="w-3.5 h-3.5 text-gray-400" />
                     {{ selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleDateString() : '---' }}
@@ -667,8 +1109,9 @@ onMounted(async () => {
               </div>
 
               <!-- Detail Scrollable form -->
-              <div class="flex-1 overflow-y-auto p-5 space-y-5">
-                
+              <fieldset :disabled="savingUser" class="user-editor-fields flex-1 overflow-y-auto p-5 space-y-5">
+                <p v-if="saveError" class="user-error" role="alert">{{ saveError }}</p>
+
                 <!-- Section: Identidad -->
                 <div class="space-y-3">
                   <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Información Personal</h4>
@@ -697,7 +1140,7 @@ onMounted(async () => {
                 <!-- Section: Rol y Sector -->
                 <div class="border-t border-gray-100 pt-4 space-y-3">
                   <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Rol & Sector Organizacional</h4>
-                  
+
                   <div class="grid grid-cols-2 gap-3">
                     <div>
                       <label class="text-[10px] font-black text-gray-400 uppercase tracking-wider block mb-1">Función del Cargo</label>
@@ -754,7 +1197,7 @@ onMounted(async () => {
                 <!-- Section: Autorizaciones y Alcance -->
                 <div class="border-t border-gray-100 pt-4 space-y-4">
                   <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Sectores Autorizados & Alcance</h4>
-                  
+
                   <!-- Sectores Asignados Checkboxes -->
                   <div class="space-y-1.5">
                     <label class="text-[10px] font-black text-gray-400 uppercase tracking-wider block">Sectores Autorizados (Acceso a Pantallas)</label>
@@ -807,7 +1250,7 @@ onMounted(async () => {
                 <div class="border-t border-gray-100 pt-4">
                   <div class="rounded-xl border overflow-hidden transition-all" :class="selectedUser.vistasPersonalizadas ? 'border-indigo-200 bg-indigo-50/15' : 'border-gray-200'">
                     <!-- Header -->
-                    <div 
+                    <div
                       class="flex items-center justify-between px-3 py-2.5 transition-colors border-b"
                       :class="selectedUser.vistasPersonalizadas ? 'bg-indigo-50/30 border-indigo-100' : 'bg-gray-50 border-gray-100'"
                     >
@@ -818,7 +1261,7 @@ onMounted(async () => {
                           Activo · {{ selectedUser.vistasPersonalizadas.length }} vistas
                         </span>
                       </div>
-                      
+
                       <!-- iOS style Switch Toggle -->
                       <button
                         @click="selectedUser.vistasPersonalizadas ? disableCustomVistas(selectedUser) : enableCustomVistas(selectedUser)"
@@ -835,8 +1278,8 @@ onMounted(async () => {
                     <!-- Body -->
                     <div class="p-3.5 space-y-4">
                       <p class="text-[10px] text-gray-400 font-medium leading-relaxed">
-                        {{ selectedUser.vistasPersonalizadas 
-                            ? 'Este usuario posee una configuración personalizada que sobreescribe los permisos predefinidos para su rol.' 
+                        {{ selectedUser.vistasPersonalizadas
+                            ? 'Este usuario posee una configuración personalizada que sobreescribe los permisos predefinidos para su rol.'
                             : 'El usuario utiliza las vistas y permisos estándar definidos para su función.' }}
                       </p>
 
@@ -893,7 +1336,7 @@ onMounted(async () => {
                             >{{ VISTA_LABEL[v] || v }}</span>
                           </div>
                         </div>
-                        
+
                         <div>
                           <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Permisos asignados del Rol</span>
                           <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">
@@ -909,7 +1352,7 @@ onMounted(async () => {
                   </div>
                 </div>
 
-              </div>
+              </fieldset>
 
               <!-- Detail Footer with Sticky Actions -->
               <div class="px-5 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
@@ -929,7 +1372,7 @@ onMounted(async () => {
                   <!-- Discard button -->
                   <button
                     v-if="isDirty"
-                    @click="discardChanges"
+                    @click="discardChanges" :disabled="savingUser"
                     class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-100 rounded-xl text-gray-500 text-xs font-bold transition-all cursor-pointer"
                   >
                     <Undo2 class="w-3.5 h-3.5" />
@@ -939,722 +1382,19 @@ onMounted(async () => {
                   <!-- Save Button -->
                   <button
                     @click="guardarConfiguracion(selectedUser)"
-                    :disabled="!isDirty"
+                    :disabled="!isDirty || savingUser"
                     :class="isDirty ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer active:scale-97' : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
                     class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black tracking-wide shadow-xs transition-all"
                   >
                     <Save class="w-3.5 h-3.5" />
-                    Guardar
+                    {{ savingUser ? 'Guardando…':'Guardar cambios' }}
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- MOBILE/TABLET DRAWER (Detail View on smaller screens) -->
-          <Teleport to="body">
-            <div v-if="drawerOpen && selectedUser" class="fixed inset-0 z-50 lg:hidden flex justify-end">
-              <!-- Back-drop overlay -->
-              <div 
-                class="fixed inset-0 bg-black/45 backdrop-blur-xs transition-opacity duration-300 animate-fade-in"
-                @click="drawerOpen = false"
-              ></div>
-              
-              <!-- Drawer Content Pane -->
-              <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10 animate-slide-in">
-                <!-- Header -->
-                <div class="px-4 py-3.5 border-b border-gray-150 flex items-center justify-between bg-gray-50 shrink-0">
-                  <div class="flex items-center gap-2.5 min-w-0">
-                    <div :class="[getRoleColor(selectedUser.role).bg, getRoleColor(selectedUser.role).text]" class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0">
-                      {{ (selectedUser.nombre || 'U').substring(0,2).toUpperCase() }}
-                    </div>
-                    <div class="min-w-0">
-                      <span class="text-xs font-black text-gray-800 truncate block">{{ selectedUser.nombre && selectedUser.apellido ? `${selectedUser.nombre} ${selectedUser.apellido}` : (selectedUser.displayName || 'Sin nombre') }}</span>
-                      <span class="text-[10px] text-gray-400 font-medium truncate block">{{ selectedUser.email }}</span>
-                    </div>
-                  </div>
-                  <button @click="drawerOpen = false" class="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
-                    <X class="w-4 h-4" />
-                  </button>
-                </div>
-
-                <!-- Form Inputs Body -->
-                <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                  <!-- Identidad -->
-                  <div class="space-y-2">
-                    <span class="text-[9px] font-black text-indigo-600 uppercase tracking-wider block">Información Personal</span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <input
-                        v-model="selectedUser.nombre"
-                        type="text"
-                        placeholder="Nombre"
-                        class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white"
-                      />
-                      <input
-                        v-model="selectedUser.apellido"
-                        type="text"
-                        placeholder="Apellido"
-                        class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- Rol y Sector -->
-                  <div class="border-t border-gray-100 pt-3.5 space-y-2">
-                    <span class="text-[9px] font-black text-indigo-600 uppercase tracking-wider block">Rol & Sector Principal</span>
-                    <div class="grid grid-cols-2 gap-2">
-                      <div>
-                        <label class="text-[9px] text-gray-400 font-black uppercase mb-1 block">Función</label>
-                        <select
-                          v-model="selectedUser.role"
-                          class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-1.5 text-xs font-bold text-gray-700 outline-none"
-                        >
-                          <option value="pendiente">Pendiente de aprobación</option>
-                          <option v-for="r in activeRoles" :key="r.value" :value="r.value">{{ r.label }}</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="text-[9px] text-gray-400 font-black uppercase mb-1 block">Sector Principal</label>
-                        <select
-                          v-model="selectedUser.sectorDefault"
-                          class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-1.5 text-xs font-bold text-gray-700 outline-none"
-                        >
-                          <option v-for="s in activeSectors" :key="s" :value="s">{{ s }}</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Sectores Autorizados checkboxes -->
-                  <div class="border-t border-gray-100 pt-3.5 space-y-2">
-                    <span class="text-[9px] font-black text-indigo-600 uppercase tracking-wider block">Sectores Autorizados</span>
-                    <div class="flex flex-wrap gap-2">
-                      <label v-for="s in activeSectors" :key="s" class="inline-flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          :value="s"
-                          v-model="selectedUser.sectoresAsignados"
-                          class="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600"
-                        />
-                        <span class="text-xs font-bold text-gray-700">{{ s }}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- Jefe de Sectores Checkboxes -->
-                  <div v-if="isJefeRole(selectedUser.role)" class="bg-emerald-50/30 rounded-xl p-3 border border-emerald-100 space-y-2">
-                    <label class="text-[9px] font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Building2 class="w-3.5 h-3.5" />
-                      Jefe de Sectores
-                    </label>
-                    <div class="flex flex-wrap gap-2">
-                      <label v-for="s in activeSectors" :key="s" class="inline-flex items-center gap-2 px-2.5 py-1.5 bg-white border border-emerald-150 rounded-xl cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          :value="s"
-                          v-model="selectedUser.jefeDeSectores"
-                          class="w-3.5 h-3.5 rounded border-emerald-300 text-emerald-600"
-                        />
-                        <span class="text-xs font-bold text-emerald-800">{{ s }}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- Alcance Admin Select -->
-                  <div v-if="selectedUser.role === 'admin'" class="bg-amber-50/30 rounded-xl p-3 border border-amber-100 space-y-1.5">
-                    <label class="text-[9px] font-black text-amber-700 uppercase tracking-wider block">Alcance Administrativo</label>
-                    <select
-                      v-model="selectedUser.alcance"
-                      class="w-full bg-white border border-amber-200 rounded-xl px-2 py-1 text-xs font-bold text-amber-800 outline-none"
-                    >
-                      <option value="global">Administrador global</option>
-                      <option value="sector">Administrador sectorizado</option>
-                    </select>
-                  </div>
-
-                  <!-- Personalización del acceso -->
-                  <div class="border-t border-gray-100 pt-3.5">
-                    <div class="rounded-xl border overflow-hidden" :class="selectedUser.vistasPersonalizadas ? 'border-indigo-200 bg-indigo-50/15' : 'border-gray-200'">
-                      <!-- Toggle Header -->
-                      <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-150">
-                        <span class="text-[9px] font-black text-gray-700 uppercase">Acceso Personalizado</span>
-                        <button
-                          @click="selectedUser.vistasPersonalizadas ? disableCustomVistas(selectedUser) : enableCustomVistas(selectedUser)"
-                          class="relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full transition-colors focus:outline-none cursor-pointer"
-                          :class="selectedUser.vistasPersonalizadas ? 'bg-indigo-600' : 'bg-gray-300'"
-                        >
-                          <span
-                            class="inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform"
-                            :class="selectedUser.vistasPersonalizadas ? 'translate-x-4' : 'translate-x-0.5'"
-                          />
-                        </button>
-                      </div>
-
-                      <div class="p-3 space-y-3">
-                        <template v-if="selectedUser.vistasPersonalizadas">
-                          <!-- Vistas check -->
-                          <div class="space-y-1">
-                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Vistas Habilitadas</span>
-                            <div class="flex flex-col gap-1">
-                              <label v-for="vista in VISTA_OPTIONS" :key="vista.slug" class="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  :checked="selectedUser.vistasPersonalizadas.includes(vista.slug)"
-                                  @change="toggleUserVista(selectedUser, vista.slug)"
-                                  class="w-3.5 h-3.5 rounded text-indigo-600 border-gray-300"
-                                />
-                                <span class="text-[10px] font-bold text-gray-600">{{ vista.label }}</span>
-                              </label>
-                            </div>
-                          </div>
-
-                          <!-- Permisos check -->
-                          <div class="space-y-1 pt-2">
-                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-wider block">Permisos</span>
-                            <div class="flex flex-col gap-1">
-                              <label v-for="(label, key) in PERMISO_LABELS" :key="key" class="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  :checked="selectedUser.permisosPersonalizados?.[key]"
-                                  @change="toggleUserPermiso(selectedUser, key)"
-                                  class="w-3.5 h-3.5 rounded text-indigo-600 border-gray-300"
-                                />
-                                <span class="text-[10px] font-bold text-gray-600">{{ label }}</span>
-                              </label>
-                            </div>
-                          </div>
-                        </template>
-
-                        <div v-else class="text-[10px] font-medium text-gray-400">
-                          Utilizando las vistas y permisos predefinidos para el rol: <span class="font-bold text-gray-500">{{ roleLabel[selectedUser.role] }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Footer with actions -->
-                <div class="p-4 border-t border-gray-150 bg-gray-50 flex items-center justify-between gap-3 shrink-0">
-                  <div class="flex items-center gap-1.5 text-[10px] font-bold">
-                    <span v-if="isDirty" class="text-amber-600">Con cambios</span>
-                    <span v-else class="text-gray-400">Sin cambios</span>
-                  </div>
-
-                  <div class="flex items-center gap-2">
-                    <button
-                      v-if="isDirty"
-                      @click="discardChanges"
-                      class="px-3 py-1.5 border border-gray-200 rounded-xl text-gray-500 text-xs font-bold transition-all cursor-pointer"
-                    >
-                      Descartar
-                    </button>
-                    <button
-                      @click="guardarConfiguracion(selectedUser); drawerOpen = false"
-                      :disabled="!isDirty"
-                      :class="isDirty ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-400'"
-                      class="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-black cursor-pointer"
-                    >
-                      <Save class="w-3.5 h-3.5 mr-1" />
-                      Guardar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Teleport>
-
-        </div>
-
-        <!-- ── TAB 2: PERFILES DE ROL (ACCORDIONS & RESUMEN) ── -->
-        <div v-else-if="activeTab === 'perfiles'" class="flex-1 overflow-y-auto space-y-5 mx-auto w-full p-4 bg-white rounded-2xl border border-gray-200 shadow-xs">
-          
-          <!-- Tab Title & Toggle -->
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4 gap-4">
-            <div>
-              <h3 class="text-base font-black text-gray-800 flex items-center gap-2">
-                <ShieldCheck class="w-5 h-5 text-indigo-600" />
-                Perfiles de Rol — Vistas y Permisos Predeterminados
-                <span class="px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full ml-1">{{ activeRoles.length }} roles</span>
-              </h3>
-              <p class="text-[11px] text-gray-400 font-medium mt-1">Configura las vistas y permisos iniciales de cada cargo y edita su metadata operativa.</p>
-            </div>
-            
-            <!-- Selector de Vista -->
-            <div class="flex items-center gap-3 self-start sm:self-center shrink-0">
-              <button 
-                @click="addRoleFromPerfiles"
-                class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black shadow-xs hover:shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus class="w-3.5 h-3.5" /> Nuevo Perfil
-              </button>
-              <div class="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200">
-                <button 
-                @click="perfilesViewMode = 'resumen'"
-                :class="perfilesViewMode === 'resumen' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
-                class="px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <LayoutGrid class="w-3.5 h-3.5" />
-                Resumen
-              </button>
-              <button 
-                @click="perfilesViewMode = 'editor'"
-                :class="perfilesViewMode === 'editor' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'"
-                class="px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <Pencil class="w-3.5 h-3.5" />
-                Editar
-              </button>
-            </div>
-            </div>
-          </div>
-
-          <!-- MODO RESUMEN: Vista General Tabla / Cards -->
-          <div v-if="perfilesViewMode === 'resumen'" class="space-y-6 animate-fade-in">
-            <!-- Leyenda compacta -->
-            <div class="flex flex-wrap items-center justify-between gap-3 bg-indigo-50/40 px-4 py-3 rounded-2xl border border-indigo-100/60 text-xs font-bold text-indigo-800 shrink-0">
-              <div class="flex items-center gap-2">
-                <AlertCircle class="w-4 h-4 text-indigo-600 shrink-0" />
-                <span class="font-extrabold uppercase tracking-wider text-[10px]">Leyenda Permisos Especiales</span>
-              </div>
-              <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-indigo-700">
-                <span><strong>VC</strong> = Ver Calidad</span>
-                <span><strong>CF</strong> = Crear Falla</span>
-                <span><strong>CO</strong> = Cerrar Orden</span>
-                <span><strong>CS</strong> = Config. Sistema</span>
-              </div>
-            </div>
-
-            <!-- Grilla/Tabla por cada nivel -->
-            <div v-for="[nivelKey, nivelGroup] in rolesByNivel" :key="nivelKey" class="space-y-3">
-              <!-- Separador nivel -->
-              <div class="flex items-center gap-2.5 pt-2 px-3 py-2 rounded-xl"
-                :class="{
-                  'bg-blue-50/50':    nivelKey === 'operativo',
-                  'bg-violet-50/50':  nivelKey === 'mandos',
-                  'bg-emerald-50/50': nivelKey === 'estrategico',
-                  'bg-amber-50/50':   nivelKey === 'global',
-                }"
-              >
-                <span class="text-base font-extrabold">{{ NIVEL_CONFIG[nivelKey]?.emoji || '⚙️' }}</span>
-                <h4 class="text-xs font-black uppercase tracking-wider text-gray-500">{{ NIVEL_CONFIG[nivelKey]?.label || nivelGroup.label }}</h4>
-                <div class="flex-1 h-px bg-gray-100/70"></div>
-              </div>
-
-              <!-- Vista Desktop: Tabla -->
-              <div class="hidden md:block overflow-x-auto border border-gray-150 rounded-2xl shadow-2xs bg-white">
-                <table class="w-full text-left border-collapse">
-                  <thead>
-                    <tr class="bg-gray-50/75 text-[10px] font-black text-gray-400 uppercase border-b border-gray-150">
-                      <th class="py-3 px-4">🏷️ Rol / Cargo</th>
-                      <th class="py-3 px-4">📝 Descripción Funcional</th>
-                      <th class="py-3 px-4 text-center">🏭 Sector Def.</th>
-                      <th class="py-3 px-4 text-center">👁️ Vistas</th>
-                      <th class="py-3 px-4 text-center">🔐 Permisos (VC · CF · CO · CS)</th>
-                      <th class="py-3 px-4">🚪 Entrada</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-100 text-xs">
-                    <tr 
-                      v-for="role in nivelGroup.roles" 
-                      :key="role.value" 
-                      class="hover:bg-gray-50/30 transition-colors border-l-3"
-                      :class="{
-                        'border-l-blue-400':    nivelKey === 'operativo',
-                        'border-l-violet-400':  nivelKey === 'mandos',
-                        'border-l-emerald-400': nivelKey === 'estrategico',
-                        'border-l-amber-400':   nivelKey === 'global',
-                      }"
-                    >
-                      <td class="py-3.5 px-4 font-black text-gray-800 whitespace-nowrap">
-                        {{ role.label }}
-                      </td>
-                      <td v-if="role.descripcion" class="py-3.5 px-4 text-gray-600 font-medium max-w-xs truncate" :title="role.descripcion">
-                        {{ role.descripcion }}
-                      </td>
-                      <td v-else class="py-3.5 px-4">
-                        <span class="text-gray-350 italic text-[11px] flex items-center gap-1">
-                          <Pencil class="w-3 h-3" /> Sin descripción — 
-                          <button @click="perfilesViewMode = 'editor'; expandedProfile = role.value" class="text-indigo-500 hover:text-indigo-700 underline cursor-pointer">editar</button>
-                        </span>
-                      </td>
-                      <td class="py-3.5 px-4 text-center">
-                        <span class="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded-lg text-[9px] font-black text-gray-600 uppercase">
-                          {{ role.sectorDefault }}
-                        </span>
-                      </td>
-                      <td class="py-3.5 px-4 text-center">
-                        <span 
-                          class="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-black rounded-lg cursor-help relative group"
-                        >
-                          {{ role.value === 'admin' ? '*' : role.effectiveVistas.length }}
-                          <!-- Tooltip al hacer hover -->
-                          <span class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 whitespace-nowrap max-w-xs transition-all pointer-events-none">
-                            <span class="block border-b border-gray-700 pb-1 mb-1 text-[8px] font-black text-indigo-400 uppercase">Pantallas Habilitadas</span>
-                            <span v-if="role.value === 'admin'" class="block">Todas las vistas (*)</span>
-                            <span v-else-if="role.effectiveVistas.length === 0" class="block text-gray-400">Ninguna</span>
-                            <span v-else v-for="v in role.effectiveVistas" :key="v" class="block text-left">
-                              · {{ VISTA_LABEL[v] || v }}
-                            </span>
-                          </span>
-                        </span>
-                      </td>
-                      <td class="py-3.5 px-4 text-center font-bold text-xs select-none">
-                        <div class="flex items-center justify-center gap-2">
-                          <span 
-                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
-                            :class="role.effectivePermisos.verCalidad ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
-                          >VC</span>
-                          <span 
-                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
-                            :class="role.effectivePermisos.crearFalla ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
-                          >CF</span>
-                          <span 
-                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
-                            :class="role.effectivePermisos.cerrarOrden ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
-                          >CO</span>
-                          <span 
-                            class="px-1.5 py-0.5 rounded text-[9px] font-black border"
-                            :class="role.effectivePermisos.configSistema ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200 opacity-60'"
-                          >CS</span>
-                        </div>
-                      </td>
-                      <td class="py-3.5 px-4 text-gray-500 font-mono text-[11px] font-bold">
-                        {{ role.defaultRoute }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Vista Mobile: Grid de Tarjetas -->
-              <div class="grid grid-cols-1 gap-3 md:hidden">
-                <div 
-                  v-for="role in nivelGroup.roles" 
-                  :key="role.value"
-                  class="bg-gray-50/50 border border-gray-150 rounded-2xl p-4 space-y-3"
-                >
-                  <div class="flex items-center justify-between">
-                    <span class="font-extrabold text-sm text-gray-800">{{ role.label }}</span>
-                    <span class="px-2 py-0.5 bg-white border border-gray-200 rounded-lg text-[9px] font-black text-gray-600 uppercase">
-                      🏭 {{ role.sectorDefault }}
-                    </span>
-                  </div>
-
-                  <p class="text-xs text-gray-500 font-medium leading-relaxed">
-                    {{ role.descripcion || 'Sin descripción asignada' }}
-                  </p>
-
-                  <div class="flex flex-wrap gap-2 text-[10px] font-bold">
-                    <span class="px-2.5 py-1 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700">
-                      👁️ {{ role.value === 'admin' ? '*' : role.effectiveVistas.length }} vistas
-                    </span>
-                    <span class="px-2.5 py-1 bg-gray-100 border border-gray-200 rounded-xl text-gray-600 font-mono">
-                      🚪 {{ role.defaultRoute }}
-                    </span>
-                  </div>
-
-                  <!-- Permisos móviles -->
-                  <div class="border-t border-gray-100 pt-2.5 flex gap-1.5">
-                    <span 
-                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
-                      :class="role.effectivePermisos.verCalidad ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
-                    >VC</span>
-                    <span 
-                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
-                      :class="role.effectivePermisos.crearFalla ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
-                    >CF</span>
-                    <span 
-                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
-                      :class="role.effectivePermisos.cerrarOrden ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
-                    >CO</span>
-                    <span 
-                      class="px-1.5 py-0.5 rounded text-[8px] font-black border"
-                      :class="role.effectivePermisos.configSistema ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-400 border-gray-150'"
-                    >CS</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- MODO EDITOR: Accordion de Configuración -->
-          <div v-else class="space-y-3 animate-fade-in">
-            <div 
-              v-for="role in editableRoleList" 
-              :key="role.value" 
-              class="border rounded-2xl overflow-hidden shadow-3xs transition-all duration-200"
-              :class="expandedProfile === role.value ? 'border-indigo-300 bg-white ring-1 ring-indigo-100/50' : 'border-gray-200 bg-gray-50/20 hover:bg-gray-50/50'"
-            >
-              <!-- Cabecera del Accordion -->
-              <button 
-                @click="toggleProfileExpand(role.value)" 
-                class="w-full flex flex-col sm:flex-row sm:items-center justify-between px-5 py-4 text-left cursor-pointer gap-2"
-              >
-                <div class="flex items-center gap-3">
-                  <span class="text-base leading-none">
-                    {{ NIVEL_CONFIG[editableProfiles[role.value]?.nivel]?.emoji || '🔧' }}
-                  </span>
-                  <div class="min-w-0">
-                    <span class="text-xs font-black text-gray-800 block sm:inline-block mr-2">{{ role.label }}</span>
-                    <span
-                      v-if="editableProfiles[role.value]?.nivel"
-                      class="inline-block px-2 py-0.5 text-[8px] font-black uppercase rounded-md tracking-wider"
-                      :class="{
-                        'bg-blue-50 text-blue-600 border border-blue-200':     editableProfiles[role.value].nivel === 'operativo',
-                        'bg-violet-50 text-violet-600 border border-violet-200': editableProfiles[role.value].nivel === 'mandos',
-                        'bg-emerald-50 text-emerald-600 border border-emerald-200': editableProfiles[role.value].nivel === 'estrategico',
-                      }"
-                    >
-                      {{ NIVEL_CONFIG[editableProfiles[role.value].nivel]?.label }}
-                    </span>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-3 self-end sm:self-center shrink-0">
-                  <span class="text-[10px] text-gray-400 font-bold bg-white border border-gray-150 px-2 py-0.5 rounded-lg">
-                    {{ (editableProfiles[role.value]?.vistas || []).length }} vistas
-                  </span>
-                  <ChevronUp v-if="expandedProfile === role.value" class="w-4 h-4 text-indigo-500" />
-                  <ChevronDown v-else class="w-4 h-4 text-gray-400" />
-                </div>
-              </button>
-              
-              <!-- Cuerpo Expandido -->
-              <div v-if="expandedProfile === role.value" class="px-5 pb-5 pt-1 space-y-5 border-t border-gray-100 bg-white">
-                
-                <!-- 📝 Descripción Funcional -->
-                <div class="space-y-1.5">
-                  <label class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Pencil class="w-3.5 h-3.5" />
-                    Descripción Funcional del Cargo
-                  </label>
-                  <textarea
-                    :value="editableProfiles[role.value]?.descripcion"
-                    @change="updateProfileField(role.value, 'descripcion', $event.target.value)"
-                    rows="2"
-                    class="w-full bg-gray-50 border border-gray-250 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-750 outline-none focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-100 transition-all resize-none leading-relaxed"
-                    placeholder="Escribe la función principal de este rol en la planta..."
-                  ></textarea>
-                </div>
-
-                <!-- ⚙️ Configuración Operativa -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-b border-gray-100 py-4 my-2">
-                  
-                  <!-- Nivel Select -->
-                  <div class="space-y-1.5">
-                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers class="w-3.5 h-3.5 text-gray-400" />
-                      Nivel Jerárquico
-                    </label>
-                    <select
-                      :value="editableProfiles[role.value]?.nivel"
-                      @change="updateProfileField(role.value, 'nivel', $event.target.value)"
-                      class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
-                    >
-                      <option v-for="(cfg, key) in NIVEL_CONFIG" :key="key" :value="key">
-                        {{ cfg.emoji }} {{ cfg.label }}
-                      </option>
-                    </select>
-                  </div>
-
-                  <!-- Sector Default Select -->
-                  <div class="space-y-1.5">
-                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin class="w-3.5 h-3.5 text-gray-400" />
-                      Sector Default
-                    </label>
-                    <select
-                      :value="editableProfiles[role.value]?.sectorDefault"
-                      @change="updateProfileField(role.value, 'sectorDefault', $event.target.value)"
-                      class="w-full bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 focus:bg-white transition-all"
-                    >
-                      <option v-for="sec in activeSectors" :key="sec" :value="sec">
-                        🏭 {{ sec }}
-                      </option>
-                    </select>
-                  </div>
-
-                  <!-- Entrada Default (Read-only) -->
-                  <div class="space-y-1.5">
-                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <LogIn class="w-3.5 h-3.5 text-gray-400" />
-                      Entrada Inicial
-                    </label>
-                    <div class="w-full bg-gray-50 border border-gray-150 rounded-xl px-3 py-2 text-xs font-mono text-gray-500 select-none flex items-center gap-1.5 h-[34px]">
-                      <span>🚪</span>
-                      <span class="font-bold">{{ getDefaultRoute(role.value) }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 👁️ Vistas Checkboxes -->
-                <div class="space-y-2">
-                  <span class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <LayoutGrid class="w-3.5 h-3.5" />
-                    Vistas Habilitadas
-                  </span>
-                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <label 
-                      v-for="vista in VISTA_OPTIONS" 
-                      :key="vista.slug" 
-                      class="flex items-center gap-2.5 p-2.5 border rounded-xl hover:bg-indigo-50/20 cursor-pointer select-none transition-all duration-150"
-                      :class="editableProfiles[role.value]?.vistas?.includes(vista.slug) ? 'border-indigo-200 bg-indigo-50/10' : 'border-gray-150 bg-gray-50/30'"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="editableProfiles[role.value]?.vistas?.includes(vista.slug)"
-                        @change="toggleVista(role.value, vista.slug)"
-                        class="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
-                      />
-                      <span class="text-xs font-bold text-gray-700 truncate">{{ vista.label }}</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- 🔐 Permisos Checkboxes -->
-                <div class="space-y-2 pt-2 border-t border-gray-100">
-                  <span class="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Lock class="w-3.5 h-3.5" />
-                    Permisos Especiales
-                  </span>
-                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <label 
-                      v-for="(label, key) in PERMISO_LABELS" 
-                      :key="key" 
-                      class="flex items-center gap-2.5 p-2.5 border rounded-xl hover:bg-emerald-50/20 cursor-pointer select-none transition-all duration-150"
-                      :class="editableProfiles[role.value]?.permisos?.[key] ? 'border-emerald-250 bg-emerald-50/10' : 'border-gray-150 bg-gray-50/30'"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="editableProfiles[role.value]?.permisos?.[key]"
-                        @change="togglePermiso(role.value, key)"
-                        class="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
-                      />
-                      <span class="text-xs font-bold text-gray-700 truncate">{{ label }}</span>
-                    </label>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── TAB 3: CONFIGURACIÓN DINÁMICA (ROLES & SECTORES) ── -->
-        <div v-else-if="activeTab === 'config'" class="flex-1 overflow-y-auto mx-auto w-full p-2 grid grid-cols-1 md:grid-cols-2 lg:max-w-5xl gap-6">
-          
-          <!-- ROLES CONFIG -->
-          <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col h-fit">
-            <div class="mb-4">
-              <h3 class="text-sm font-black text-gray-800">Funciones (Roles) del Sistema</h3>
-              <p class="text-[10px] text-gray-400 font-medium mt-1">Crea o elimina cargos disponibles para el personal.</p>
-            </div>
-
-            <!-- List of current roles -->
-            <div class="flex flex-wrap gap-1.5 mb-4">
-              <span
-                v-for="(r, i) in activeRoles"
-                :key="r.value"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-xl"
-              >
-                {{ r.label }}
-                <!-- Disallow deleting admin role for safety -->
-                <button 
-                  v-if="r.value !== 'admin'" 
-                  @click="removeRole(i)" 
-                  class="text-indigo-400 hover:text-red-500 transition-colors ml-1 p-0.5 rounded-md hover:bg-indigo-100 cursor-pointer"
-                >
-                  <Trash2 class="w-3 h-3" />
-                </button>
-              </span>
-            </div>
-
-            <!-- Form to add new role -->
-            <div class="space-y-2 border-t border-gray-100 pt-4">
-              <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Agregar Cargo</span>
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input
-                  v-model="newRoleValue"
-                  type="text"
-                  placeholder="ID (ej: supervisor_hilado)"
-                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-indigo-400"
-                />
-                <input
-                  v-model="newRoleLabel"
-                  type="text"
-                  placeholder="Etiqueta (ej: Supervisor Hilado)"
-                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-indigo-400"
-                />
-                <button 
-                  @click="addRole" 
-                  class="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
-                >
-                  <Plus class="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- SECTORES CONFIG -->
-          <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col h-fit">
-            <div class="mb-4">
-              <h3 class="text-sm font-black text-gray-800">Sectores Disponibles</h3>
-              <p class="text-[10px] text-gray-400 font-medium mt-1">Administra los sectores o áreas operativas de la fábrica.</p>
-            </div>
-
-            <!-- List of current sectors -->
-            <div class="flex flex-wrap gap-1.5 mb-4">
-              <span
-                v-for="(s, i) in activeSectors"
-                :key="s"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold rounded-xl"
-              >
-                {{ s }}
-                <button 
-                  @click="removeSector(i)" 
-                  class="text-emerald-400 hover:text-red-500 transition-colors ml-1 p-0.5 rounded-md hover:bg-emerald-100 cursor-pointer"
-                >
-                  <Trash2 class="w-3 h-3" />
-                </button>
-              </span>
-            </div>
-
-            <!-- Form to add sector -->
-            <div class="space-y-2 border-t border-gray-100 pt-4">
-              <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider block">Agregar Sector</span>
-              <div class="flex gap-2">
-                <input
-                  v-model="newSector"
-                  type="text"
-                  placeholder="Nombre del sector (ej: TINTORERIA)"
-                  @keydown.enter="addSector"
-                  class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2 text-xs font-bold outline-none focus:bg-white focus:border-emerald-400"
-                />
-                <button 
-                  @click="addSector" 
-                  class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
-                >
-                  <Plus class="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Reset Seed Defaults Button -->
-            <div v-if="!dynamicRoles.length || !dynamicSectors.length" class="mt-4 pt-3 border-t border-gray-50 text-center">
-              <button
-                @click="seedDefaults"
-                class="text-[10px] font-black text-indigo-600 hover:underline tracking-wider uppercase cursor-pointer"
-              >
-                Cargar configuración por defecto
-              </button>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-    </main>
-  </div>
+</div></Teleport>
 </template>
 
 <style scoped>
@@ -1674,4 +1414,9 @@ onMounted(async () => {
 .animate-fade-in {
   animation: fadeIn 0.2s ease-out forwards;
 }
+</style>
+<style scoped>
+.users-page{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#f8fafc;font-size:13px;color:#334155}.users-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.users-workspace{flex:1;min-height:0;overflow:hidden;width:100%;padding:12px 16px}.users-list-panel{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;background:white;border:1px solid #e2e8f0;border-radius:7px;overflow:hidden}.users-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border-bottom:1px solid #e2e8f0}.users-search{position:relative;flex:1;min-width:200px}.users-search>svg{position:absolute;left:10px;top:10px;width:16px;height:16px;color:#94a3b8}.users-search input{width:100%;padding-left:33px!important}.users-table-scroll{flex:1;min-height:0;overflow:auto}.users-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}.users-table th{position:sticky;top:0;background:#f1f5f9;color:#475569;z-index:1;border-bottom:1px solid #cbd5e1;font-size:11px;font-weight:700;text-align:left}.users-table th,.users-table td{padding:11px 12px;overflow-wrap:anywhere}.users-table td{border-bottom:1px solid #eef2f6;vertical-align:middle;font-size:13px}.users-table tbody tr:nth-child(even){background:#fafbfd}.users-table tr:hover{background:#eff6ff}.users-table strong{font-weight:600;color:#1e293b}.users-table small{display:block;font-size:11px;color:#64748b;margin-top:4px;line-height:1.5}.user-badge{display:inline-block;border-radius:4px;background:#eff6ff;color:#1d4ed8;padding:4px 7px;font-size:11px;font-weight:600}.user-badge.pending{background:#fffbeb;color:#92400e}.users-list-panel>footer{padding:8px 12px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:11px;color:#64748b}.users-empty{padding:40px;text-align:center;color:#64748b}.user-btn,.user-icon{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#475569;font-weight:600;min-height:34px;padding:0 10px}.user-btn svg,.user-icon svg{width:16px;height:16px}.user-icon{min-height:30px;width:30px;padding:0;border-color:transparent}.user-btn:hover,.user-icon:hover{background:#f1f5f9}.user-error{color:#b91c1c;background:#fef2f2;padding:9px 12px;border-radius:5px;font-size:12px;line-height:1.5}.user-error button{text-decoration:underline;margin-left:8px}.user-backdrop{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.4);padding:16px;display:flex;align-items:center;justify-content:center}.user-modal{width:min(1280px,100%);height:min(900px,calc(100dvh - 32px));display:flex;flex-direction:column;min-height:0;background:white;border-radius:9px;overflow:hidden;box-shadow:0 20px 60px #0f172a33;color:#334155;font-size:13px}.user-editor-fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;border:0;min-width:0}.user-editor-fields>div{margin-top:0!important;min-width:0}.user-editor-fields>div:last-child,.user-editor-fields>.user-error{grid-column:1/-1}.config-panels{flex:1;min-height:0;overflow:auto;width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-content:start}.users-style :deep(.rounded-2xl){border-radius:7px}.users-style :deep(.rounded-xl){border-radius:5px}.users-style :deep(.font-black){font-weight:600}.users-style :deep(.tracking-widest),.users-style :deep(.tracking-wider){letter-spacing:.02em}.users-style :deep([class*="text-[8px]"]),.users-style :deep([class*="text-[9px]"]),.users-style :deep([class*="text-[10px]"]){font-size:11px;line-height:1.5}.users-style :deep(.text-gray-400){color:#64748b}.users-style :deep(input:not([type=checkbox])),.users-style :deep(select),.users-style :deep(textarea){font-size:13px;border-radius:5px;border-color:#cbd5e1;min-height:34px;padding:7px 9px;min-width:0}.users-style :deep(button[class*="px-"]){min-height:32px;border-radius:5px}.users-style :deep(button:disabled){opacity:.45;cursor:not-allowed}.users-style :deep(button:focus-visible),.users-style :deep(input:focus-visible),.users-style :deep(select:focus-visible){outline:2px solid #60a5fa;outline-offset:2px}.users-style :deep(th){color:#475569;font-weight:600;font-size:11px}.users-style :deep(td){overflow-wrap:anywhere}.users-style :deep(table:not(.users-table)){width:100%}.user-modal :deep(.p-5){padding:16px}.user-modal :deep(.py-4){padding-top:12px;padding-bottom:12px}
+@media(max-width:1100px){.users-workspace{padding:10px}.users-table th,.users-table td{padding:8px}.user-editor-fields{grid-template-columns:1fr;gap:16px}.user-modal :deep(.p-5){padding:12px}.users-style :deep(th[class*="px-4"]),.users-style :deep(td[class*="px-4"]){padding:8px}.users-style :deep(.gap-6){gap:14px}.users-style :deep(.space-y-6)>:not([hidden])~:not([hidden]){margin-top:14px}}
+@media(max-width:767px){.users-table{min-width:620px}.users-filters .users-search{flex-basis:100%}.users-filters select{flex:1;max-width:190px}.users-header{justify-content:flex-start}.users-header>div:last-child{flex-wrap:wrap;width:100%}.users-header button{padding-left:9px;padding-right:9px}.config-panels{grid-template-columns:1fr;gap:12px}.config-panels :deep(.flex.gap-2){flex-wrap:wrap}.user-backdrop{padding:10px}.user-modal{height:calc(100dvh - 20px)}.user-modal :deep(.grid-cols-2){grid-template-columns:1fr}.user-modal :deep(.truncate){white-space:normal;overflow-wrap:anywhere}.user-modal :deep(.shrink-0){max-width:100%}}
 </style>

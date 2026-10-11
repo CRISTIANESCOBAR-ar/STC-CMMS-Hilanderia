@@ -980,3 +980,29 @@ test('stop subscription reports failures and retains normalized night records fr
   calls[1].callback({ docs:[{ id:'night',data:() => ({ fecha:'2026-10-12',turno:'C' }) }] }); assert.equal(updates[0][0].fechaDocumento,'2026-10-12');
   calls[0].onError(new Error('Failed')); assert.equal(failures[0].message,'Failed'); stop(); assert.ok(calls.every(call => call.stopped));
 });
+
+test('user administration renders all tabs and keeps role/sector drafts isolated until an authorized save', async () => {
+  const organizationSource=fs.readFileSync(new URL('../src/constants/organization.js',import.meta.url),'utf8');
+  const names=[...organizationSource.matchAll(/export const (\w+)/g)].map(match => match[1]);
+  const organization=evaluate(organizationSource.replace(/export const/g,'const')+`\nreturn { ${names.join(',')} };`,{ '../utils/plantTime':{ plantShift:() => 'A' } });
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/Usuarios.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'users-test' });
+  const template=compileTemplate({ id:'users-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors,[]);
+  const role=Vue.ref('admin'),writes=[],override=Vue.ref({}); let failWrite=true,confirm=false,leave,failLoad=false;
+  const employee={ id:'legacy',email:'legacy@example.test',displayName:'José Operador',role:'mecanico',sectorDefault:'TEJEDURIA',sectoresAsignados:['TEJEDURIA'] };
+  const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,'../firebase/config':{ db:{} },'../services/authService':{ userRole:role },'../constants/organization':organization,'../utils/tooltipDirective':{ vTippy },sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },'../services/profileService':{ profileOverrides:override,loadProfiles:async () => {},saveProfiles:async () => {},getEffectiveVistas:r => organization.ROLE_PROFILES[r]?.vistas || [],getEffectivePermisos:r => organization.ROLE_PROFILES[r]?.permisos || {},getDefaultRoute:() => '/',getEffectiveDescripcion:r => organization.ROLE_PROFILES[r]?.descripcion || '',getEffectiveNivel:r => organization.ROLE_PROFILES[r]?.nivel || 'operativo',getEffectiveSectorDefault:() => 'TEJEDURIA' },'firebase/firestore':{ collection:() => 'usuarios',doc:(db,...path) => path.join('/'),query:() => assert.fail('User listing must include documents without createdAt'),orderBy:() => assert.fail('No date-only listing'),getDoc:async () => { if(failLoad) throw new Error('Config offline'); return { exists:() => true,data:() => ({ roles:organization.ROLE_OPTIONS,sectores:['TEJEDURIA','HILANDERIA'] }) }; },getDocs:async () => ({ docs:[{ id:employee.id,data:() => employee },{ id:'unapproved',data:() => ({ displayName:'Sin rol' }) }] }),setDoc:async () => {},updateDoc:async (path,data) => { writes.push({ path,data }); if(failWrite) throw new Error('Write failed'); } } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(state.isLoading,false); assert.equal(state.usuarios.length,2); assert.equal(state.usuarios.find(user => user.id==='unapproved').role,'pendiente');
+  state.searchQuery='jose'; assert.equal(state.filteredUsuarios.length,1); state.searchQuery=''; state.filterSector='HILANDERIA'; assert.equal(state.filteredUsuarios.length,1); state.filterSector='';
+  state.activeTab='perfiles'; await Vue.nextTick(); assert.ok(state.rolesByNivel.length); state.perfilesViewMode='editor'; await Vue.nextTick(); state.activeTab='config'; await Vue.nextTick(); state.activeTab='usuarios'; await Vue.nextTick();
+  const original=state.usuarios.find(user => user.id==='legacy'); state.selectUser(original); state.selectedUser.role='inspector'; state.selectedUser.sectoresAsignados.push('HILANDERIA');
+  assert.equal(original.role,'mecanico'); assert.deepEqual(original.sectoresAsignados,['TEJEDURIA']); assert.equal(state.isDirty,true);
+  assert.equal(await state.closeUser(),false); assert.equal(await leave(),false);
+  await state.guardarConfiguracion(state.selectedUser); assert.equal(state.saveError,'Write failed'); assert.equal(original.role,'mecanico'); assert.equal(state.selectedUser.role,'inspector');
+  failWrite=false; await state.guardarConfiguracion(state.selectedUser); assert.equal(original.role,'inspector'); assert.deepEqual(original.sectoresAsignados,['TEJEDURIA','HILANDERIA']); assert.equal(state.isDirty,false);
+  await state.closeUser(); assert.equal(state.selectedUser,null); state.selectUser(original); role.value='mecanico'; const count=writes.length; await state.guardarConfiguracion(state.selectedUser); assert.equal(writes.length,count); await state.closeUser(); role.value='admin';
+  failLoad=true; await state.reloadAll(); assert.equal(state.isLoading,false); assert.match(state.loadError,/configuración/); failLoad=false; await state.reloadAll(); assert.equal(state.loadError,'');
+  assert.deepEqual(errors,[]); app.unmount();
+});

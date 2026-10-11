@@ -458,3 +458,20 @@ test('a conflicting shift transaction cannot partially write or overwrite import
   assert.equal(snapshot.data().registros['1_A'].picks, 300);
   assert.equal(snapshot.data().registros['2_A'], undefined);
 });
+
+test('symptom scoped queries and transactions remain available only to approved members and administrators', async () => {
+  await approve('symptom-admin', 'admin'); await approve('symptom-reader', 'tejedor', 'TEJEDURIA');
+  const db = identity('symptom-admin').firestore(), reference = doc(db, 'sintomas/test-symptom');
+  await assertSucceeds(runTransaction(db, async transaction => {
+    assert.equal((await transaction.get(reference)).exists(), false);
+    transaction.set(reference, { nombre:'Trama', sector:'TEJEDURIA', tipoMaquina:'TELAR', activo:true, orden:1, creadoEn:serverTimestamp() });
+  }));
+  const reader = identity('symptom-reader').firestore();
+  const records = await assertSucceeds(getDocs(query(collection(reader,'sintomas'), where('sector','==','TEJEDURIA'), where('tipoMaquina','==','TELAR'))));
+  assert.equal(records.size,1);
+  await assertFails(updateDoc(doc(reader,'sintomas/test-symptom'), { nombre:'Cambio no permitido' }));
+  await assertFails(deleteDoc(doc(reader,'sintomas/test-symptom')));
+  await assertFails(setDoc(doc(reader,'sintomas/other'), { nombre:'No permitido' }));
+  await assertSucceeds(runTransaction(db, async transaction => { await transaction.get(reference); transaction.update(reference, { nombre:'Renombrado', orden:2 }); }));
+  await assertSucceeds(runTransaction(db, async transaction => { await transaction.get(reference); transaction.delete(reference); }));
+});

@@ -767,3 +767,82 @@ test('shared event panel reads intervention categories and states through its ki
     assert.deepEqual(errors, []);
   } finally { app.unmount(); }
 });
+
+test('symptom transactions preserve identifiers, reject duplicate creates and concurrent edits, normalize ordering', async () => {
+  const source = fs.readFileSync(new URL('../src/services/sintomasService.js', import.meta.url), 'utf8');
+  const role = Vue.ref('admin'), store = new Map(), writes = [], reads = [];
+  const a = { id:'a', nombre:'Trama', descripcion:'Antes', categoria:'TRAMA', derivaA:'MECANICO', destacado:false, activo:true, orden:2 };
+  const b = { ...a, id:'b', nombre:'Otra', orden:2 };
+  store.set('a', { ...a }); store.set('b', { ...b });
+  const dependencies = {
+    '../firebase/config':{ db:{} }, './authService':{ userRole:role },
+    'firebase/firestore':{
+      doc:(db, collection, id) => id, collection:() => 'sintomas', where:(...args) => args, query:(...args) => args,
+      getDocs:async query => { reads.push(query); return { docs:[...store].map(([id,data]) => ({ id, data:() => data })) }; },
+      serverTimestamp:() => 'server-time',
+      runTransaction:async (db, work) => {
+        const pending = [];
+        await work({ get:async id => ({ exists:() => store.has(id), data:() => store.get(id) }),
+          set:(id,data) => pending.push({ id,data,kind:'set' }), update:(id,data) => pending.push({ id,data,kind:'update' }), delete:id => pending.push({ id,kind:'delete' }) });
+        pending.forEach(write => { writes.push(write); if (write.kind === 'delete') store.delete(write.id); else store.set(write.id, { ...(write.kind === 'update' ? store.get(write.id):{}), ...write.data }); });
+      },
+    },
+  };
+  const service = evaluate(source.replace(/export (async function|const)/g, '$1') + '\nreturn { loadSymptoms, saveSymptom, deleteSymptom, reorderSymptoms, symptomFields };', dependencies);
+  await service.loadSymptoms('TEJEDURIA','TELAR');
+  assert.deepEqual(reads[0].slice(1), [['sector','==','TEJEDURIA'],['tipoMaquina','==','TELAR']]);
+  await service.saveSymptom('a', { ...a, nombre:'Nombre editado', descripcion:'Descripción editada' }, a);
+  assert.equal(store.get('a').nombre,'Nombre editado'); assert.equal(store.get('a').descripcion,'Descripción editada');
+  assert.equal(writes[0].id,'a'); assert.equal(writes[0].kind,'update');
+  await assert.rejects(service.saveSymptom('a', a), /Ya existe/);
+  await assert.rejects(service.saveSymptom('a', a, a), /Otro usuario/);
+  await assert.rejects(service.deleteSymptom(a), /Otro usuario/);
+  await service.reorderSymptoms([b, store.get('a')]);
+  assert.equal(store.get('b').orden,1); assert.equal(store.get('a').orden,2);
+  await assert.rejects(service.reorderSymptoms([b]), /Otro usuario/);
+  role.value = 'tejedor'; const count = writes.length;
+  await assert.rejects(service.saveSymptom('new',a), /administrador/);
+  await assert.rejects(service.deleteSymptom(b), /administrador/);
+  await assert.rejects(service.reorderSymptoms([b]), /administrador/);
+  assert.equal(writes.length,count);
+});
+
+test('symptom view ignores stale loads and preserves the edit draft after a failed explicit save', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/SintomasAdmin.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id:'symptoms-test' });
+  const template = compileTemplate({ id:'symptoms-test', source:descriptor.template.content, compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors, []);
+  const requests = [], writes = [], ordering = []; const role = Vue.ref('admin');
+  let failSave = true, confirm = false;
+  const fields = ['nombre','descripcion','categoria','derivaA','destacado','activo'];
+  const dependencies = {
+    vue:Vue, 'vue-router':{ onBeforeRouteLeave() {} }, 'lucide-vue-next':icons,
+    '../services/authService':{ userRole:role }, '../utils/tooltipDirective':{ vTippy }, 'file-saver':{ saveAs() {} },
+    sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },
+    '../services/sintomasService':{ symptomFields:fields,
+      loadSymptoms:(sector,type) => new Promise(resolve => requests.push({ sector,type,resolve })),
+      saveSymptom:async (id,data,baseline) => { writes.push({ id,data,baseline }); if (failSave) throw new Error('Conflicto de prueba'); },
+      deleteSymptom:async () => {}, reorderSymptoms:async list => ordering.push(list),
+    },
+  };
+  const component = evaluate(script.content,dependencies); component.render = evaluate(template.code,dependencies);
+  const { renderer,root } = host(); const app = renderer.createApp(component), errors = [];
+  app.config.errorHandler = error => errors.push(error); app.mount(root);
+  const state = root._vnode.component.setupState;
+  state.sector = 'HILANDERIA'; state.changeSector(); await Vue.nextTick();
+  requests[0].resolve([{ id:'old', nombre:'Viejo' }]); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(state.rows, []); assert.equal(requests[1].type,'CARDA');
+  const row = { id:'stable-id', nombre:'Pérdida de aceite', descripcion:'Inicial', categoria:'MECANICO', derivaA:'MECANICO', activo:true, destacado:false, orden:1 };
+  requests[1].resolve([row,{ ...row,id:'second',activo:false,orden:2 }]); await new Promise(resolve => setImmediate(resolve));
+  state.search = 'perdida'; assert.equal(state.visible.length,2); state.status = 'active'; assert.equal(state.visible.length,1);
+  await state.move(row,1); assert.equal(ordering.length,0);
+  state.openEditor(row); state.draft.nombre = 'Nuevo nombre'; state.draft.descripcion = 'Nueva descripción';
+  await state.save(); assert.equal(writes[0].id,'stable-id'); assert.equal(writes[0].data.descripcion,'Nueva descripción');
+  assert.equal(state.editing,true); assert.equal(state.formError,'Conflicto de prueba'); assert.equal(state.draft.nombre,'Nuevo nombre');
+  assert.equal(await state.closeEditor(),false); assert.equal(state.editing,true);
+  failSave = false; const saved = state.save(); await new Promise(resolve => setImmediate(resolve));
+  requests.at(-1).resolve([row]); await saved; assert.equal(state.editing,false);
+  role.value = 'tejedor'; state.openEditor(row); assert.equal(state.editing,false);
+  await state.remove(row); assert.equal(state.busy,false);
+  assert.deepEqual(errors,[]); app.unmount();
+});

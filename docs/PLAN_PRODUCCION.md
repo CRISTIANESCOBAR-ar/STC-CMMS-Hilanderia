@@ -338,3 +338,12 @@ pruebas del servicio en entorno piloto.
 - Por debajo de 981 px, selector de especialidad con cantidades y una columna visible; aprovecha el espacio sin comprimir tres tarjetas lado a lado. Los filtros comunes de estado, sector, asignación y búsqueda se conservan; el filtro de categoría solo aplica a Tabla y conserva su selección al volver.
 - Las tarjetas muestran número corto de máquina, prioridad, estado, síntoma, observaciones resumidas, asignado, antigüedad y foto disponible; Detalle abre la descripción completa en la ruta existente. Tomar grupo se limita a la máquina y especialidad visibles, respetando permisos.
 - Prueba del componente real ampliada para verificar distribución por especialidad, persistencia, reutilización de suscripción, conservación del filtro y recuperación de categorías antiguas. Pendiente aprobación visual del usuario; rollback mediante revert y Hosting.
+
+### V7 — Tablas por especialidad y detalle modal
+
+- Las columnas por especialidad muestran tablas compactas de máquina, prioridad, síntoma/estado y acceso al detalle; conservan agrupación, filtros, permisos y selección de especialidad en anchos pequeños. La tabla general permanece disponible.
+- Detalle abre un modal sobre la lista, sin cambiar de ruta ni perder filtros. La URL directa /intervenciones/:id utiliza el mismo componente y vuelve a la lista al cerrar.
+- Solicitud, metadatos y foto a la izquierda; diagnóstico, tiempos, catálogo y procedimiento a la derecha. En pantallas de hasta 800 px se ordenan verticalmente, con scroll interno y acciones al pie.
+- Se mantienen Tomar, guardar diagnóstico y completar, condicionadas al estado, permisos y usuario asignado. Bloqueo de acciones repetidas, datos conservados ante error, advertencia de cambios pendientes al cerrar/salir y protección del borrador frente a snapshots.
+- Carga con error y reintento, estados de documento no encontrado, catálogo con reintento. Foto ampliable, procedimiento contenido, foco inicial/retorno al botón de origen, recorrido de teclado y Escape; fondo de la lista inerte mientras se consulta el detalle.
+- Prueba del componente real para edición vacía frente a snapshots, guardado fallido, clic duplicado, cierre pendiente, guardado confirmado, solo lectura y documento inexistente. Pendiente aprobación visual en las PC de planta; rollback con revert y Hosting, sin migraciones ni cambios de reglas.

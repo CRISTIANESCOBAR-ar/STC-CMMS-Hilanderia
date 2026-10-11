@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
+import IntervencionDetalle from './IntervencionDetalle.vue';
 import { userProfile, userRole } from '../services/authService';
 import { getEffectivePermisosForUser } from '../services/profileService';
 import { canExecuteIntervention } from '../utils/interventionAccess';
@@ -29,6 +30,10 @@ const filtroTipo = ref('');
 const filtroSector = ref('');
 const filtroAsignacion = ref('');
 const errorCarga = ref(false);
+const detalleId = ref(null);
+let detalleTrigger;
+const abrirDetalle = item => { detalleTrigger = globalThis.document?.activeElement; detalleId.value = item.id; };
+const cerrarDetalle = async () => { detalleId.value = null; await nextTick(); if (detalleTrigger?.isConnected) detalleTrigger.focus(); };
 const presentationKey = 'cmms.interventions.presentation';
 function storedPresentation() {
   try { return globalThis.localStorage?.getItem(presentationKey) === 'specialty' ? 'specialty' : 'table'; }
@@ -269,7 +274,7 @@ const onTomarGrupo = async (grupo) => {
 </script>
 
 <template>
-  <div class="interventions-page min-h-screen bg-gray-50 pb-8">
+  <div class="interventions-page min-h-screen bg-gray-50 pb-8" :inert="detalleId !== null">
     <header class="management-header"><div><h1>Intervenciones</h1><p>Gestión de solicitudes · Prioridad más alta primero</p></div><button v-if="canDespacharIntervencion(userRole)" class="management-button primary" @click="router.push('/llamar')" v-tippy="'Registrar una nueva solicitud de intervención'"><Plus :size="16" />Nueva solicitud</button></header>
 
     <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -344,16 +349,16 @@ const onTomarGrupo = async (grupo) => {
           <header class="specialty-heading" :class="'specialty-' + column.id"><h2>{{ column.label }}</h2><span>{{ column.count }} solicitudes</span></header>
           <div class="specialty-list">
             <p v-if="!column.count" class="specialty-empty">Sin solicitudes con estos filtros</p>
-            <section v-for="group in column.grupos" :key="group.key" class="specialty-machine">
-              <header v-if="group.items.length > 1" class="specialty-machine-heading"><span>Máquina {{ numeroCorto(group.items[0]) }} · {{ group.items.length }} solicitudes</span><button v-if="group.items.some(item => item.estado === 'PENDIENTE' && canTomarItem(item))" class="management-button" :disabled="!!actualizando" @click="onTomarGrupo(group)" v-tippy="'Tomar las solicitudes permitidas de esta máquina y especialidad'">Tomar grupo</button></header>
-              <article v-for="item in group.items" :key="item.id" class="specialty-card" :class="{ 'specialty-stopped': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
-                <header><div><strong>Máquina {{ numeroCorto(item) }}</strong><small>{{ item.tipoMaquina }} · {{ item.sector }}<span v-if="item.grupoTelar"> · GP {{ item.grupoTelar }}</span></small></div><span class="specialty-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span></header>
-                <div class="specialty-status"><span :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</span><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ estadoConfig[item.estado]?.label || item.estado }}</span><span v-if="item.critico" class="text-red-600">Crítica</span></div>
-                <h3>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</h3><p class="specialty-description">{{ item.observaciones }}</p>
-                <div class="specialty-assignment">{{ item.asignadoNombre || 'Sin asignar' }}<span v-if="item.fotoUrl"> · Foto adjunta</span></div>
-                <footer><span v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</span><div><button class="management-button" @click="router.push('/intervenciones/' + item.id)" v-tippy="'Abrir descripción completa, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></footer>
-              </article>
-            </section>
+            <table v-else class="specialty-table"><thead><tr><th>Máq.</th><th>Prioridad</th><th>Síntoma / estado</th><th>Detalle</th></tr></thead>
+              <tbody v-for="group in column.grupos" :key="group.key">
+                <tr v-if="group.items.length > 1" class="specialty-group-row"><td colspan="4"><div><span>Máquina {{ numeroCorto(group.items[0]) }} · {{ group.items.length }}</span><button v-if="group.items.some(item => item.estado === 'PENDIENTE' && canTomarItem(item))" class="management-button" :disabled="!!actualizando" @click="onTomarGrupo(group)" v-tippy="'Tomar solicitudes permitidas de esta máquina y especialidad'">Tomar grupo</button></div></td></tr>
+                <tr v-for="item in group.items" :key="item.id" :class="{ 'specialty-stopped': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
+                  <td><strong>{{ numeroCorto(item) }}</strong><small v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</small></td>
+                  <td><span class="specialty-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span><small v-if="item.critico" class="text-red-600">Crítica</small></td>
+                  <td><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ estadoConfig[item.estado]?.label || item.estado }}</span><small>{{ item.asignadoNombre || 'Sin asignar' }}</small></td>
+                  <td><button class="management-button specialty-detail-button" :aria-label="'Detalle de máquina ' + numeroCorto(item)" @click="abrirDetalle(item)" v-tippy="'Abrir detalle y acciones'"><ChevronRight :size="16" /></button></td>
+                </tr>
+              </tbody></table>
           </div>
         </section>
       </div>
@@ -368,7 +373,7 @@ const onTomarGrupo = async (grupo) => {
           <td class="request-description"><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><p>{{ item.observaciones }}</p><small v-if="item.fotoUrl">Foto adjunta</small></td>
           <td>{{ item.asignadoNombre || 'Sin asignar' }}<small>Solicita: {{ item.creadoPorNombre || 'Sin identificar' }}</small></td>
           <td><span v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</span></td>
-          <td><div class="management-row-actions"><button class="management-button" @click="router.push('/intervenciones/' + item.id)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
+          <td><div class="management-row-actions"><button class="management-button" @click="abrirDetalle(item)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
         </tr>
       </tbody></table></div>
     <div v-if="presentacion === 'table'" class="management-cards max-w-lg mx-auto px-3 pt-3 space-y-3">
@@ -450,7 +455,7 @@ const onTomarGrupo = async (grupo) => {
                     <User class="w-3 h-3" /> {{ item.asignadoNombre }}
                   </span>
                   <div class="ml-auto flex items-center gap-1">
-                    <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="router.push('/intervenciones/' + item.id)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
+                    <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="abrirDetalle(item)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
                       <ChevronRight class="w-3 h-3" />
                     </button>
                     <button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="!!actualizando"
@@ -581,7 +586,7 @@ const onTomarGrupo = async (grupo) => {
                 <ChevronDown v-if="expandedId !== g.items[0].id" class="w-3.5 h-3.5" />
                 <ChevronUp v-else class="w-3.5 h-3.5" />
               </button>
-              <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="router.push('/intervenciones/' + g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
+              <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="abrirDetalle(g.items[0])" class="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
                 <ChevronRight class="w-3.5 h-3.5" />
               </button>
               <button v-if="g.items[0].estado === 'PENDIENTE' && canTomarItem(g.items[0])" @click.stop="onTomar(g.items[0])" :disabled="!!actualizando"
@@ -599,6 +604,7 @@ const onTomarGrupo = async (grupo) => {
     <footer class="management-footer">{{ intervencionesFiltered.length }} solicitudes · {{ grupos.length }} máquinas · Cerradas: últimas 24 horas</footer>
     </div>
   </div>
+  <IntervencionDetalle v-if="detalleId" :key="detalleId" :id="detalleId" @close="cerrarDetalle" />
 </template>
 
 <style scoped>
@@ -617,24 +623,22 @@ const onTomarGrupo = async (grupo) => {
 .specialty-MECANICO { border-top-color:#3b82f6; } .specialty-ELECTRICO { border-top-color:#f59e0b; } .specialty-CALIDAD { border-top-color:#ef4444; }
 .specialty-heading h2 { font-size:14px; font-weight:650; color:#334155; }
 .specialty-heading > span { font-size:11px; color:#64748b; }
-.specialty-list { padding:9px; }
-.specialty-machine + .specialty-machine { margin-top:10px; }
-.specialty-machine-heading { padding:7px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; font-size:11px; font-weight:600; color:#475569; }
-.specialty-machine-heading button { font-size:11px; padding:4px 7px; }
-.specialty-card { background:white; border:1px solid #e2e8f0; border-radius:8px; padding:11px; overflow-wrap:anywhere; }
-.specialty-card + .specialty-card { margin-top:7px; }
+.specialty-list { padding:0; }
+.specialty-table { width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0; background:white; font-size:12px; color:#334155; }
+.specialty-table th { position:sticky; top:0; z-index:1; text-align:left; background:#f8fafc; border-bottom:1px solid #cbd5e1; padding:9px 6px; font-size:10px; font-weight:600; color:#64748b; }
+.specialty-table th:nth-child(1) { width:15%; } .specialty-table th:nth-child(2) { width:23%; } .specialty-table th:nth-child(3) { width:calc(62% - 42px); } .specialty-table th:nth-child(4) { width:42px; }
+.specialty-table td { padding:10px 6px; border-bottom:1px solid #e2e8f0; vertical-align:top; overflow-wrap:anywhere; }
+.specialty-table tr:hover td { background:#f8fafc; }
+.specialty-table strong { font-size:12px; font-weight:600; }
+.specialty-table small { display:block; font-size:10px; color:#64748b; margin-top:4px; }
+.specialty-table small.text-red-600 { color:#dc2626; } .specialty-table small.text-amber-600 { color:#d97706; } .specialty-table small.text-green-600 { color:#16a34a; }
+.specialty-table .specialty-badge { padding:3px 4px; font-size:9px; }
+.specialty-group-row td { background:#f1f5f9; padding:6px; } .specialty-group-row td > div { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:5px; font-size:11px; font-weight:600; }
+.specialty-group-row button { font-size:10px; min-height:30px; padding:4px 6px; }
+.specialty-detail-button { padding:5px; min-width:30px; }
+.specialty-stopped td:first-child { border-left:3px solid #ef4444; }
 .specialty-stopped { border-left:3px solid #ef4444; }
-.specialty-card > header { display:flex; align-items:start; justify-content:space-between; gap:6px; }
-.specialty-card strong { color:#0f172a; font-size:14px; font-weight:650; }
-.specialty-card small { display:block; color:#64748b; font-size:11px; margin-top:2px; }
 .specialty-badge { display:inline-block; border-radius:5px; padding:3px 6px; font-size:10px; font-weight:600; flex-shrink:0; }
-.specialty-status { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:11px; }
-.specialty-card h3 { margin-top:8px; font-size:13px; font-weight:600; color:#334155; line-height:1.4; }
-.specialty-description { margin-top:4px; font-size:12px; color:#64748b; line-height:1.45; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-.specialty-assignment { margin-top:8px; font-size:11px; color:#475569; }
-.specialty-card footer { display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:space-between; border-top:1px solid #f1f5f9; padding-top:8px; margin-top:8px; }
-.specialty-card footer > span { color:#64748b; font-size:11px; }
-.specialty-card footer > div { display:flex; flex-wrap:wrap; gap:5px; }
 .specialty-empty { padding:30px 10px; color:#64748b; font-size:12px; text-align:center; }
 .management-header,.management-table-scroll,.management-footer { display:none; }
 .management-filters { display:flex; gap:8px; flex-wrap:wrap; padding:10px 12px; align-items:end; background:white; border-bottom:1px solid #e2e8f0; }
@@ -698,10 +702,7 @@ const onTomarGrupo = async (grupo) => {
 }
 @media(min-width:981px) and (max-width:1199px) {
  .specialty-heading { padding:9px; }
- .specialty-list { padding:6px; }
- .specialty-card { padding:9px; }
- .specialty-card .management-button { padding:5px 8px; }
- .specialty-description { -webkit-line-clamp:2; }
+ .specialty-list { padding:0; }
 }
 @keyframes pulse-subtle {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }

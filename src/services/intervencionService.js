@@ -77,10 +77,10 @@ export const intervencionService = {
   /**
    * Suscripción realtime a una intervención específica.
    */
-  suscribirPorId(id, callback) {
+  suscribirPorId(id, callback, onError) {
     return onSnapshot(doc(db, COLLECTION_NAME, id), (snap) => {
-      if (snap.exists()) callback({ id: snap.id, ...snap.data() });
-    });
+      callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    }, onError);
   },
 
   /**

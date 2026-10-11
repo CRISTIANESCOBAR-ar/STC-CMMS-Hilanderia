@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { getAuth } from 'firebase/auth';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -15,12 +15,57 @@ import {
   Clock, CheckCircle2, BookOpen, Save, CirclePlay, X
 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
+import { vTippy } from '../utils/tooltipDirective';
+import { eventView, machineStateLabel } from '../utils/faultEvents';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
+const props = defineProps({ id: { type:String, default:null } });
+const emit = defineEmits(['close']);
+const interventionId = computed(() => props.id || route.params.id);
+const dialog = ref(null);
+const errorCarga = ref(false);
+const fotoAmpliada = ref(false);
+const baseline = ref('');
+const dirty = computed(() => baseline.value && baseline.value !== JSON.stringify(diagnostico.value));
+let previousFocus;
+let alive = true;
+const close = async () => {
+  if (guardando.value || tomando.value) return;
+  if (dirty.value) {
+    const result = await Swal.fire({ title:'¿Descartar cambios sin guardar?', text:'El diagnóstico tiene cambios pendientes.', icon:'question', showCancelButton:true, confirmButtonText:'Descartar', cancelButtonText:'Seguir editando' });
+    if (!result.isConfirmed) return;
+    baseline.value = JSON.stringify(diagnostico.value);
+  }
+  if (props.id) emit('close'); else router.push('/intervenciones');
+};
+function beforeUnload(event) { if (dirty.value || guardando.value || tomando.value) { event.preventDefault(); event.returnValue = ''; } }
+onBeforeRouteLeave(async () => {
+  if (guardando.value || tomando.value) return false;
+  if (!dirty.value) return true;
+  const result = await Swal.fire({ title:'¿Descartar cambios sin guardar?', showCancelButton:true, confirmButtonText:'Descartar', cancelButtonText:'Seguir editando' });
+  return result.isConfirmed;
+});
+function dialogKeydown(event) {
+  if (event.key === 'Escape') { event.stopPropagation(); if (showProcedimientoViewer.value) showProcedimientoViewer.value = false; else if (fotoAmpliada.value) fotoAmpliada.value = false; else close(); }
+  if (event.key !== 'Tab') return;
+  const focusRoot = showProcedimientoViewer.value || fotoAmpliada.value ? dialog.value?.querySelector('.detail-nested') : dialog.value;
+  const nodes = [...(focusRoot?.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]') || [])].filter(node => node.getClientRects().length);
+  if (!nodes.length) { event.preventDefault(); return; }
+  const first = nodes[0], last = nodes.at(-1), active = globalThis.document?.activeElement;
+  if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); }
+}
 
 const route  = useRoute();
 const router = useRouter();
 
 // ── Estado ────────────────────────────────────────────────────────────────────
 const intervencion = ref(null);
+const prioridadLabel = computed(() => {
+  const item = intervencion.value;
+  if (!item || item.estado === 'COMPLETADO') return 'Normal';
+  return item.estadoMaquina === 'PARADA' ? 'Urgente' : item.estadoMaquina === 'CON_PROBLEMA' ? (item.critico ? 'Alta' : 'Media') : 'Normal';
+});
 const loading      = ref(true);
 const guardando    = ref(false);
 let   unsub        = null;
@@ -59,6 +104,7 @@ const formatGCmest = (raw) => {
 // ── Catálogo ──────────────────────────────────────────────────────────────────
 const catalogo        = ref([]);
 const catalogoCargado = ref(false);
+const catalogoError = ref(false);
 const piezaSeleccionada = ref(null);
 
 // Cascada de selección
@@ -66,6 +112,17 @@ const seccionSeleccionada     = ref('');
 const grupoSeleccionado       = ref('');
 const denominacionSeleccionada = ref(null);
 const showProcedimientoViewer  = ref(false);
+let nestedTrigger;
+watch([showProcedimientoViewer, fotoAmpliada], async ([procedure, photo], [previousProcedure, previousPhoto]) => {
+  if (procedure || photo) { nestedTrigger = globalThis.document?.activeElement; await nextTick(); dialog.value?.querySelector('.detail-nested button')?.focus?.(); }
+  else if (previousProcedure || previousPhoto) { await nextTick(); nestedTrigger?.focus?.(); }
+});
+async function cargarCatalogo(modelo = intervencion.value?.modeloMaquina) {
+  if (!modelo) return;
+  catalogoError.value = false; catalogoCargado.value = true;
+  try { const items = await catalogoService.obtenerPorModelo(modelo); if (alive) catalogo.value = items; }
+  catch { if (alive) { catalogoCargado.value = false; catalogoError.value = true; } }
+}
 
 // ── Formulario diagnóstico ────────────────────────────────────────────────────
 const diagnostico = ref({
@@ -80,21 +137,28 @@ const diagnostico = ref({
 });
 
 // ── Carga realtime ────────────────────────────────────────────────────────────
-onMounted(() => {
-  unsub = intervencionService.suscribirPorId(route.params.id, (data) => {
+function subscribe() {
+  unsub?.(); errorCarga.value = false; loading.value = true;
+  unsub = intervencionService.suscribirPorId(interventionId.value, (data) => {
+    if (!alive) return;
     intervencion.value = data;
     loading.value = false;
-    // Prellenar diagnostico si ya existe
-    if (data.causaRaiz     && !diagnostico.value.causaRaiz)    diagnostico.value.causaRaiz    = data.causaRaiz;
-    if (data.accionTomada  && !diagnostico.value.accionTomada) diagnostico.value.accionTomada = data.accionTomada;
-    if (data.piezaId       && !diagnostico.value.piezaId)      Object.assign(diagnostico.value, { piezaId: data.piezaId, piezaNombre: data.piezaNombre, numeroCatalogo: data.numeroCatalogo, numeroArticulo: data.numeroArticulo });
-    if (data.tiempoReal && !diagnostico.value.tiempoReal) diagnostico.value.tiempoReal = data.tiempoReal;
-  });
+    if (data && !dirty.value && !guardando.value) {
+      for (const key of Object.keys(diagnostico.value)) diagnostico.value[key] = data[key] ?? (['causaRaiz', 'accionTomada', 'tiempoReal'].includes(key) ? '' : null);
+      baseline.value = JSON.stringify(diagnostico.value);
+    }
+  }, () => { if (alive) { loading.value = false; errorCarga.value = true; } });
+}
+onMounted(() => {
+  previousFocus = globalThis.document?.activeElement;
+  nextTick(() => dialog.value?.focus?.());
+  globalThis.window?.addEventListener('beforeunload', beforeUnload);
+  subscribe();
   // Actualizar el reloj cada 30 s para el timer en vivo
   timerInterval = setInterval(() => { ahora.value = Date.now(); }, 30_000);
 });
 
-onUnmounted(() => { unsub?.(); clearInterval(timerInterval); });
+onUnmounted(() => { alive = false; unsub?.(); clearInterval(timerInterval); globalThis.window?.removeEventListener('beforeunload', beforeUnload); if (previousFocus?.isConnected) previousFocus.focus(); });
 
 // ── Cargar catálogo + resolver grupo cuando se conoce el modelo ──────────────
 watch(intervencion, async (iv) => {
@@ -105,8 +169,9 @@ watch(intervencion, async (iv) => {
       grupoTelarResuelto.value = iv.grupoTelar;
       gmTelarResuelto.value    = iv.gmTelar || null;
     } else if (iv.maquinaId) {
-      const snap = await getDoc(doc(db, 'maquinas', iv.maquinaId));
-      if (snap.exists()) {
+      const snap = await getDoc(doc(db, 'maquinas', iv.maquinaId)).catch(() => null);
+      if (!alive) return;
+      if (snap?.exists()) {
         const d = snap.data();
         grupoTelarResuelto.value = formatGrpTear(d.grp_tear);
         gmTelarResuelto.value    = formatGCmest(d.g_cmest);
@@ -117,8 +182,7 @@ watch(intervencion, async (iv) => {
   if (catalogoCargado.value) return;
   const modelo = iv.modeloMaquina;
   if (!modelo) return;
-  catalogoCargado.value = true;
-  catalogo.value = await catalogoService.obtenerPorModelo(modelo);
+  await cargarCatalogo(modelo);
 }, { immediate: true });
 
 // ── Cascada catálogo ──────────────────────────────────────────────────────────
@@ -169,6 +233,7 @@ const limpiarPieza = () => {
   denominacionSeleccionada.value = null;
   seccionSeleccionada.value = '';
   grupoSeleccionado.value = '';
+  Object.assign(diagnostico.value, { piezaId:null, piezaNombre:null, numeroCatalogo:null, numeroArticulo:null });
 };
 
 // ── Helpers UI ────────────────────────────────────────────────────────────────
@@ -244,10 +309,11 @@ const puedeTomarIntervencion = computed(() =>
 
 const tomando = ref(false);
 const tomarIntervencion = async () => {
+  if (tomando.value || guardando.value || !puedeTomarIntervencion.value) return;
   const user = getAuth().currentUser;
   tomando.value = true;
   try {
-    await intervencionService.actualizarEstado(route.params.id, 'EN_PROCESO', {
+    await intervencionService.actualizarEstado(interventionId.value, 'EN_PROCESO', {
       asignadoA:      user?.uid || null,
       asignadoNombre: user?.displayName || user?.email || 'Usuario',
     });
@@ -258,9 +324,12 @@ const tomarIntervencion = async () => {
 
 // ── Guardar diagnóstico ───────────────────────────────────────────────────────
 const guardarDiagnostico = async () => {
+  if (guardando.value || tomando.value || !puedeEditar.value) return;
   guardando.value = true;
+  const payload = { ...diagnostico.value };
   try {
-    await intervencionService.guardarDiagnostico(route.params.id, diagnostico.value);
+    await intervencionService.guardarDiagnostico(interventionId.value, payload);
+    baseline.value = JSON.stringify(payload);
     Swal.fire({ toast: true, position: 'top', icon: 'success', title: 'Diagnóstico guardado', showConfirmButton: false, timer: 2000, iconColor: '#ea580c' });
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Error', text: e.message });
@@ -269,6 +338,7 @@ const guardarDiagnostico = async () => {
 
 // ── Completar ─────────────────────────────────────────────────────────────────
 const completar = async () => {
+  if (guardando.value || tomando.value || !puedeEditar.value) return;
   const confirm = await Swal.fire({
     title: '¿Completar intervención?',
     text: 'El problema fue resuelto.',
@@ -278,15 +348,15 @@ const completar = async () => {
     cancelButtonText: 'Cancelar',
     confirmButtonColor: '#16a34a',
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirm.isConfirmed || guardando.value || !puedeEditar.value) return;
   guardando.value = true;
   try {
     // Siempre guardar tiempoAuto al completar; tiempoReal es el campo manual
     diagnostico.value.tiempoAuto = minutosTranscurridos.value !== null ? String(minutosTranscurridos.value) : null;
     // Si el mecánico no ingresó nada en tiempoReal, lo dejamos null (no pisamos el auto)
-    await intervencionService.guardarDiagnostico(route.params.id, diagnostico.value);
-    await intervencionService.actualizarEstado(route.params.id, 'COMPLETADO');
-    router.push('/intervenciones');
+    await intervencionService.guardarDiagnostico(interventionId.value, { ...diagnostico.value });
+    await intervencionService.actualizarEstado(interventionId.value, 'COMPLETADO');
+    baseline.value = JSON.stringify(diagnostico.value);
   } catch (e) {
     Swal.fire({ icon: 'error', title: 'Error', text: e.message });
   } finally { guardando.value = false; }
@@ -294,379 +364,54 @@ const completar = async () => {
 </script>
 
 <template>
-  <div class="bg-transparent pb-28">
-
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-32">
-      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500"></div>
-    </div>
-
-    <template v-else-if="intervencion">
-
-      <!-- ── Navbar portal: solo badges tipo + crítico ─────── -->
-      <Teleport to="#navbar-header-portal">
-        <div class="flex items-center gap-1.5">
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
-            :class="tipoConfig[intervencion.tipoIntervencion]?.bg || 'bg-gray-100 text-gray-500'">
-            <component :is="tipoConfig[intervencion.tipoIntervencion]?.ic" class="w-2.5 h-2.5" />
-            {{ tipoConfig[intervencion.tipoIntervencion]?.label }}
-          </span>
-          <span v-if="intervencion.critico"
-            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">
-            <AlertTriangle class="w-2.5 h-2.5" /> CRÍTICO
-          </span>
-        </div>
-      </Teleport>
-
-      <main class="max-w-sm mx-auto pt-2">
-        <div class="bg-white border-y border-gray-100">
-
-          <!-- ── ① MÁQUINA (solo lectura) ──────────────────────── -->
-          <div class="px-4 py-2 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-2 min-w-0">
-              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">1</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest shrink-0">MÁQUINA</label>
-              <div class="flex items-center gap-1 text-[10px] text-gray-400 min-w-0 overflow-hidden ml-1">
-                <span class="font-bold text-gray-500 shrink-0">{{ modeloCorto }}</span>
-                <span class="text-gray-300 mx-0.5">·</span>
-                <Clock class="w-3 h-3 text-gray-300 shrink-0" />
-                <span class="ml-0.5 shrink-0">{{ timeAgo(intervencion.createdAt) }}</span>
-                <span class="text-gray-300 mx-0.5">·</span>
-                <span class="truncate">{{ intervencion.creadoPorNombre }}</span>
-              </div>
-            </div>
-
-            <div class="flex gap-2">
-              <!-- Tipo -->
-              <div :class="intervencion.tipoMaquina === 'TELAR' ? 'flex-[0.8]' : 'flex-1'">
-                <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">TIPO</label>
-                <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                  <span class="text-sm font-bold text-gray-900">{{ intervencion.tipoMaquina || '—' }}</span>
-                </div>
-              </div>
-              <!-- Grupo (solo TELAR) -->
-              <div v-if="intervencion.tipoMaquina === 'TELAR'" class="flex-[0.5]">
-                <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GRUPO</label>
-                <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                  <span class="text-sm font-bold text-gray-700">{{ grupoTelarResuelto || '—' }}</span>
-                </div>
-              </div>
-              <!-- Máquina -->
-              <div :class="intervencion.tipoMaquina === 'TELAR' ? 'flex-[1.1]' : 'flex-[1.2]'">
-                <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">MÁQUINA</label>
-                <div class="bg-orange-50 border border-orange-300 rounded-lg px-2.5 py-1.5">
-                  <span class="text-sm font-bold text-orange-700">
-                    {{ nombreMaquinaDisplay }}
-                    <span v-if="intervencion.lado && intervencion.lado !== 'U'" class="text-orange-500"> ({{ intervencion.lado }})</span>
-                  </span>
-                </div>
-              </div>
-              <!-- GM (solo TELAR) -->
-              <div v-if="intervencion.tipoMaquina === 'TELAR'" class="flex-[0.45]">
-                <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">GM</label>
-                <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                  <span class="text-sm font-bold text-gray-700">{{ gmTelarResuelto || '—' }}</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- ── ② ¿QUÉ ESTÁ PASANDO? (solo lectura) ───────────── -->
-          <div class="px-4 pt-3 pb-3 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
-              <!-- Badge derivaA inline al título -->
-              <div v-if="intervencion.derivaA" class="ml-auto flex items-center gap-1.5">
-                <span class="text-[9px] font-extrabold text-gray-400 tracking-widest">SE NOTIFICA A:</span>
-                <span class="text-[11px] font-black px-2.5 py-0.5 rounded-full"
-                  :class="[DERIVA_COLOR[intervencion.derivaA]?.bg, DERIVA_COLOR[intervencion.derivaA]?.text]">
-                  {{ DERIVA_COLOR[intervencion.derivaA]?.label }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Síntoma -->
-            <div v-if="intervencion.sintomaNombre"
-              class="border border-orange-300 bg-orange-50 rounded-lg px-2.5 py-1.5 mb-2">
-              <span class="text-sm font-bold text-orange-700">
-                {{ intervencion.sintomaNombre }}
-              </span>
-            </div>
-            <div v-else class="border border-gray-200 bg-gray-50 rounded-lg px-2.5 py-1.5 mb-2">
-              <span class="text-sm text-gray-400 italic">Sin síntoma registrado</span>
-            </div>
-
-            <!-- Observaciones del operador -->
-            <div v-if="intervencion.observaciones" class="mt-2 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2">
-              <p class="text-[9px] font-extrabold text-gray-400 tracking-widest mb-0.5">OBSERVACIONES</p>
-              <p class="text-sm text-gray-700 italic leading-snug">"{{ intervencion.observaciones }}"</p>
-            </div>
-
-            <!-- Foto -->
-            <div v-if="intervencion.fotoUrl" class="mt-2 rounded-xl overflow-hidden border border-gray-200 max-h-48 bg-gray-900">
-              <OperationalImage :src="intervencion.fotoUrl" class="w-full h-full object-contain" />
-            </div>
-          </div>
-
-          <!-- ── ③ ESTADO DE LA MÁQUINA (solo lectura) ─────────── -->
-          <div class="px-4 pt-3 pb-3 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">ESTADO DE LA MÁQUINA</label>
-            </div>
-            <div class="grid grid-cols-3 gap-2">
-              <div v-for="e in ESTADOS_MAQUINA" :key="e.id"
-                class="flex flex-row items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border-2 transition-all"
-                :class="intervencion.estadoMaquina === e.id ? e.activeBg : 'bg-white border-gray-100 opacity-40'"
-              >
-                <component :is="e.ic" class="w-3.5 h-3.5 shrink-0"
-                  :class="intervencion.estadoMaquina === e.id ? e.iconColor : 'text-gray-300'" />
-                <span class="text-[10px] font-black leading-tight"
-                  :class="intervencion.estadoMaquina === e.id ? e.textColor : 'text-gray-300'">
-                  {{ e.label }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── ④ CATÁLOGO DE PIEZAS ──────────────────────────────── -->
-          <div v-if="catalogo.length" class="border-t border-gray-100">
-            <!-- Header sección -->
-            <div class="px-4 pt-3 pb-1 flex items-center gap-2">
-              <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">CATÁLOGO DE PIEZAS</label>
-            </div>
-
-            <!-- 1. Sección + 2. Grupo -->
-            <div class="px-4 py-3 border-b border-gray-50 flex gap-4">
-              <div class="flex-[1.4]">
-                <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">1. Sección</label>
-                <select v-model="seccionSeleccionada" :disabled="!puedeEditar"
-                  class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-40">
-                  <option value="">Seleccionar...</option>
-                  <option v-for="s in seccionesDisponibles" :key="s" :value="s">{{ s }}</option>
-                </select>
-              </div>
-              <div class="flex-[0.6]">
-                <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1"
-                  :class="{'opacity-50': !seccionSeleccionada}">2. Grupo</label>
-                <select v-model="grupoSeleccionado" :disabled="!seccionSeleccionada || !puedeEditar"
-                  class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-30">
-                  <option value="">...</option>
-                  <option v-for="g in gruposDisponibles" :key="g" :value="g">{{ g }}</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- 3. Punto / Parte específica -->
-            <div v-if="grupoSeleccionado" class="px-4 py-3 border-b border-gray-50 animate-in slide-in-from-top-2">
-              <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">3. Punto / Parte específica</label>
-              <select v-model="denominacionSeleccionada" :disabled="!puedeEditar"
-                class="w-full bg-transparent border-0 p-0 text-gray-900 text-base font-bold focus:ring-0 focus:outline-none disabled:opacity-40">
-                <option :value="null">Seleccionar...</option>
-                <option v-for="d in denominacionesDisponibles" :key="d.id" :value="d">
-                  {{ d.denominacion }}{{ d.subGrupo && d.subGrupo !== '-' ? ' [' + d.subGrupo + ']' : '' }}
-                </option>
-              </select>
-
-              <!-- Tiempo + Procedimiento -->
-              <div v-if="denominacionSeleccionada" class="mt-2.5 flex items-center gap-2">
-                <div v-if="denominacionSeleccionada.tiempo"
-                  class="flex items-center gap-1.5 flex-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  <span class="text-[11px] font-black text-amber-700 tracking-wide">{{ denominacionSeleccionada.tiempo }}</span>
-                </div>
-                <div v-if="denominacionSeleccionada.numeroArticulo && denominacionSeleccionada.numeroArticulo !== '-'"
-                  class="bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded shrink-0">
-                  Art: {{ denominacionSeleccionada.numeroArticulo }}
-                </div>
-                <button type="button"
-                  @click="denominacionSeleccionada?.procedimiento?.length > 0 && (showProcedimientoViewer = true)"
-                  :disabled="!denominacionSeleccionada?.procedimiento?.length"
-                  class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition active:scale-[0.97]"
-                  :class="denominacionSeleccionada?.procedimiento?.length
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-                    : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'">
-                  <BookOpen class="w-3.5 h-3.5" />
-                  <span>Procedimiento</span>
-                  <span v-if="denominacionSeleccionada?.procedimiento?.length"
-                    class="bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none">
-                    {{ denominacionSeleccionada.procedimiento.length }}
-                  </span>
-                </button>
-              </div>
-
-              <!-- Limpiar selección (solo si puedeEditar) -->
-              <button v-if="denominacionSeleccionada && puedeEditar" type="button"
-                @click="limpiarPieza"
-                class="mt-2 text-[10px] font-bold text-gray-400 hover:text-red-500 transition">
-                ✕ Limpiar selección
-              </button>
-            </div>
-
-            <!-- Pieza guardada (solo lectura si no puedeEditar) -->
-            <div v-if="!puedeEditar && diagnostico.piezaNombre"
-              class="px-4 py-3 border-b border-gray-50">
-              <label class="block text-[10px] font-extrabold text-gray-400 tracking-widest mb-1">PIEZA REGISTRADA</label>
-              <div class="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <BookOpen class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                <div>
-                  <p class="text-sm font-black text-blue-800 leading-tight">{{ diagnostico.piezaNombre }}</p>
-                  <p v-if="diagnostico.numeroCatalogo && diagnostico.numeroCatalogo !== '-'"
-                    class="text-[11px] text-blue-400">Cat: {{ diagnostico.numeroCatalogo }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="catalogoCargado && puedeEditar" class="px-4 py-3 text-xs text-gray-400 italic border-t border-gray-100">
-            Sin catálogo para {{ intervencion.modeloMaquina || 'este modelo' }}.
-          </div>
-
-          <!-- ── ⑤ DIAGNÓSTICO DEL MECÁNICO ────────────────────── -->
-          <div class="px-4 pt-3 pb-3 border-b border-gray-100">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
-              <label class="text-[10px] font-extrabold text-gray-400 tracking-widest">DIAGNÓSTICO</label>
-            </div>
-
-            <!-- Causa raíz -->
-            <div class="mb-3">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">CAUSA RAÍZ</label>
-              <textarea v-model="diagnostico.causaRaiz" :disabled="!puedeEditar" rows="2"
-                placeholder="¿Qué causó el problema?"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-            </div>
-
-            <!-- Acción tomada -->
-            <div class="mb-3">
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">ACCIÓN TOMADA</label>
-              <textarea v-model="diagnostico.accionTomada" :disabled="!puedeEditar" rows="2"
-                placeholder="¿Qué se hizo para resolverlo?"
-                class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-orange-400 focus:border-orange-400 block p-2.5 resize-none outline-none disabled:bg-gray-50 disabled:text-gray-500" />
-            </div>
-
-            <!-- Tiempo real -->
-            <div>
-              <label class="block text-[9px] font-extrabold text-gray-400 tracking-widest mb-2">TIEMPO (min)</label>
-              <div class="flex gap-2">
-                <!-- Auto (solo lectura) -->
-                <div class="flex-1">
-                  <p class="text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">AUTO</p>
-                  <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                    <Clock class="w-3.5 h-3.5 text-emerald-500 shrink-0"
-                      :class="puedeEditar ? 'animate-pulse' : ''" />
-                    <span class="text-sm font-black text-emerald-700">
-                      {{ minutosTranscurridos !== null ? minutosTranscurridos + ' min' : '—' }}
-                    </span>
-                    <span v-if="puedeEditar" class="text-[9px] text-emerald-400 ml-auto">en curso</span>
-                  </div>
-                </div>
-                <!-- Manual (editable) -->
-                <div class="flex-1">
-                  <p class="text-[9px] font-extrabold text-gray-400 tracking-widest mb-1">AJUSTE MANUAL</p>
-                  <input
-                    v-model="diagnostico.tiempoReal"
-                    :disabled="!puedeEditar"
-                    type="number" min="1"
-                    placeholder="Ej: 25"
-                    class="w-full bg-white border border-gray-200 text-gray-900 text-sm font-bold rounded-xl focus:ring-orange-400 focus:border-orange-400 block px-3 py-2 outline-none disabled:bg-gray-50 disabled:text-gray-400" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </main>
-
-      <!-- ── Barra inferior fija ──────────────────────────────────── -->
-      <div v-if="puedeEditar || puedeTomarIntervencion" class="fixed bottom-0 left-0 right-0 z-40 px-2 pb-2">
-        <div class="max-w-sm mx-auto bg-white border border-gray-200 rounded-[1.4rem] shadow-[0_-10px_35px_rgba(15,23,42,0.14)] p-3">
-          <div class="flex items-center gap-2">
-            <button @click="router.back()"
-              class="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition active:scale-90">
-              <ArrowLeft class="w-5 h-5 text-gray-500" />
-            </button>
-
-            <!-- Tomar intervención (PENDIENTE → EN_PROCESO) -->
-            <button v-if="puedeTomarIntervencion" @click="tomarIntervencion" :disabled="tomando"
-              class="flex-1 flex items-center justify-center gap-2 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm shadow-orange-500/20">
-              <span v-if="tomando" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-              <Wrench v-else class="w-4 h-4" />
-              Tomar intervención
-            </button>
-
-            <!-- Guardar + Completar (EN_PROCESO, asignado a mí) -->
-            <template v-else-if="puedeEditar">
-              <button @click="guardarDiagnostico" :disabled="guardando"
-                class="flex-1 flex items-center justify-center gap-2 h-12 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm">
-                <Save class="w-4 h-4" />
-                Guardar
-              </button>
-              <button @click="completar" :disabled="guardando"
-                class="flex-1 flex items-center justify-center gap-2 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black transition active:scale-[0.98] disabled:opacity-50 shadow-sm shadow-emerald-500/20">
-                <CheckCircle2 class="w-4 h-4" />
-                Completar
-              </button>
-            </template>
-          </div>
-        </div>
-      </div>
-
-      <!-- Completado -->
-      <div v-if="intervencion.estado === 'COMPLETADO'"
-        class="max-w-sm mx-auto mx-3 mt-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center">
-        <CheckCircle2 class="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-        <p class="text-sm font-black text-emerald-700">Intervención completada</p>
-        <p v-if="intervencion.asignadoNombre" class="text-xs text-emerald-500 mt-0.5">por {{ intervencion.asignadoNombre }}</p>
-      </div>
-
-    </template>
-
-    <!-- No encontrado -->
-    <div v-else class="flex flex-col items-center justify-center py-24 text-center px-8">
-      <p class="font-black text-gray-400">Intervención no encontrada</p>
-      <button @click="router.back()" class="mt-3 text-sm text-orange-600 font-bold">← Volver</button>
-    </div>
-
-  </div>
-
-  <!-- Modal Procedimiento -->
   <Teleport to="body">
-    <div v-if="showProcedimientoViewer"
-      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm"
-      @click.self="showProcedimientoViewer = false">
-      <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
-        <div class="p-4 border-b border-gray-100 flex justify-between items-start shrink-0">
-          <div class="flex-1 pr-2">
-            <p class="text-[10px] font-extrabold text-indigo-500 tracking-widest mb-0.5">PROCEDIMIENTO</p>
-            <h3 class="text-sm font-black text-gray-800 leading-tight">{{ denominacionSeleccionada?.denominacion }}</h3>
-            <p class="text-xs text-gray-400 font-medium mt-0.5">{{ denominacionSeleccionada?.seccion }} · Grupo {{ denominacionSeleccionada?.grupo }}</p>
-          </div>
-          <button @click="showProcedimientoViewer = false" class="p-1.5 hover:bg-gray-100 rounded-lg transition shrink-0">
-            <X class="w-5 h-5 text-gray-400" />
-          </button>
+    <div class="detail-overlay" @click.self="close">
+      <section ref="dialog" class="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="intervention-detail-title" tabindex="-1" @keydown="dialogKeydown">
+        <header class="detail-header"><div><h2 id="intervention-detail-title">Detalle de intervención<span v-if="intervencion"> · Máquina {{ eventView(intervencion).numeroMaquinaDisplay }}</span></h2><p v-if="intervencion">{{ tipoConfig[intervencion.tipoIntervencion]?.label || intervencion.tipoIntervencion }} · {{ intervencion.sector }} · Prioridad {{ prioridadLabel }} · {{ intervencion.estado === 'PENDIENTE' ? 'Pendiente' : intervencion.estado === 'EN_PROCESO' ? 'En proceso' : 'Completada' }}<span v-if="intervencion.critico" class="detail-critical"> · Crítica</span></p></div><button class="detail-button" aria-label="Cerrar detalle" :disabled="guardando || tomando" @click="close" v-tippy="'Cerrar detalle'"><X :size="18" /></button></header>
+        <div v-if="loading" class="detail-message" role="status">Cargando intervención…</div>
+        <div v-else-if="errorCarga" class="detail-message" role="alert">No se pudo cargar la intervención. <button class="detail-button" @click="subscribe">Reintentar</button></div>
+        <div v-else-if="!intervencion" class="detail-message">Intervención no encontrada.</div>
+        <div v-else class="detail-body">
+          <section class="detail-request"><h3>Solicitud</h3><dl class="detail-metadata"><dt>Máquina</dt><dd>{{ nombreMaquinaDisplay }} · {{ intervencion.numeroMaquina }}</dd><dt>Modelo</dt><dd>{{ intervencion.modeloMaquina || '—' }}</dd><dt v-if="grupoTelarResuelto">Grupo / GM</dt><dd v-if="grupoTelarResuelto">{{ grupoTelarResuelto }} / {{ gmTelarResuelto || '—' }}</dd><dt>Estado de máquina</dt><dd :class="estadoMaqConfig[intervencion.estadoMaquina]?.color">{{ machineStateLabel(intervencion.estadoMaquina) }}</dd><dt>Solicitado por</dt><dd>{{ intervencion.creadoPorNombre || 'Sin identificar' }}</dd><dt>Ingreso</dt><dd>{{ intervencion.createdAt?.seconds ? new Date(intervencion.createdAt.seconds * 1000).toLocaleString('es-AR') : '—' }}</dd><dt>Asignado a</dt><dd>{{ intervencion.asignadoNombre || 'Sin asignar' }}</dd><dt v-if="intervencion.derivaA">Se notifica a</dt><dd v-if="intervencion.derivaA">{{ DERIVA_COLOR[intervencion.derivaA]?.label || intervencion.derivaA }}</dd></dl>
+            <h4>Síntoma</h4><p class="detail-symptom">{{ intervencion.sintomaNombre || intervencion.motivoDescripcion || 'Sin síntoma registrado' }}</p><h4>Observaciones</h4><p class="detail-observations">{{ intervencion.observaciones || 'Sin observaciones' }}</p>
+            <button v-if="intervencion.fotoUrl" class="detail-photo" @click="fotoAmpliada = true" v-tippy="'Ampliar foto adjunta'" aria-label="Ampliar foto adjunta"><OperationalImage :src="intervencion.fotoUrl" /></button>
+          </section>
+          <section class="detail-work"><h3>Diagnóstico y resolución</h3><p class="detail-readonly" v-if="!puedeEditar">{{ intervencion.estado === 'COMPLETADO' ? 'Intervención completada. Datos de consulta.' : puedeTomarIntervencion ? 'Tomá la intervención para registrar el trabajo realizado.' : 'Consulta de la intervención. La edición corresponde al usuario asignado con permiso de ejecución.' }}</p>
+            <p v-if="catalogoError" class="detail-readonly">No se pudo cargar el catálogo. <button class="detail-button" @click="cargarCatalogo()">Reintentar catálogo</button></p><fieldset :disabled="!puedeEditar || guardando || tomando">
+              <label for="iv-cause">Causa raíz<textarea id="iv-cause" v-model="diagnostico.causaRaiz" rows="3" placeholder="¿Qué causó el problema?" /></label>
+              <label for="iv-action">Acción tomada<textarea id="iv-action" v-model="diagnostico.accionTomada" rows="3" placeholder="¿Qué se hizo para resolverlo?" /></label>
+              <div class="detail-time"><div><span>Tiempo automático</span><strong>{{ minutosTranscurridos !== null ? minutosTranscurridos + ' min' : '—' }}</strong></div><label for="iv-time">Ajuste manual (min)<input id="iv-time" v-model="diagnostico.tiempoReal" type="number" min="1" placeholder="Opcional" /></label></div>
+              <div v-if="catalogo.length" class="detail-catalog"><h4>Pieza del catálogo</h4><div class="detail-catalog-selectors"><label for="iv-section">Sección<select id="iv-section" v-model="seccionSeleccionada"><option value="">Seleccionar…</option><option v-for="section in seccionesDisponibles" :key="section" :value="section">{{ section }}</option></select></label><label for="iv-group">Grupo<select id="iv-group" v-model="grupoSeleccionado" :disabled="!seccionSeleccionada"><option value="">Seleccionar…</option><option v-for="group in gruposDisponibles" :key="group" :value="group">{{ group }}</option></select></label></div><label for="iv-part">Denominación<select id="iv-part" v-model="denominacionSeleccionada" :disabled="!grupoSeleccionado"><option :value="null">Seleccionar…</option><option v-for="part in denominacionesDisponibles" :key="part.id" :value="part">{{ part.denominacion }}{{ part.subGrupo && part.subGrupo !== '-' ? ' [' + part.subGrupo + ']' : '' }}</option></select></label><button v-if="diagnostico.piezaNombre" type="button" class="detail-button" @click="limpiarPieza">Quitar pieza</button></div>
+            </fieldset>
+            <div v-if="diagnostico.piezaNombre" class="detail-piece"><strong>{{ diagnostico.piezaNombre }}</strong><p>Catálogo: {{ diagnostico.numeroCatalogo || '—' }} · Artículo: {{ diagnostico.numeroArticulo || '—' }}</p></div>
+            <button v-if="denominacionSeleccionada" class="detail-button" :disabled="!denominacionSeleccionada.procedimiento?.length" @click="showProcedimientoViewer = true" v-tippy="denominacionSeleccionada.procedimiento?.length ? 'Consultar procedimiento de la pieza' : 'La pieza no tiene procedimiento'">Procedimiento</button>
+          </section>
         </div>
-        <div class="overflow-y-auto flex-1 p-4 space-y-4">
-          <div v-for="(paso, i) in denominacionSeleccionada?.procedimiento" :key="i" class="space-y-2">
-            <div class="flex gap-3">
-              <div class="flex-none w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">{{ i + 1 }}</div>
-              <p class="text-sm text-gray-800 font-medium leading-relaxed pt-0.5">{{ paso.texto }}</p>
-            </div>
-            <div v-if="paso.imagenUrl" class="ml-9 rounded-lg overflow-hidden border border-gray-200">
-              <img :src="paso.imagenUrl" class="w-full max-h-64 object-contain bg-gray-900" />
-            </div>
-          </div>
-        </div>
-        <div class="p-4 border-t border-gray-100 shrink-0">
-          <button @click="showProcedimientoViewer = false" type="button"
-            class="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition">
-            Cerrar
-          </button>
-        </div>
-      </div>
+        <footer class="detail-actions"><span role="status">{{ guardando ? 'Guardando…' : tomando ? 'Tomando intervención…' : dirty ? 'Cambios sin guardar' : '' }}</span><div><button class="detail-button" :disabled="guardando || tomando" @click="close">Cerrar</button><button v-if="puedeTomarIntervencion" class="detail-button primary" :disabled="guardando || tomando" @click="tomarIntervencion">Tomar intervención</button><template v-if="puedeEditar"><button class="detail-button primary" :disabled="guardando || tomando" @click="guardarDiagnostico"><Save :size="16" />Guardar diagnóstico</button><button class="detail-button complete" :disabled="guardando || tomando" @click="completar"><CheckCircle2 :size="16" />Completar</button></template></div></footer>
+        <div v-if="showProcedimientoViewer || fotoAmpliada" class="detail-nested-overlay" @click.self="showProcedimientoViewer = false; fotoAmpliada = false"><section class="detail-nested" role="dialog" aria-modal="true" aria-label="Información adjunta"><header><h3>{{ fotoAmpliada ? 'Foto adjunta' : 'Procedimiento · ' + denominacionSeleccionada?.denominacion }}</h3><button class="detail-button" aria-label="Cerrar información adjunta" @click="showProcedimientoViewer = false; fotoAmpliada = false"><X :size="18" /></button></header><div class="detail-nested-body"><OperationalImage v-if="fotoAmpliada" :src="intervencion.fotoUrl" /><ol v-else><li v-for="(step, index) in denominacionSeleccionada?.procedimiento" :key="index"><strong>{{ index + 1 }}.</strong> {{ step.texto }}<img v-if="step.imagenUrl" :src="step.imagenUrl" alt="Imagen del paso" /></li></ol></div></section></div>
+      </section>
     </div>
   </Teleport>
 </template>
+<style scoped>
+.detail-overlay { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; padding:16px; background:rgb(15 23 42 / .45); }
+.detail-dialog { position:relative; width:min(1100px,100%); max-height:calc(100dvh - 32px); display:flex; flex-direction:column; background:white; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 20px 60px #0f172a40; overflow:hidden; outline:none; }
+.detail-header { display:flex; justify-content:space-between; align-items:start; gap:12px; padding:16px 20px; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
+.detail-header h2 { font-size:18px; color:#0f172a; font-weight:650; } .detail-header p { margin-top:4px; font-size:12px; color:#64748b; } .detail-critical { color:#b91c1c; font-weight:600; }
+.detail-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); overflow:auto; min-height:0; }
+.detail-request,.detail-work { padding:20px; min-width:0; overflow-wrap:anywhere; } .detail-request { background:#f8fafc; border-right:1px solid #e2e8f0; }
+h3 { font-size:15px; font-weight:650; color:#334155; margin-bottom:12px; } h4 { font-size:12px; font-weight:600; color:#475569; margin:16px 0 6px; }
+.detail-metadata { display:grid; grid-template-columns:130px minmax(0,1fr); gap:7px 10px; font-size:12px; } dt { color:#64748b; } dd { color:#334155; }
+.detail-symptom { color:#0f172a; font-size:14px; font-weight:600; } .detail-observations { white-space:pre-wrap; font-size:13px; color:#475569; line-height:1.6; }
+.detail-photo { display:block; margin-top:16px; width:100%; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; background:#f1f5f9; cursor:zoom-in; } .detail-photo :deep(img) { width:100%; max-height:260px; object-fit:contain; }
+.detail-readonly { font-size:12px; color:#64748b; line-height:1.5; margin-bottom:12px; }
+fieldset { border:0; padding:0; min-width:0; } label { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; color:#475569; font-size:12px; font-weight:600; }
+input,select,textarea { width:100%; min-width:0; border:1px solid #cbd5e1; border-radius:7px; padding:9px; background:white; color:#334155; font-size:13px; font-weight:400; } textarea { resize:vertical; min-height:85px; } fieldset:disabled input,fieldset:disabled select,fieldset:disabled textarea { background:#f8fafc; color:#64748b; }
+.detail-time,.detail-catalog-selectors { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; } .detail-time > div { font-size:12px; color:#64748b; } .detail-time strong { display:block; padding:9px; margin-top:5px; background:#ecfdf5; border-radius:7px; color:#047857; }
+.detail-piece { padding:10px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; font-size:12px; color:#4338ca; margin:10px 0; } .detail-piece p { margin-top:4px; }
+.detail-button { min-height:36px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 11px; border:1px solid #cbd5e1; border-radius:7px; background:white; color:#334155; font-size:12px; font-weight:600; cursor:pointer; } .detail-button:hover { background:#f1f5f9; } .detail-button.primary { background:#4f46e5; border-color:#4f46e5; color:white; } .detail-button.complete { background:#059669; border-color:#059669; color:white; } .detail-button:disabled { opacity:.45; cursor:default; } button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:2px solid #818cf8; outline-offset:2px; }
+.detail-actions { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; padding:12px 20px; border-top:1px solid #e2e8f0; background:white; flex-shrink:0; } .detail-actions > span { font-size:12px; color:#64748b; } .detail-actions > div { display:flex; flex-wrap:wrap; gap:8px; } .detail-message { padding:40px 20px; color:#64748b; font-size:14px; }
+.detail-nested-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:12px; background:#0f172a60; } .detail-nested { width:100%; max-height:100%; background:white; border-radius:9px; display:flex; flex-direction:column; overflow:hidden; } .detail-nested header { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #e2e8f0; } .detail-nested h3 { margin:0; } .detail-nested-body { overflow:auto; padding:16px; } .detail-nested-body :deep(img) { width:100%; max-height:65dvh; object-fit:contain; } .detail-nested li { margin-bottom:16px; font-size:13px; color:#334155; line-height:1.6; }
+@media(max-width:800px) { .detail-body { grid-template-columns:minmax(0,1fr); } .detail-request { border-right:0; border-bottom:1px solid #e2e8f0; } .detail-request,.detail-work { padding:14px; } }
+@media(max-width:480px) { .detail-overlay { padding:8px; } .detail-dialog { max-height:calc(100dvh - 16px); } .detail-header,.detail-actions { padding:12px; } .detail-header h2 { font-size:16px; } .detail-metadata { grid-template-columns:110px minmax(0,1fr); } .detail-actions > div { width:100%; } .detail-actions button { flex:1; } }
+</style>

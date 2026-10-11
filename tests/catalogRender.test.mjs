@@ -72,6 +72,7 @@ test('intervention management filters grouped requests and only takes permitted 
     '../constants/organization': { DEFAULT_SECTOR:'TEJEDURIA', normalizeSectorValue:v => v,
       sanitizeSectorList:v => v, canDespacharIntervencion: () => true },
     './OperationalImage.vue': { render: () => Vue.h('img') },
+    './IntervencionDetalle.vue': { props:['id'], render: () => Vue.h('div') },
     sweetalert2: { fire: async () => ({ isConfirmed:true }) },
     '../services/intervencionService': { intervencionService: {
       suscribirActivas: (sectors, callback, error) => { subscriptions.push({ callback, error }); return () => {}; },
@@ -95,6 +96,10 @@ test('intervention management filters grouped requests and only takes permitted 
   await Vue.nextTick();
   assert.equal(state.grupos[0].items.length, 2);
   assert.equal(state.numeroCorto(requests[0]), '1');
+  state.abrirDetalle(requests[0]); await Vue.nextTick();
+  assert.equal(state.detalleId, 'quality');
+  assert.equal(subscriptions.length, 1);
+  state.detalleId = null;
   state.busqueda = 'perdida';
   assert.deepEqual(state.intervencionesFiltered.map(i => i.id), ['quality']);
   state.limpiarFiltros();
@@ -138,6 +143,68 @@ test('intervention management filters grouped requests and only takes permitted 
   assert.equal(state.especialidadActiva, 'MECANICO');
   app.unmount();
   assert.deepEqual(errors.map(error => error.message), []);
+});
+
+test('intervention detail modal preserves dirty diagnosis on snapshots and failures and guards closing', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/IntervencionDetalle.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id:'intervention-detail-test' });
+  const template = compileTemplate({ id:'intervention-detail-test', source:descriptor.template.content,
+    compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors, []);
+  let snapshot, finish, fail, closed = 0, confirm = false, writes = 0;
+  const transitions = [];
+  const dependencies = {
+    vue:Vue, 'lucide-vue-next':icons,
+    'vue-router': { useRoute: () => ({ params:{ id:'direct-id' } }), useRouter: () => ({ push() {} }), onBeforeRouteLeave() {} },
+    'firebase/auth': { getAuth: () => ({ currentUser:{ uid:'tech', displayName:'Técnico' } }) },
+    'firebase/firestore': { getDoc:async () => ({ exists:() => false }), doc() {} }, '../firebase/config':{ db:{} },
+    '../services/authService':{ userRole:Vue.ref('admin'), userProfile:Vue.ref({}) },
+    '../services/profileService':{ getEffectivePermisosForUser: () => ({}) },
+    '../utils/interventionAccess':{ canExecuteIntervention },
+    '../utils/faultEvents':{ eventView, machineStateLabel:value => value }, '../utils/tooltipDirective':{ vTippy },
+    '../services/catalogoService':{ catalogoService:{ obtenerPorModelo:async () => [] } },
+    './OperationalImage.vue':{ render:() => Vue.h('img') }, sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },
+    '../services/intervencionService':{ intervencionService:{
+      suscribirPorId:(id, callback) => { assert.equal(id, 'selected-id'); snapshot = callback; return () => {}; },
+      guardarDiagnostico:() => { writes++; return new Promise((resolve, reject) => { finish = resolve; fail = reject; }); },
+      actualizarEstado:async (id, state) => { transitions.push([id, state]); },
+    } },
+  };
+  const component = evaluate(script.content, dependencies);
+  component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host();
+  const app = renderer.createApp(component, { id:'selected-id', onClose:() => closed++ }), errors = [];
+  app.config.errorHandler = error => errors.push(error);
+  app.mount(root);
+  const state = root._vnode.component.setupState;
+  const data = { id:'selected-id', numeroMaquina:35001, estado:'EN_PROCESO', asignadoA:'tech', tipoIntervencion:'MECANICO', causaRaiz:'Original', grupoTelar:'1' };
+  snapshot(data); await Vue.nextTick();
+  assert.equal(state.puedeEditar, true);
+  state.diagnostico.causaRaiz = '';
+  snapshot({ ...data, observaciones:'Actualizada' }); await Vue.nextTick();
+  assert.equal(state.diagnostico.causaRaiz, '', 'empty local edits survive snapshots');
+  await state.close(); assert.equal(closed, 0);
+  state.diagnostico.causaRaiz = 'Corregida';
+  const saving = state.guardarDiagnostico();
+  await state.guardarDiagnostico(); await state.close();
+  assert.equal(writes, 1); assert.equal(closed, 0);
+  fail(new Error('Disconnected')); await saving;
+  assert.equal(state.diagnostico.causaRaiz, 'Corregida'); assert.equal(state.dirty, true);
+  const saved = state.guardarDiagnostico(); finish(); await saved;
+  assert.equal(state.dirty, false);
+  await state.close(); assert.equal(closed, 1);
+  confirm = true;
+  const completing = state.completar();
+  await new Promise(resolve => setImmediate(resolve));
+  await state.close(); assert.equal(closed, 1);
+  finish(); await completing;
+  assert.deepEqual(transitions, [['selected-id', 'COMPLETADO']]);
+  assert.equal(state.dirty, false);
+  snapshot({ ...data, estado:'COMPLETADO' }); await Vue.nextTick();
+  assert.equal(state.puedeEditar, false);
+  await state.guardarDiagnostico(); assert.equal(writes, 3);
+  snapshot(null); await Vue.nextTick(); assert.equal(state.loading, false); assert.equal(state.intervencion, null);
+  app.unmount(); assert.deepEqual(errors.map(error => error.message), []);
 });
 
 test('real catalog template renders loading, data and model changes for admin without Vue errors', async () => {

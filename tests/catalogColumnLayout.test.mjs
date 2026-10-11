@@ -12,11 +12,19 @@ test('catalog sizing measures glyph width rather than character count', () => {
 
 test('long descriptions stay bounded while full identifiers determine the scrollable width', () => {
   const layout = catalogColumnLayout([{ seccion: 'S'.repeat(300), denominacion: 'D'.repeat(500), numeroArticulo: 'A'.repeat(50), grupo: null }], { measureText: text => text.length * 10 });
-  assert.equal(layout.columns[0].pixels, 260);
-  assert.equal(layout.columns[3].pixels, 380);
+  assert.equal(layout.columns[0].pixels, 3028);
+  assert.equal(layout.columns[3].pixels, 320);
   assert.equal(layout.columns[5].pixels, 528);
   assert.equal(layout.columns[1].maxLength, 0);
   assert.equal(layout.minWidth, layout.columns.reduce((sum, column) => sum + column.pixels, 104));
   const reader = catalogColumnLayout([], { actions: false });
   assert.equal(reader.minWidth, reader.columns.reduce((sum, column) => sum + column.pixels, 0));
+});
+
+test('section and subgroup fit full content and percentage widths cover the table', () => {
+  const layout = catalogColumnLayout([{ seccion: 'S'.repeat(40), subGrupo: 'G'.repeat(50) }], { measureText: text => text.length * 10 });
+  assert.equal(layout.columns[0].pixels, 428);
+  assert.equal(layout.columns[2].pixels, 528);
+  const total = layout.columns.reduce((sum, col) => sum + parseFloat(col.width), parseFloat(layout.actionWidth));
+  assert.ok(Math.abs(total - 100) < 0.00001);
 });

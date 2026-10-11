@@ -972,7 +972,7 @@ const exportCatalogToExcel = async () => {
               </div>
               <div class="catalog-data"><div class="catalog-table-scroll" tabindex="0" aria-label="Datos del catálogo; desplazamiento dentro del modal">
                 <table class="catalog-table" :style="{ minWidth: catalogColumns.minWidth + 'px' }"><caption class="sr-only">Piezas y artículos del catálogo {{ catalogoModelo }}</caption>
-                  <colgroup><col v-for="column in catalogColumns.columns" :key="column.key" :style="{ width: column.width }" /><col v-if="userRole === 'admin' || userRole === 'jefe_sector'" style="width:104px" /></colgroup>
+                  <colgroup><col v-for="column in catalogColumns.columns" :key="column.key" :style="{ width: column.width }" /><col v-if="userRole === 'admin' || userRole === 'jefe_sector'"  :style="{ width: catalogColumns.actionWidth }" /></colgroup>
                   <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 tracking-widest shadow-sm">
                     <tr>
                       <th class="px-3 py-3 bg-gray-50 w-20">Sección</th>
@@ -1171,9 +1171,9 @@ const exportCatalogToExcel = async () => {
 .catalog-table td { padding:8px 12px; height:44px; font-size:13px; font-weight:400; color:#475569; border-bottom:1px solid #edf1f6; overflow-wrap:anywhere; }
 .catalog-table tbody tr:nth-child(even) { background:#fbfcfe; }
 .catalog-table tbody tr:hover { background:#f0f4ff; }
-.catalog-table td:nth-child(1),.catalog-table td:nth-child(2),.catalog-table td:nth-child(3),.catalog-table td:nth-child(4) { white-space:normal; overflow-wrap:break-word; word-break:normal; }
+.catalog-table td:nth-child(4) { white-space:normal; overflow-wrap:break-word; word-break:normal; }
 .catalog-table td:nth-child(4) { color:#334155; }
-.catalog-table td:nth-child(5),.catalog-table td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
+.catalog-table td:nth-child(1),.catalog-table td:nth-child(2),.catalog-table td:nth-child(3),.catalog-table td:nth-child(5),.catalog-table td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
 .catalog-table input { width:100%; min-width:0; }
 .catalog-table td:nth-child(4) input { min-width:0; }
 .catalog-table input { font-size:13px; padding:6px 8px; }

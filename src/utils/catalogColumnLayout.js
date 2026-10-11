@@ -1,8 +1,8 @@
 /** Size the loaded model, not filtered results, so searching never shifts columns. */
 export function catalogColumnLayout(items, { measureText = text => Array.from(text).length * 7.5, actions = true } = {}) {
   const fields = [
-    ['seccion', 'Sección', 140, 260], ['grupo', 'Grupo', 72, 200],
-    ['subGrupo', 'Sub-G', 84, 260], ['denominacion', 'Denominación', 220, 380],
+    ['seccion', 'Sección', 140, Infinity], ['grupo', 'Grupo', 72, Infinity],
+    ['subGrupo', 'Sub-G', 84, Infinity], ['denominacion', 'Denominación', 180, 320],
     ['numeroCatalogo', 'Catálogo', 100, Infinity], ['numeroArticulo', 'Artículo', 100, Infinity],
   ];
   const cache = new Map();
@@ -25,8 +25,8 @@ export function catalogColumnLayout(items, { measureText = text => Array.from(te
   const contentWidth = columns.reduce((total, column) => total + column.pixels, 0);
   const actionWidth = actions ? 104 : 0;
   for (const column of columns) {
-    const ratio = column.pixels / contentWidth;
-    column.width = `calc(${ratio * 100}% - ${ratio * actionWidth}px)`;
+    const ratio = column.pixels / (contentWidth + actionWidth);
+    column.width = `${ratio * 100}%`;
   }
-  return { columns, minWidth: contentWidth + actionWidth };
+  return { columns, actionWidth: `${actionWidth / (contentWidth + actionWidth) * 100}%`, minWidth: contentWidth + actionWidth };
 }

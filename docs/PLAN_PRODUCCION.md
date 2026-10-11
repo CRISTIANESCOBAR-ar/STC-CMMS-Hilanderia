@@ -266,3 +266,10 @@ pruebas del servicio en entorno piloto.
 - Distribución calculada con el ancho del texto de todos los registros cargados del modelo; cache de mediciones y actualización al completar la carga de fuentes.
 - Los filtros no alteran los anchos; códigos completos, descripciones limitadas para permitir varias líneas, espacio sobrante proporcional y acciones de 104 px.
 - 42 pruebas correctas y build correcto. Pendiente validación visual por el usuario; sin escrituras en Firestore.
+
+### V1 — Corrección de quiebres persistentes
+
+- Eliminados los límites de ancho de Sección, Grupo y Sub-G; se dimensionan con todo el texto y permanecen en una línea.
+- Solo Denominación permite envolver texto, con ancho base máximo de 320 px.
+- Porcentajes simples en colgroup que suman 100%, reemplazando calc() y sus anchos mixtos; acciones participa del reparto proporcional.
+- 43 pruebas correctas; pendiente revisión visual en navegador tras publicar.

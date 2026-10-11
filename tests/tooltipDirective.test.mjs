@@ -8,13 +8,13 @@ test('tooltips initialize on demand, update live content and release listeners',
     addEventListener(name, handler) { listeners.set(name, handler); },
     removeEventListener(name, handler) { assert.equal(listeners.get(name), handler); listeners.delete(name); },
   };
-  let created = 0, shown = 0, hidden = 0, destroyed = 0, content;
+  let created = 0, shown = 0, hidden = 0, destroyed = 0, cancelled = 0, content;
   const directive = createTooltipDirective((target, options) => {
     assert.equal(target, el);
     assert.equal(options.allowHTML, false);
     content = options.content;
     created++;
-    return { show() { shown++; }, hide() { hidden++; }, destroy() { destroyed++; }, setContent(value) { content = value; } };
+    return { show() { shown++; }, hide() { hidden++; }, clearDelayTimeouts() { cancelled++; }, destroy() { destroyed++; }, setContent(value) { content = value; } };
   });
   directive.mounted(el, { value: 'Pendiente' });
   assert.equal(created, 0);
@@ -28,6 +28,12 @@ test('tooltips initialize on demand, update live content and release listeners',
   assert.equal(content, 'Sin pendientes');
   listeners.get('input')();
   assert.equal(hidden, 1);
+  listeners.get('pointerdown')();
+  listeners.get('click')();
+  listeners.get('blur')();
+  listeners.get('mouseleave')();
+  assert.equal(hidden, 5);
+  assert.equal(cancelled, 5, 'click and focus changes cancel queued tooltip displays');
   directive.beforeUnmount(el);
   assert.equal(destroyed, 1);
   assert.equal(listeners.size, 0);

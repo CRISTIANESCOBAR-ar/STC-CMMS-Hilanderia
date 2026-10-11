@@ -16,11 +16,19 @@ export function createTooltipDirective(createTooltip = tippy) {
         });
         state.instance.show();
       };
-      state.hide = () => state.instance?.hide();
+      state.hide = () => {
+        state.instance?.clearDelayTimeouts?.();
+        state.instance?.hide();
+      };
       el.addEventListener('mouseenter', state.show);
       el.addEventListener('focus', state.show);
       el.addEventListener('keydown', state.hide);
       el.addEventListener('input', state.hide);
+      el.addEventListener('mouseleave', state.hide);
+      el.addEventListener('blur', state.hide);
+      el.addEventListener('pointerdown', state.hide);
+      // Hide before a Vue click handler opens a modal and makes this element inert.
+      el.addEventListener('click', state.hide, true);
       states.set(el, state);
     },
     updated(el, binding) {
@@ -37,6 +45,10 @@ export function createTooltipDirective(createTooltip = tippy) {
       el.removeEventListener('focus', state.show);
       el.removeEventListener('keydown', state.hide);
       el.removeEventListener('input', state.hide);
+      el.removeEventListener('mouseleave', state.hide);
+      el.removeEventListener('blur', state.hide);
+      el.removeEventListener('pointerdown', state.hide);
+      el.removeEventListener('click', state.hide, true);
       state.instance?.destroy();
       states.delete(el);
     },

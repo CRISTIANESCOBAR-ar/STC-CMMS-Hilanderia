@@ -283,6 +283,8 @@ pruebas del servicio en entorno piloto.
 
 ### V2 — Shift Report: primera planilla desktop
 
+- Criterio para próximas vistas rediseñadas: usar Tippy para ayudas contextuales, sin atributos HTML title. Directiva reutilizable en src/utils/tooltipDirective.js: contenido de texto, estilo light-border, instancia bajo demanda y limpieza al desmontar; nombres accesibles se mantienen separados del tooltip.
+
 - Desde 768 px: tabla con una fila por telar, grupos A/B/C y Pts, Rot T, Rot U, Rot O, RPM. Cabecera y Telar fijos, ancho completo y scroll interior. En pantallas menores se conserva carga por tarjeta.
 - Pts en miles: 261 representa 261.000 picks. Entrada manual de tres dígitos, sin multiplicar el valor en el TXT existente.
 - Avance automático: Pts y RPM al tercer dígito; roturas al segundo (límites existentes). Continúa al campo siguiente incluso si ya tiene valor; importados se omiten al avanzar automáticamente. Último campo lleva a Guardar.

@@ -1,3 +1,4 @@
+import { vTippy } from '../src/utils/tooltipDirective.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -208,7 +209,7 @@ test('real shift sheet auto-advances, selects arrow targets and preserves unsave
   const dependencies = {
     // CSS transitions are excluded from this in-memory renderer.
     vue: { ...Vue, Transition: { inheritAttrs: false, setup(_, { slots }) { return () => slots.default?.(); } } }, 'lucide-vue-next': icons, 'vue-router': { onBeforeRouteLeave() {} },
-    '../utils/plantTime': plantTime, '../utils/shiftGrid': shiftGrid,
+    '../utils/plantTime': plantTime, '../utils/shiftGrid': shiftGrid, '../utils/tooltipDirective': { vTippy },
     'firebase/firestore': { collection() {}, query() {}, getDocs: async () => ({ docs: [{ id: 'loom1', data: () => ({ tipo: 'TELAR', maquina: 35001, activo: true }) }] }) },
     '../firebase/config': {}, '../services/shiftReportService': shiftReportService,
     '../services/shiftReportFirestore': {

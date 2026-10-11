@@ -1007,7 +1007,7 @@ const exportCatalogToExcel = async () => {
                         <td class="px-3 py-2 text-xs text-gray-500">{{ item.numeroArticulo }}</td>
                         <td v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="px-3 py-2"><div class="flex justify-center gap-1">
                           <button v-if="userRole === 'admin'" @click="startCatalogEdit(item)" class="cmms-button catalog-icon-button" aria-label="Editar fila" title="Editar fila"><Edit3 class="w-4 h-4" /></button>
-                          <button v-if="item.id" @click="openProcedimientoEditor(item)" class="cmms-button catalog-icon-button" aria-label="Gestionar procedimiento" :title="item.procedimiento?.length ? 'Editar procedimiento (' + item.procedimiento.length + ' pasos)' : 'Agregar procedimiento'"><BookOpen class="w-4 h-4" /></button>
+                          <button v-if="item.id" @click="openProcedimientoEditor(item)" class="cmms-button catalog-icon-button" :class="item.procedimiento?.length ? 'procedure-present' : 'procedure-empty'" :aria-label="item.procedimiento?.length ? 'Ver o editar procedimiento: ' + item.procedimiento.length + ' pasos' : 'Sin procedimiento; agregar pasos'" :title="item.procedimiento?.length ? 'Ver o editar procedimiento (' + item.procedimiento.length + ' pasos)' : 'Sin procedimiento — agregar pasos'"><BookOpen v-if="item.procedimiento?.length" class="w-4 h-4" /><Plus v-else class="w-4 h-4" /></button>
                         </div></td>
                       </template>
                     </tr>
@@ -1023,60 +1023,57 @@ const exportCatalogToExcel = async () => {
             </div>
           </div>
     <!-- Modal Editor de Procedimiento -->
-    <div v-if="showProcedimientoModal" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/70 backdrop-blur-sm overflow-y-auto">
-      <div class="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden my-4">
-        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-violet-50">
+    <div v-if="showProcedimientoModal" class="catalog-overlay procedure-overlay">
+      <div class="catalog-dialog procedure-dialog" role="dialog" aria-modal="true" aria-labelledby="procedure-title">
+        <div class="catalog-header">
           <div>
-            <h3 class="text-lg font-black text-gray-800 tracking-tight">Procedimiento</h3>
-            <p class="text-xs text-gray-500 font-bold mt-0.5 max-w-sm truncate">{{ procedimientoItem?.denominacion }}</p>
+            <h3 id="procedure-title" class="catalog-title">Procedimiento</h3>
+            <p class="catalog-subtitle procedure-description">{{ procedimientoItem?.denominacion }}</p>
           </div>
-          <button @click="closeProcedimientoEditor" class="p-2 hover:bg-white rounded-md transition-colors"><X class="w-5 h-5 text-gray-500" /></button>
+          <button @click="closeProcedimientoEditor" class="cmms-button catalog-icon-button" aria-label="Cerrar procedimiento"><X class="w-5 h-5 text-gray-500" /></button>
         </div>
 
-        <div class="p-4 space-y-3 max-h-[55vh] overflow-y-auto">
-          <div v-if="procedimientoPasos.length === 0" class="text-center py-10 text-gray-400">
+        <div class="procedure-content">
+          <div v-if="procedimientoPasos.length === 0" class="procedure-empty-state">
             <BookOpen class="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p class="font-bold text-sm">Sin pasos definidos</p>
+            <p class="text-sm font-semibold">Sin pasos definidos</p>
             <p class="text-xs mt-1">Haga clic en "Agregar paso" para comenzar.</p>
           </div>
 
-          <div v-for="(paso, i) in procedimientoPasos" :key="i" class="flex gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <div class="flex-none w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">{{ i + 1 }}</div>
+          <div v-for="(paso, i) in procedimientoPasos" :key="i" class="procedure-step">
+            <div class="procedure-step-number">{{ i + 1 }}</div>
             <div class="flex-1 space-y-2 min-w-0">
               <textarea
                 v-model="paso.texto"
                 rows="2"
                 placeholder="Descripción del paso..."
-                class="w-full bg-white border border-gray-200 text-sm text-gray-800 rounded-md p-2 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none resize-none"
+                class="cmms-control procedure-text" :aria-label="'Descripción del paso ' + (i + 1)"
               ></textarea>
               <div v-if="paso.imagenUrl" class="relative rounded-md overflow-hidden border border-gray-200">
-                <img :src="paso.imagenUrl" class="w-full max-h-48 object-contain bg-gray-900" />
-                <button @click="paso.imagenUrl = null" type="button" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 transition">
+                <img :src="paso.imagenUrl" class="procedure-image" :alt="'Imagen del paso ' + (i + 1)" />
+                <button @click="paso.imagenUrl = null" type="button" class="cmms-button catalog-icon-button procedure-remove-image" :aria-label="'Quitar imagen del paso ' + (i + 1)">
                   <X class="w-3 h-3" />
                 </button>
               </div>
               <div v-else>
-                <label class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-md text-xs font-bold text-gray-500 hover:bg-gray-100 transition" :class="{ 'opacity-50 cursor-not-allowed': uploadingPasoIndex !== null }">
+                <label class="cmms-button procedure-upload" :class="{ 'opacity-50 cursor-not-allowed': uploadingPasoIndex !== null }">
                   <Camera class="w-3.5 h-3.5" />
                   <span>{{ uploadingPasoIndex === i ? 'Subiendo...' : 'Agregar imagen' }}</span>
-                  <input type="file" accept="image/*" class="hidden" :disabled="uploadingPasoIndex !== null" @change="onPasoImagenChange(i, $event)" />
+                  <input type="file" accept="image/*" class="sr-only" :disabled="uploadingPasoIndex !== null" @change="onPasoImagenChange(i, $event)" />
                 </label>
               </div>
             </div>
-            <button @click="eliminarPaso(i)" type="button" class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition shrink-0 self-start">
+            <button @click="eliminarPaso(i)" type="button" class="cmms-button catalog-icon-button procedure-danger" :aria-label="'Eliminar paso ' + (i + 1)">
               <Trash2 class="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        <div class="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
-          <button @click="agregarPaso" type="button" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" stroke-linejoin="round"/><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Agregar paso
-          </button>
+        <div class="catalog-footer procedure-footer">
+          <button @click="agregarPaso" type="button" class="cmms-button"><Plus :size="16" />Agregar paso</button>
           <div class="flex gap-2">
-            <button @click="closeProcedimientoEditor" type="button" class="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-white transition">Cancelar</button>
-            <button @click="guardarProcedimiento" type="button" :disabled="isSavingProcedimiento" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-60 flex items-center gap-1.5">
+            <button @click="closeProcedimientoEditor" type="button" class="cmms-button">Cancelar</button>
+            <button @click="guardarProcedimiento" type="button" :disabled="isSavingProcedimiento" class="cmms-button cmms-button-primary">
               <Save class="w-4 h-4" />
               {{ isSavingProcedimiento ? 'Guardando...' : 'Guardar' }}
             </button>
@@ -1183,4 +1180,22 @@ const exportCatalogToExcel = async () => {
 .catalog-footer { padding:12px 20px; border-top:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; color:#64748b; font-size:12px; }
 @media (max-width:850px) { .catalog-overlay { padding:8px; } .catalog-header,.catalog-footer { padding:12px; } .catalog-filters { padding:10px 12px; gap:8px; } .catalog-data { padding:10px 12px; } .catalog-title { font-size:18px; } }
 @media (max-width:550px) { .catalog-filters { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .catalog-filter:first-child { grid-column:1/-1; } .catalog-filter-actions { grid-column:1/-1; justify-content:flex-end; } }
+.catalog-table .procedure-present { color:#4338ca; background:#eef2ff; border-color:#c7d2fe; }
+.catalog-table .procedure-empty { color:#94a3b8; background:#f8fafc; border-style:dashed; }
+.catalog-table .procedure-empty:hover { color:#475569; background:#f1f5f9; }
+.procedure-overlay { z-index:110; }
+.procedure-dialog { width:min(860px,100%); height:min(760px,100%); }
+.procedure-description { overflow-wrap:anywhere; }
+.procedure-content { flex:1; min-height:0; overflow:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; background:#f8fafc; }
+.procedure-step { display:flex; align-items:flex-start; gap:12px; padding:14px; background:white; border:1px solid #dce3ec; border-radius:8px; flex-shrink:0; }
+.procedure-step-number { width:28px; height:28px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:6px; background:#eef2ff; color:#4338ca; font-size:12px; font-weight:600; margin-top:4px; }
+.procedure-text { width:100%; min-height:80px; resize:vertical; line-height:1.5; }
+.procedure-image { width:100%; max-height:240px; object-fit:contain; background:#f1f5f9; }
+.procedure-remove-image { position:absolute; top:6px; right:6px; }
+.procedure-danger { color:#dc2626; }
+.procedure-danger:hover { background:#fef2f2; border-color:#fecaca; }
+.procedure-upload:focus-within { outline:2px solid #6366f1; outline-offset:2px; }
+.procedure-empty-state { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px; color:#64748b; }
+.procedure-footer { flex-wrap:wrap; }
+@media (max-width:850px) { .procedure-content { padding:12px; } .procedure-step { padding:10px; gap:8px; } }
 </style>

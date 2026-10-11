@@ -273,3 +273,10 @@ pruebas del servicio en entorno piloto.
 - Solo Denominación permite envolver texto, con ancho base máximo de 320 px.
 - Porcentajes simples en colgroup que suman 100%, reemplazando calc() y sus anchos mixtos; acciones participa del reparto proporcional.
 - 43 pruebas correctas; pendiente revisión visual en navegador tras publicar.
+
+### V1 — Procedimientos
+
+- Acción en catálogo: libro índigo cuando hay pasos; símbolo + atenuado y borde discontinuo cuando no hay procedimiento. Tooltip y nombre accesible explican ambos estados; agregar permanece habilitado.
+- Modal Procedimiento unificado con catálogo: tipografía, botones de 36 px, cabecera y pie fijos, alto/ancho acotados, scroll interior, tarjetas numeradas e imágenes contenidas.
+- Acciones de eliminar paso/quitar imagen y campos con nombres accesibles; adjuntar imagen admite foco de teclado.
+- Prueba real cubre procedimiento vacío, agregar/eliminar paso, abrir con texto e imagen y cancelar sin modificar el registro cargado. 43 pruebas correctas; validación visual pendiente en PC.

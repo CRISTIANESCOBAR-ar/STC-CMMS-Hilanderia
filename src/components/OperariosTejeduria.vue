@@ -1,9 +1,17 @@
 <script setup>
 import { shiftSlot, plantShift, addDays } from '../utils/plantTime';
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
+import PlantDatePicker from './PlantDatePicker.vue';
+import { vTippy } from '../utils/tooltipDirective';
+import { userRole, userProfile } from '../services/authService';
+import { canAccessViewForUser } from '../services/profileService';
+import { getSectorScope } from '../utils/sectorScope';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { Search, Users, Filter, Camera, Loader2, XCircle, Calendar, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X, LayoutGrid, Table2 } from 'lucide-vue-next';
+import { Search, Users, Camera, Loader2, XCircle, ChevronLeft, ChevronRight, UserPlus, Pencil, Trash2, Save, X, LayoutGrid, Table2, RefreshCw, Plus } from 'lucide-vue-next';
 import CameraCapture from './CameraCapture.vue';
 import Swal from 'sweetalert2';
 import { generateGeminiText, GEMINI_SETUP_MSG } from '../services/geminiClient';
@@ -13,7 +21,14 @@ const searchQuery = ref('');
 const showCamera = ref(false);
 const isProcessing = ref(false);
 const isLoading = ref(false);
-const showGestion = ref(false);
+const showGestion = ref(false), gestionModal = ref(null), savingMaster = ref(false), savingSchedule = ref(false), loadError = ref(''), masterError = ref(''), statusFilter = ref(''), gestionSearch = ref(''), gestionTurno = ref(''), pendingSchedule = ref(false);
+const admin = computed(() => userRole.value === 'admin');
+const canOperate = computed(() => { try { const sectors=getSectorScope(userProfile.value); return (sectors===null || sectors.includes('TEJEDURIA')) && canAccessViewForUser(userRole.value,'operarios',userProfile.value?.vistasPersonalizadas); } catch { return false; } });
+const blocked = computed(() => isProcessing.value || savingSchedule.value || savingMaster.value || pendingSchedule.value);
+const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,character => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[character]));
+let loadGeneration=0, suppressLoad=false, previousFocus;
+
 
 const turnos = ['A', 'B', 'C'];
 
@@ -25,26 +40,28 @@ const vistaCards = ref(typeof window !== 'undefined' && window.innerWidth < 640)
 
 // ── Tabla maestra de operarios (Firestore: config/operarios_tejeduria) ──
 const maestroOperarios = ref([]);
+const masterReady = ref(false);
 
 const cargarMaestro = async () => {
   try {
     const snap = await getDoc(doc(db, 'config', 'operarios_tejeduria'));
-    if (snap.exists() && snap.data().operarios?.length) {
-      maestroOperarios.value = snap.data().operarios;
-    }
+    maestroOperarios.value = snap.exists() && Array.isArray(snap.data().operarios) ? snap.data().operarios : [];
+    masterReady.value = true;
   } catch (e) {
-    console.error('Error cargando maestro:', e);
+    masterReady.value = false;
+    loadError.value = 'No se pudo cargar el maestro de operarios. Reintentá.'; throw e;
   }
 };
 
-const guardarMaestro = async () => {
+const guardarMaestro = async (next = maestroOperarios.value) => {
+  if (!admin.value) throw new Error('Solo administración puede modificar el maestro.');
   try {
     await setDoc(doc(db, 'config', 'operarios_tejeduria'), {
-      operarios: maestroOperarios.value,
+      operarios: next,
       updatedAt: serverTimestamp(),
     });
   } catch (e) {
-    console.error('Error guardando maestro:', e);
+    throw e;
   }
 };
 
@@ -60,7 +77,8 @@ const operariosTurno = computed(() =>
 // Lista combinada: turno asignado + extras del escaneo
 const listaCompleta = computed(() => {
   const asignados = operariosTurno.value.map(op => {
-    const reg = registroDia.value.find(r => r.legajo === op.legajo);
+    const reg = registroDia.value.find(r => String(r.legajo) === String(op.legajo))
+      || extrasEscaneados.value.find(r => String(r.legajo) === String(op.legajo));
     return {
       ...op,
       ingreso: reg?.ingreso || '',
@@ -70,8 +88,8 @@ const listaCompleta = computed(() => {
       estado: 'asignado', // pertenece al turno
     };
   });
-  const extras = extrasEscaneados.value.map(ex => {
-    const maestro = maestroOperarios.value.find(m => m.legajo === ex.legajo);
+  const extras = extrasEscaneados.value.filter(ex => !operariosTurno.value.some(op => String(op.legajo) === String(ex.legajo))).map(ex => {
+    const maestro = maestroOperarios.value.find(m => String(m.legajo) === String(ex.legajo));
     return {
       legajo: ex.legajo,
       nombre: ex.nombre || maestro?.nombre || `Legajo ${ex.legajo}`,
@@ -88,13 +106,13 @@ const listaCompleta = computed(() => {
 });
 
 const operariosFiltrados = computed(() => {
-  const lista = listaCompleta.value;
+  const lista = listaCompleta.value.filter(op => !statusFilter.value || op.estado===statusFilter.value);
   if (!searchQuery.value.trim()) return lista;
-  const q = searchQuery.value.trim().toLowerCase();
+  const q = normalize(searchQuery.value.trim());
   return lista.filter(op =>
-    op.nombre.toLowerCase().includes(q) ||
+    normalize(op.nombre).includes(q) ||
     String(op.legajo).includes(q) ||
-    (op.puesto || '').toLowerCase().includes(q)
+    normalize(op.puesto).includes(q)
   );
 });
 
@@ -113,6 +131,7 @@ const docId = (turno) => `${fechaSeleccionada.value}_${turno}`;
 
 // ── Firestore: guardar/cargar horarios del día ──
 const guardarHorarios = async (turno) => {
+  if (!canOperate.value) throw new Error('No tenés permiso para modificar horarios.');
   const lista = listaCompleta.value;
   const horarios = {};
   const extras = [];
@@ -140,16 +159,18 @@ const guardarHorarios = async (turno) => {
       updatedAt: serverTimestamp(),
     }, { merge: true });
   } catch (e) {
-    console.error('Error guardando horarios:', e);
+    throw e;
   }
 };
 
 const cargarHorarios = async (turno) => {
+  const token = ++loadGeneration, key = docId(turno);
   registroDia.value = [];
   extrasEscaneados.value = [];
   isLoading.value = true;
   try {
-    const snap = await getDoc(doc(db, 'operarios_horarios', docId(turno)));
+    const snap = await getDoc(doc(db, 'operarios_horarios', key));
+    if (token !== loadGeneration) return;
     if (snap.exists()) {
       const data = snap.data();
       const horarios = data.horarios || {};
@@ -178,19 +199,27 @@ const cargarHorarios = async (turno) => {
       }
     }
   } catch (e) {
-    console.error('Error cargando horarios:', e);
+    if (token === loadGeneration) loadError.value = 'No se pudieron cargar los horarios. Reintentá antes de escanear.'; throw e;
   } finally {
-    isLoading.value = false;
+    if (token === loadGeneration) isLoading.value = false;
   }
 };
 
-onMounted(async () => {
-  await cargarMaestro();
-  await cargarHorarios(turnoActivo.value);
+async function reload() {
+  if (blocked.value) return;
+  isLoading.value=true; loadError.value='';
+  try { await cargarMaestro(); await cargarHorarios(turnoActivo.value); } catch {} finally { isLoading.value=false; }
+}
+onMounted(reload);
+watch([turnoActivo,fechaSeleccionada],async () => {
+  if (suppressLoad) return;
+  if (masterReady.value) loadError.value='';
+  try { await cargarHorarios(turnoActivo.value); } catch {}
 });
-watch(turnoActivo, (t) => cargarHorarios(t));
-watch(fechaSeleccionada, () => cargarHorarios(turnoActivo.value));
-
+onUnmounted(() => { loadGeneration++; globalThis.window?.removeEventListener('beforeunload',beforeUnload); });
+function beforeUnload(event) { if (blocked.value || (showGestion.value && gestionDirty.value)) { event.preventDefault(); event.returnValue=''; } }
+globalThis.window?.addEventListener('beforeunload',beforeUnload);
+onBeforeRouteLeave(async () => { if (blocked.value) return false; if (showGestion.value) { await closeGestion(); return !showGestion.value; } return true; });
 // ── OCR Libre con Gemini Vision ──
 const blobToBase64 = (blob) => new Promise((resolve) => {
   const reader = new FileReader();
@@ -199,6 +228,7 @@ const blobToBase64 = (blob) => new Promise((resolve) => {
 });
 
 const handleCapture = async (blob) => {
+  if (blocked.value || !canOperate.value || loadError.value || !masterReady.value) return;
   showCamera.value = false;
   isProcessing.value = true;
 
@@ -273,8 +303,20 @@ REGLAS:
       return;
     }
 
+    resultados.forEach(result => {
+      if (!result || typeof result !== 'object') throw new Error('La lectura contiene un operario inválido. Reintentá con una foto más nítida.');
+      result.legajo = Number(result.legajo) || 0;
+      result.nombre = String(result.nombre || '');
+      for (const field of ['ingreso','salida','inicio','final']) {
+        result[field] = String(result[field] || '');
+        if (result[field] && !/^([01]\d|2[0-3]):[0-5]\d$/.test(result[field])) throw new Error('La lectura contiene horarios inválidos. Reintentá con una foto más nítida.');
+      }
+    });
+    if (fechaLeida) addDays(fechaLeida,0);
+
     // Aplicar fecha y turno leídos de la planilla
     let cambios = [];
+    suppressLoad = true;
     if (fechaLeida && /^\d{4}-\d{2}-\d{2}$/.test(fechaLeida) && fechaLeida !== fechaSeleccionada.value) {
       fechaSeleccionada.value = fechaLeida;
       cambios.push(`Fecha → ${fechaLeida}`);
@@ -282,9 +324,12 @@ REGLAS:
     if (turnoLeido && turnos.includes(turnoLeido) && turnoLeido !== turnoActivo.value) {
       turnoActivo.value = turnoLeido;
       cambios.push(`Turno → ${turnoLeido}`);
-      // Esperar a que se carguen los datos del nuevo turno
-      await cargarHorarios(turnoLeido);
+
     }
+
+    await nextTick();
+    if (cambios.length) await cargarHorarios(turnoActivo.value);
+    suppressLoad = false;
 
     // Clasificar resultados
     const turno = turnoActivo.value;
@@ -293,10 +338,10 @@ REGLAS:
     let nuevosExtras = [];
 
     resultados.forEach(r => {
-      const esDelTurno = asignadosTurno.some(op => op.legajo === r.legajo);
+      const esDelTurno = asignadosTurno.some(op => String(op.legajo) === String(r.legajo));
       if (esDelTurno) {
         // Actualizar registro del día
-        const existente = registroDia.value.find(rd => rd.legajo === r.legajo);
+        const existente = registroDia.value.find(rd => String(rd.legajo) === String(r.legajo));
         if (existente) {
           if (r.ingreso) existente.ingreso = r.ingreso;
           if (r.salida) existente.salida = r.salida;
@@ -315,7 +360,7 @@ REGLAS:
         actualizados++;
       } else {
         // Es de otro turno o desconocido
-        const yaExtra = extrasEscaneados.value.find(e => e.legajo === r.legajo);
+        const yaExtra = [...extrasEscaneados.value,...nuevosExtras].find(e => String(e.legajo) === String(r.legajo));
         if (!yaExtra) {
           nuevosExtras.push({
             legajo: r.legajo,
@@ -335,7 +380,9 @@ REGLAS:
     });
 
     extrasEscaneados.value.push(...nuevosExtras);
+    pendingSchedule.value = true;
     await guardarHorarios(turno);
+    pendingSchedule.value = false;
 
     const totalExtras = nuevosExtras.length;
     let msg = `${actualizados} del turno ${turno}`;
@@ -354,10 +401,10 @@ REGLAS:
 
     // Identificar operarios desconocidos (no están en la tabla maestra)
     const desconocidos = nuevosExtras.filter(ex => {
-      return !maestroOperarios.value.some(m => m.legajo === ex.legajo);
+      return !maestroOperarios.value.some(m => String(m.legajo) === String(ex.legajo));
     }).filter(ex => ex.legajo > 0 && ex.nombre);
 
-    if (desconocidos.length > 0) {
+    if (desconocidos.length > 0 && admin.value) {
       await ofrecerAgregarDesconocidos(desconocidos);
     }
 
@@ -365,23 +412,45 @@ REGLAS:
     console.error('Error OCR:', err);
     Swal.fire({ icon: 'error', title: 'Error al procesar imagen', text: err.message, confirmButtonColor: '#4f46e5' });
   } finally {
+    suppressLoad = false;
     isProcessing.value = false;
   }
 };
 
 const limpiarHorarios = async () => {
-  registroDia.value = [];
-  extrasEscaneados.value = [];
-  await guardarHorarios(turnoActivo.value);
+  if (blocked.value || !canOperate.value || isLoading.value || loadError.value) return;
+  savingSchedule.value=true;
+  const before={ registros:registroDia.value,extras:extrasEscaneados.value };
+  try {
+    if (!(await Swal.fire({ title:'¿Limpiar horarios?',text:`Se quitarán los horarios y extras de ${fechaSeleccionada.value}, turno ${turnoActivo.value}.`,icon:'warning',showCancelButton:true,confirmButtonText:'Limpiar',cancelButtonText:'Cancelar' })).isConfirmed) return;
+    registroDia.value=[]; extrasEscaneados.value=[];
+    await guardarHorarios(turnoActivo.value);
+  } catch (failure) { registroDia.value=before.registros; extrasEscaneados.value=before.extras; Swal.fire('No se pudo limpiar',failure.message,'error'); }
+  finally { savingSchedule.value=false; }
 };
+async function retrySchedule() {
+  if (savingSchedule.value || isProcessing.value || !canOperate.value) return;
+  savingSchedule.value=true;
+  try { await guardarHorarios(turnoActivo.value); pendingSchedule.value=false; }
+  catch (failure) { Swal.fire('No se pudo guardar',failure.message,'error'); }
+  finally { savingSchedule.value=false; }
+}
+async function discardSchedule() {
+  if (savingSchedule.value || isProcessing.value) return;
+  if (!(await Swal.fire({ title:'¿Descartar la lectura pendiente?',text:'Se volverán a cargar los horarios guardados.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Cancelar' })).isConfirmed) return;
+  pendingSchedule.value=false; await reload();
+}
 
 // ── Ofrecer agregar operarios desconocidos al maestro ──
 const ofrecerAgregarDesconocidos = async (desconocidos) => {
+  if (!admin.value || savingMaster.value) return;
+  savingMaster.value=true;
+  try {
   const listHtml = desconocidos.map((op, i) => `
     <label class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer text-left">
       <input type="checkbox" checked data-idx="${i}" class="swal-chk rounded" style="width:16px;height:16px;accent-color:#4f46e5" />
-      <span class="font-mono font-bold text-indigo-600 text-sm">${op.legajo}</span>
-      <span class="font-semibold text-gray-700 text-sm">${op.nombre}</span>
+      <span class="font-mono font-bold text-indigo-600 text-sm">${escapeHtml(op.legajo)}</span>
+      <span class="font-semibold text-gray-700 text-sm">${escapeHtml(op.nombre)}</span>
     </label>
   `).join('');
 
@@ -419,10 +488,11 @@ const ofrecerAgregarDesconocidos = async (desconocidos) => {
   if (result.isConfirmed && result.value.seleccionados.length > 0) {
     const { seleccionados, turnoSel } = result.value;
     let agregados = 0;
+    const nextMaestro = [...maestroOperarios.value];
     seleccionados.forEach(idx => {
       const op = desconocidos[idx];
-      if (!maestroOperarios.value.some(m => m.legajo === op.legajo)) {
-        maestroOperarios.value.push({
+      if (!nextMaestro.some(m => Number(m.legajo) === Number(op.legajo))) {
+        nextMaestro.push({
           legajo: op.legajo,
           nombre: op.nombre.toUpperCase(),
           turno: turnoSel,
@@ -432,10 +502,13 @@ const ofrecerAgregarDesconocidos = async (desconocidos) => {
       }
     });
     if (agregados > 0) {
-      await guardarMaestro();
+      await guardarMaestro(nextMaestro);
+      maestroOperarios.value = nextMaestro;
       // Reclasificar extras: los recién agregados ya no son desconocidos
       extrasEscaneados.value = extrasEscaneados.value.map(ex => ({ ...ex }));
+      pendingSchedule.value=true;
       await guardarHorarios(turnoActivo.value);
+      pendingSchedule.value=false;
       Swal.fire({
         icon: 'success',
         title: `${agregados} operario${agregados > 1 ? 's' : ''} agregado${agregados > 1 ? 's' : ''}`,
@@ -447,6 +520,8 @@ const ofrecerAgregarDesconocidos = async (desconocidos) => {
       });
     }
   }
+  } catch (failure) { Swal.fire('No se pudo agregar al maestro',failure.message,'error'); }
+  finally { savingMaster.value=false; }
 };
 
 // ── Gestión de operarios (ABM) ──
@@ -456,58 +531,46 @@ const nuevoTurno = ref('B');
 const nuevoPuesto = ref('');
 const editandoIdx = ref(-1);
 
-const maestroFiltrado = computed(() => {
-  if (!showGestion.value) return [];
-  const filtro = turnoActivo.value;
-  return maestroOperarios.value
-    .filter(op => op.turno === filtro)
-    .sort((a, b) => a.nombre.localeCompare(b.nombre));
-});
-
+const maestroFiltrado = computed(() => maestroOperarios.value.filter(op => (!gestionTurno.value || op.turno===gestionTurno.value) && (!gestionSearch.value.trim() || normalize([op.legajo,op.nombre,op.puesto].join(' ')).includes(normalize(gestionSearch.value.trim())))).sort((a,b) => String(a.nombre || '').localeCompare(String(b.nombre || ''))));
+const gestionDirty = computed(() => Boolean(nuevoLegajo.value || nuevoNombre.value || nuevoPuesto.value || editandoIdx.value!==-1));
+function resetForm() { nuevoLegajo.value=''; nuevoNombre.value=''; nuevoPuesto.value=''; editandoIdx.value=-1; nuevoTurno.value=turnoActivo.value; masterError.value=''; }
+function openGestion() { if (!admin.value || blocked.value || isLoading.value || loadError.value) return; previousFocus=globalThis.document?.activeElement; gestionTurno.value=turnoActivo.value; gestionSearch.value=''; resetForm(); showGestion.value=true; nextTick(() => gestionModal.value?.focus?.()); }
+async function closeGestion() {
+  if (savingMaster.value) return;
+  if (gestionDirty.value && !(await Swal.fire({ title:'¿Descartar el formulario?',text:'El operario todavía no se guardó.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Seguir editando' })).isConfirmed) return;
+  showGestion.value=false; resetForm(); nextTick(() => previousFocus?.isConnected && previousFocus.focus());
+}
+function editOperario(op) { if (savingMaster.value) return; if (gestionDirty.value) { masterError.value='Guardá o cancelá el formulario antes de editar otro operario.'; return; } editandoIdx.value=op.legajo; nuevoLegajo.value=String(op.legajo); nuevoNombre.value=op.nombre || ''; nuevoTurno.value=op.turno; nuevoPuesto.value=op.puesto || ''; masterError.value=''; }
 const agregarOperario = async () => {
-  const legajo = Number(nuevoLegajo.value);
-  const nombre = nuevoNombre.value.trim().toUpperCase();
-  if (!legajo || !nombre) return;
-  if (maestroOperarios.value.some(o => o.legajo === legajo)) {
-    Swal.fire({ icon: 'warning', title: 'Legajo duplicado', text: `El legajo ${legajo} ya existe.`, confirmButtonColor: '#4f46e5' });
-    return;
-  }
-  maestroOperarios.value.push({ legajo, nombre, turno: nuevoTurno.value, puesto: nuevoPuesto.value.trim().toUpperCase() });
-  nuevoLegajo.value = '';
-  nuevoNombre.value = '';
-  nuevoPuesto.value = '';
-  await guardarMaestro();
+  if (!admin.value || savingMaster.value) return;
+  const legajo=Number(nuevoLegajo.value), nombre=nuevoNombre.value.trim().toUpperCase();
+  if (!Number.isInteger(legajo) || legajo<=0 || !nombre || !['A','B','C','D'].includes(nuevoTurno.value)) { masterError.value='Completá un legajo positivo, nombre y turno.'; return; }
+  if (maestroOperarios.value.some(op => Number(op.legajo)===legajo && op.legajo!==editandoIdx.value)) { masterError.value=`El legajo ${legajo} ya existe.`; return; }
+  const entry={ legajo,nombre,turno:nuevoTurno.value,puesto:nuevoPuesto.value.trim().toUpperCase() };
+  const next=editandoIdx.value===-1 ? [...maestroOperarios.value,entry] : maestroOperarios.value.map(op => op.legajo===editandoIdx.value ? { ...op,...entry }:op);
+  savingMaster.value=true; masterError.value='';
+  try { await guardarMaestro(next); maestroOperarios.value=next; resetForm(); }
+  catch (failure) { masterError.value=failure.message || 'No se pudo guardar. Se conserva el formulario.'; }
+  finally { savingMaster.value=false; }
 };
+const eliminarOperario = async legajo => {
+  if (!admin.value || savingMaster.value) return;
+  savingMaster.value=true; masterError.value='';
+  try {
+    if (!(await Swal.fire({ title:'¿Eliminar operario?',text:'Se quitará del maestro; los registros de horarios existentes se conservan.',icon:'warning',showCancelButton:true,confirmButtonText:'Eliminar',cancelButtonText:'Cancelar',confirmButtonColor:'#dc2626' })).isConfirmed) return;
+    const next=maestroOperarios.value.filter(op => op.legajo!==legajo); await guardarMaestro(next); maestroOperarios.value=next; if(editandoIdx.value===legajo) resetForm();
+  } catch (failure) { masterError.value=failure.message; } finally { savingMaster.value=false; }
+};
+function gestionKeyboard(event) {
+  if (event.key==='Escape') { event.stopPropagation(); closeGestion(); }
+  if (event.key!=='Tab') return;
+  const nodes=[...(gestionModal.value?.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled)') || [])].filter(node => node.getClientRects().length);
+  const first=nodes[0],last=nodes.at(-1),active=globalThis.document?.activeElement;
+  if(!first) { event.preventDefault(); return; }
+  if(event.shiftKey && (active===first || !nodes.includes(active))) { event.preventDefault(); last.focus(); }
+  else if(!event.shiftKey && (active===last || !nodes.includes(active))) { event.preventDefault(); first.focus(); }
+}
 
-const eliminarOperario = async (legajo) => {
-  const result = await Swal.fire({
-    title: '¿Eliminar operario?',
-    text: 'Se quitará de la tabla maestra.',
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: 'Eliminar',
-    cancelButtonText: 'Cancelar',
-    confirmButtonColor: '#ef4444',
-  });
-  if (!result.isConfirmed) return;
-  maestroOperarios.value = maestroOperarios.value.filter(o => o.legajo !== legajo);
-  await guardarMaestro();
-};
-
-const cambiarTurnoOperario = async (legajo, nuevoT) => {
-  const op = maestroOperarios.value.find(o => o.legajo === legajo);
-  if (op) {
-    op.turno = nuevoT;
-    await guardarMaestro();
-  }
-};
-
-// Color de fila según estado
-const rowClass = (estado) => {
-  if (estado === 'otro_turno') return 'bg-amber-50/60 border-l-3 border-l-amber-400';
-  if (estado === 'desconocido') return 'bg-red-50/60 border-l-3 border-l-red-400';
-  return '';
-};
 const estadoBadge = (op) => {
   if (op.estado === 'otro_turno') return { text: `Turno ${op.turnoOriginal}`, class: 'bg-amber-100 text-amber-700' };
   if (op.estado === 'desconocido') return { text: 'No registrado', class: 'bg-red-100 text-red-600' };
@@ -516,289 +579,24 @@ const estadoBadge = (op) => {
 </script>
 
 <template>
-  <CameraCapture v-if="showCamera" @capture="handleCapture" @cancel="showCamera = false" />
-
-  <div class="max-w-5xl mx-auto px-4 py-6 space-y-5">
-    <!-- Encabezado -->
-    <div class="flex items-center gap-3">
-      <div class="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
-        <Users class="w-6 h-6" />
-      </div>
-      <p class="text-xs text-gray-400 font-medium">Escaneá la planilla papel — el sistema digitaliza y valida automáticamente</p>
-    </div>
-
-    <!-- Selector de Fecha -->
-    <div class="flex items-center gap-2 justify-center">
-      <button @click="cambiarFecha(-1)" class="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-sm transition-colors">
-        <ChevronLeft class="w-4 h-4" />
-      </button>
-      <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white shadow-sm min-w-[180px] justify-center">
-        <Calendar class="w-4 h-4 text-indigo-500" />
-        <input type="date" v-model="fechaSeleccionada" class="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer" />
-      </div>
-      <button @click="cambiarFecha(1)" :disabled="esHoy" class="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-        <ChevronRight class="w-4 h-4" />
-      </button>
-      <button v-if="!esHoy" @click="fechaSeleccionada = fechaHoy()" class="text-xs font-bold text-indigo-600 hover:underline ml-1">Hoy</button>
-    </div>
-
-    <!-- Filtro de Turno + Acciones -->
-    <div class="flex items-center gap-2 flex-wrap">
-      <Filter class="w-4 h-4 text-gray-400" />
-      <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Turno</span>
-      <div class="flex gap-1 ml-1">
-        <button
-          v-for="t in turnos" :key="t" @click="turnoActivo = t"
-          class="px-3 py-1.5 text-sm font-bold rounded-lg border transition-all duration-150"
-          :class="turnoActivo === t ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 shadow-sm hover:shadow-md'"
-        >{{ t }}</button>
-      </div>
-
-      <div class="ml-auto flex items-center gap-2">
-        <span class="text-xs font-semibold text-gray-400">
-          {{ totalAsignados }} asignados
-          <span v-if="extrasEscaneados.length" class="text-amber-500"> + {{ extrasEscaneados.length }} extra{{ extrasEscaneados.length !== 1 ? 's' : '' }}</span>
-        </span>
-
-        <!-- Gestionar operarios -->
-        <button
-          @click="showGestion = !showGestion"
-          class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <Pencil class="w-3.5 h-3.5" />
-          {{ showGestion ? 'Cerrar' : 'Gestionar' }}
-        </button>
-
-        <button v-if="tieneHorarios" @click="limpiarHorarios"
-          class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 transition-colors shadow-sm">
-          <XCircle class="w-3.5 h-3.5" /> Limpiar
-        </button>
-
-        <button v-if="!isProcessing" @click="showCamera = true"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold rounded-lg border transition-all duration-150 shadow-sm hover:shadow-md bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 active:scale-95">
-          <Camera class="w-4 h-4" /> Escanear planilla
-        </button>
-        <div v-if="isProcessing" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200">
-          <Loader2 class="w-4 h-4 animate-spin" /> Procesando...
-        </div>
-      </div>
-    </div>
-
-    <!-- Panel de Gestión de Operarios -->
-    <div v-if="showGestion" class="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-      <p class="text-xs font-black text-slate-500 uppercase tracking-widest">Tabla Maestra — Turno {{ turnoActivo }}</p>
-
-      <!-- Agregar nuevo -->
-      <div class="flex gap-2 flex-wrap items-end">
-        <div>
-          <label class="text-[10px] font-bold text-slate-400 uppercase">Legajo</label>
-          <input v-model="nuevoLegajo" type="number" placeholder="Nro" class="block w-20 px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-100" />
-        </div>
-        <div class="flex-1 min-w-[140px]">
-          <label class="text-[10px] font-bold text-slate-400 uppercase">Nombre</label>
-          <input v-model="nuevoNombre" type="text" placeholder="APELLIDO NOMBRE" class="block w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-100" />
-        </div>
-        <div class="w-24">
-          <label class="text-[10px] font-bold text-slate-400 uppercase">Puesto</label>
-          <input v-model="nuevoPuesto" type="text" placeholder="Puesto" class="block w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-100" />
-        </div>
-        <div>
-          <label class="text-[10px] font-bold text-slate-400 uppercase">Turno</label>
-          <select v-model="nuevoTurno" class="block px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white outline-none cursor-pointer">
-            <option v-for="t in turnos" :key="t" :value="t">{{ t }}</option>
-          </select>
-        </div>
-        <button @click="agregarOperario" class="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 active:scale-95 transition-all">
-          <UserPlus class="w-4 h-4" /> Agregar
-        </button>
-      </div>
-
-      <!-- Lista editable -->
-      <div class="max-h-60 overflow-y-auto">
-        <table class="w-full text-xs">
-          <thead>
-            <tr class="border-b border-slate-200">
-              <th class="text-left px-2 py-1 font-bold text-slate-400">Legajo</th>
-              <th class="text-left px-2 py-1 font-bold text-slate-400">Nombre</th>
-              <th class="text-left px-2 py-1 font-bold text-slate-400">Puesto</th>
-              <th class="text-center px-2 py-1 font-bold text-slate-400">Turno</th>
-              <th class="px-2 py-1"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="op in maestroFiltrado" :key="op.legajo" class="border-b border-slate-100 hover:bg-white">
-              <td class="px-2 py-1.5 font-mono font-bold text-indigo-600">{{ op.legajo }}</td>
-              <td class="px-2 py-1.5 font-semibold text-slate-700">{{ op.nombre }}</td>
-              <td class="px-2 py-1.5 text-slate-500">{{ op.puesto || '—' }}</td>
-              <td class="px-2 py-1.5 text-center">
-                <select :value="op.turno" @change="cambiarTurnoOperario(op.legajo, $event.target.value)" class="px-1 py-0.5 border border-slate-200 rounded text-xs bg-white cursor-pointer">
-                  <option v-for="t in turnos" :key="t" :value="t">{{ t }}</option>
-                </select>
-              </td>
-              <td class="px-2 py-1.5 text-center">
-                <button @click="eliminarOperario(op.legajo)" class="text-red-400 hover:text-red-600 transition-colors"><Trash2 class="w-3.5 h-3.5" /></button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-if="maestroFiltrado.length === 0" class="text-center py-4 text-xs text-slate-400">Sin operarios en Turno {{ turnoActivo }}</p>
-      </div>
-    </div>
-
-    <!-- Búsqueda + Toggle vista -->
-    <div class="flex gap-2">
-      <div class="relative flex-1">
-        <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input v-model="searchQuery" type="text" placeholder="Buscar por legajo, nombre o puesto..."
-          class="w-full pl-9 pr-4 py-2.5 border border-slate-200 bg-white rounded-lg text-sm text-slate-700 placeholder-gray-400 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none shadow-sm transition-colors duration-150" />
-      </div>
-      <button @click="vistaCards = !vistaCards"
-        class="shrink-0 p-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-sm transition-colors"
-        :title="vistaCards ? 'Ver como tabla' : 'Ver como tarjetas'">
-        <Table2 v-if="vistaCards" class="w-4 h-4" />
-        <LayoutGrid v-else class="w-4 h-4" />
-      </button>
-    </div>
-
-    <!-- Leyenda de colores (si hay extras) -->
-    <div v-if="extrasEscaneados.length" class="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
-      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-white border border-slate-200"></span> Turno asignado</span>
-      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-100 border border-amber-300"></span> Otro turno</span>
-      <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-red-100 border border-red-300"></span> No registrado</span>
-    </div>
-
-    <!-- Loader -->
-    <div v-if="isLoading" class="flex justify-center py-8">
-      <Loader2 class="w-6 h-6 animate-spin text-indigo-400" />
-    </div>
-
-    <template v-else>
-      <!-- Estado vacío -->
-      <div v-if="operariosFiltrados.length === 0" class="bg-white border border-slate-200 rounded-lg shadow-sm px-6 py-12 text-center">
-        <Users class="w-10 h-10 text-gray-300 mx-auto mb-2" />
-        <p class="text-sm text-gray-400 font-medium">
-          {{ totalAsignados === 0 && !searchQuery ? 'Escaneá una planilla para cargar operarios del Turno ' + turnoActivo : 'Sin resultados' }}
-        </p>
-      </div>
-
-      <!-- ── VISTA TARJETAS ── -->
-      <div v-else-if="vistaCards" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div
-          v-for="op in operariosFiltrados" :key="op.legajo"
-          class="bg-white border rounded-xl shadow-sm overflow-hidden"
-          :class="{
-            'border-amber-300 bg-amber-50/40': op.estado === 'otro_turno',
-            'border-red-300 bg-red-50/40': op.estado === 'desconocido',
-            'border-slate-200': op.estado === 'asignado',
-          }"
-        >
-          <!-- Cabecera tarjeta -->
-          <div class="flex items-start justify-between px-4 pt-3 pb-2 border-b"
-            :class="{
-              'border-amber-100': op.estado === 'otro_turno',
-              'border-red-100': op.estado === 'desconocido',
-              'border-slate-100': op.estado === 'asignado',
-            }"
-          >
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-mono font-black text-indigo-600 text-base">{{ op.legajo }}</span>
-                <span v-if="estadoBadge(op)" :class="estadoBadge(op).class" class="text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0">
-                  {{ estadoBadge(op).text }}
-                </span>
-              </div>
-              <p class="font-bold text-gray-800 text-sm leading-tight truncate">{{ op.nombre }}</p>
-              <p v-if="op.puesto" class="text-xs text-gray-400 mt-0.5">{{ op.puesto }}</p>
-            </div>
-            <button
-              v-if="op.estado === 'desconocido' && op.legajo > 0"
-              @click="ofrecerAgregarDesconocidos([{ legajo: op.legajo, nombre: op.nombre }])"
-              title="Agregar a tabla maestra"
-              class="text-emerald-500 hover:text-emerald-700 transition-colors ml-2 shrink-0">
-              <UserPlus class="w-4 h-4" />
-            </button>
-          </div>
-
-          <!-- Horarios tarjeta: grid 2×2 -->
-          <div class="grid grid-cols-2 gap-px bg-slate-100 text-center text-xs">
-            <div class="bg-white py-2">
-              <p class="font-black text-emerald-600 uppercase tracking-wider text-[9px] mb-0.5">Ingreso</p>
-              <span v-if="op.ingreso" class="font-mono font-bold text-emerald-700 text-base">{{ op.ingreso }}</span>
-              <span v-else class="text-gray-300">—</span>
-            </div>
-            <div class="bg-white py-2">
-              <p class="font-black text-red-500 uppercase tracking-wider text-[9px] mb-0.5">Salida</p>
-              <span v-if="op.salida" class="font-mono font-bold text-red-600 text-base">{{ op.salida }}</span>
-              <span v-else class="text-gray-300">—</span>
-            </div>
-            <div class="bg-white py-2">
-              <p class="font-black text-blue-500 uppercase tracking-wider text-[9px] mb-0.5">Inicio</p>
-              <span v-if="op.inicio" class="font-mono font-bold text-blue-700 text-base">{{ op.inicio }}</span>
-              <span v-else class="text-gray-300">—</span>
-            </div>
-            <div class="bg-white py-2">
-              <p class="font-black text-orange-500 uppercase tracking-wider text-[9px] mb-0.5">Final</p>
-              <span v-if="op.final" class="font-mono font-bold text-orange-600 text-base">{{ op.final }}</span>
-              <span v-else class="text-gray-300">—</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── VISTA TABLA ── -->
-      <div v-else class="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
-        <table class="w-full text-sm min-w-[640px]">
-          <thead>
-            <tr class="bg-slate-50 border-b border-slate-200">
-              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-20">Legajo</th>
-              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider">Nombre</th>
-              <th class="text-left px-3 py-2.5 text-xs font-black text-slate-500 uppercase tracking-wider w-24">Puesto</th>
-              <th class="text-center px-2 py-2.5 text-xs font-black text-emerald-600 uppercase tracking-wider w-[70px]">Ingreso</th>
-              <th class="text-center px-2 py-2.5 text-xs font-black text-red-500 uppercase tracking-wider w-[70px]">Salida</th>
-              <th class="text-center px-2 py-2.5 text-xs font-black text-blue-600 uppercase tracking-wider w-[70px]">Inicio</th>
-              <th class="text-center px-2 py-2.5 text-xs font-black text-orange-600 uppercase tracking-wider w-[70px]">Final</th>
-              <th class="w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="op in operariosFiltrados" :key="op.legajo"
-              class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors duration-100"
-              :class="rowClass(op.estado)">
-              <td class="px-3 py-2 font-mono font-bold text-indigo-600">{{ op.legajo }}</td>
-              <td class="px-3 py-2 font-semibold text-slate-700">
-                {{ op.nombre }}
-                <span v-if="estadoBadge(op)" :class="estadoBadge(op).class" class="ml-1.5 text-[10px] font-black px-1.5 py-0.5 rounded-full">{{ estadoBadge(op).text }}</span>
-              </td>
-              <td class="px-3 py-2 text-slate-500 text-xs">{{ op.puesto || '—' }}</td>
-              <td class="px-2 py-2 text-center">
-                <span v-if="op.ingreso" class="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono font-bold text-xs">{{ op.ingreso }}</span>
-                <span v-else class="text-gray-300">—</span>
-              </td>
-              <td class="px-2 py-2 text-center">
-                <span v-if="op.salida" class="inline-block px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-mono font-bold text-xs">{{ op.salida }}</span>
-                <span v-else class="text-gray-300">—</span>
-              </td>
-              <td class="px-2 py-2 text-center">
-                <span v-if="op.inicio" class="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-bold text-xs">{{ op.inicio }}</span>
-                <span v-else class="text-gray-300">—</span>
-              </td>
-              <td class="px-2 py-2 text-center">
-                <span v-if="op.final" class="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 font-mono font-bold text-xs">{{ op.final }}</span>
-                <span v-else class="text-gray-300">—</span>
-              </td>
-              <td class="px-2 py-2">
-                <button
-                  v-if="op.estado === 'desconocido' && op.legajo > 0"
-                  @click="ofrecerAgregarDesconocidos([{ legajo: op.legajo, nombre: op.nombre }])"
-                  title="Agregar a tabla maestra"
-                  class="text-emerald-500 hover:text-emerald-700 transition-colors">
-                  <UserPlus class="w-4 h-4" />
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </template>
-  </div>
+  <CameraCapture v-if="showCamera" @capture="handleCapture" @cancel="showCamera=false" />
+  <section class="operators-page" :inert="showGestion || showCamera || undefined">
+    <header class="page-header"><div><h1>Operarios de tejeduría</h1><p>Horarios por fecha y turno · Digitalización de planillas</p></div><div class="actions"><button class="btn" v-tippy="'Actualizar maestro y horarios guardados'" :disabled="blocked || isLoading" @click="reload"><RefreshCw :class="{ spinning:isLoading }" />Actualizar</button><button v-if="admin" class="btn" :disabled="blocked || isLoading || !!loadError" @click="openGestion"><Users />Gestionar operarios</button><button v-if="canOperate" class="btn primary" :disabled="blocked || isLoading || !!loadError" @click="showCamera=true"><Camera />{{ isProcessing ? 'Procesando…':'Escanear planilla' }}</button></div></header>
+    <div class="toolbar"><div class="date-controls" :inert="blocked || isLoading || undefined"><button class="icon-btn" v-tippy="'Día anterior'" aria-label="Día anterior" :disabled="blocked || isLoading" @click="cambiarFecha(-1)"><ChevronLeft /></button><PlantDatePicker v-model="fechaSeleccionada" label="Fecha de inicio del turno" /><button class="icon-btn" v-tippy="'Día siguiente'" aria-label="Día siguiente" :disabled="blocked || isLoading || esHoy" @click="cambiarFecha(1)"><ChevronRight /></button><button v-if="!esHoy" class="btn today" :disabled="blocked || isLoading" @click="fechaSeleccionada=fechaHoy()">Hoy</button></div><div class="shift-selector" role="group" aria-label="Turno"><span>Turno</span><button v-for="turno in turnos" :key="turno" :aria-pressed="turnoActivo===turno" :class="{ selected:turnoActivo===turno }" :disabled="blocked || isLoading" v-tippy="`Turno ${turno} · ${turno==='A' ? '06:00–14:00':turno==='B' ? '14:00–22:00':'22:00–06:00 del día siguiente'}`" @click="turnoActivo=turno">{{ turno }}</button></div><div class="search"><Search /><input v-model="searchQuery" aria-label="Buscar por legajo, nombre o puesto" placeholder="Buscar legajo, nombre o puesto…" /></div><select v-model="statusFilter" aria-label="Filtrar pertenencia al turno"><option value="">Todos los operarios</option><option value="asignado">Asignados</option><option value="otro_turno">Otros turnos</option><option value="desconocido">No registrados</option></select><div class="view-switch"><button aria-label="Vista de tabla" v-tippy="'Vista de tabla'" :aria-pressed="!vistaCards" :class="{ selected:!vistaCards }" @click="vistaCards=false"><Table2 /></button><button aria-label="Vista de tarjetas" v-tippy="'Vista de tarjetas'" :aria-pressed="vistaCards" :class="{ selected:vistaCards }" @click="vistaCards=true"><LayoutGrid /></button></div><button v-if="canOperate && tieneHorarios" class="btn danger" :disabled="blocked || isLoading || !!loadError" @click="limpiarHorarios"><XCircle />Limpiar horarios</button></div>
+    <div v-if="loadError" class="error" role="alert">{{ loadError }} <button :disabled="blocked" @click="reload">Reintentar</button></div>
+    <div v-if="isProcessing" class="notice" role="status"><Loader2 class="spinning" />Leyendo la planilla. La fecha y el turno permanecerán bloqueados hasta completar el proceso.</div>
+    <div v-if="pendingSchedule && !isProcessing" class="error" role="alert"><span>La lectura todavía no se guardó. Se conserva en pantalla para reintentar.</span><button :disabled="savingSchedule" @click="retrySchedule">{{ savingSchedule ? 'Guardando…':'Guardar lectura' }}</button><button :disabled="savingSchedule" @click="discardSchedule">Descartar</button></div>
+    <div class="data-panel" :aria-busy="isLoading"><p v-if="isLoading" class="empty" role="status">Cargando operarios y horarios…</p><p v-else-if="!operariosFiltrados.length" class="empty">{{ loadError ? 'No se pudo completar la carga.':totalAsignados===0 && !searchQuery ? `No hay operarios asignados al turno ${turnoActivo}.`:'No hay resultados que coincidan con los filtros.' }}</p><div v-else class="data-scroll">
+      <table v-if="!vistaCards" class="operators-table"><colgroup><col class="id-col" /><col /><col class="job-col" /><col v-for="field in ['ingreso','salida','inicio','final']" :key="field" class="time-col" /><col v-if="admin" class="action-col" /></colgroup><thead><tr><th>Legajo</th><th>Operario</th><th>Puesto</th><th class="time ingreso">Ingreso</th><th class="time salida">Salida</th><th class="time inicio">Inicio</th><th class="time final">Final</th><th v-if="admin">Acción</th></tr></thead><tbody><tr v-for="op in operariosFiltrados" :key="`${op.estado}-${op.legajo}-${op.nombre}`" :class="op.estado"><td class="employee-id">{{ op.legajo }}</td><td><strong>{{ op.nombre }}</strong><span v-if="estadoBadge(op)" class="badge" :class="op.estado">{{ estadoBadge(op).text }}</span></td><td class="muted">{{ op.puesto || '—' }}</td><td v-for="field in ['ingreso','salida','inicio','final']" :key="field" class="time"><span class="time-value" :class="[field,{ missing:!op[field] }]">{{ op[field] || '—' }}</span></td><td v-if="admin"><button v-if="op.estado==='desconocido' && op.legajo>0" class="icon-btn" v-tippy="'Agregar al maestro de operarios'" aria-label="Agregar al maestro" :disabled="blocked" @click="ofrecerAgregarDesconocidos([{ legajo:op.legajo,nombre:op.nombre }])"><UserPlus /></button></td></tr></tbody></table>
+      <div v-else class="operator-cards"><article v-for="op in operariosFiltrados" :key="`${op.estado}-${op.legajo}-${op.nombre}`" :class="op.estado"><header><div><span class="employee-id">{{ op.legajo }}</span><span v-if="estadoBadge(op)" class="badge" :class="op.estado">{{ estadoBadge(op).text }}</span><h2>{{ op.nombre }}</h2><p>{{ op.puesto || 'Sin puesto informado' }}</p></div><button v-if="admin && op.estado==='desconocido' && op.legajo>0" class="icon-btn" v-tippy="'Agregar al maestro de operarios'" aria-label="Agregar al maestro" :disabled="blocked" @click="ofrecerAgregarDesconocidos([{ legajo:op.legajo,nombre:op.nombre }])"><UserPlus /></button></header><dl><div v-for="field in ['ingreso','salida','inicio','final']" :key="field"><dt>{{ { ingreso:'Ingreso',salida:'Salida',inicio:'Inicio',final:'Final' }[field] }}</dt><dd class="time-value" :class="[field,{ missing:!op[field] }]">{{ op[field] || '—' }}</dd></div></dl></article></div>
+    </div><footer class="panel-footer"><span>{{ operariosFiltrados.length }} de {{ totalTurno }} operarios · {{ totalAsignados }} asignados<span v-if="extrasEscaneados.length"> · {{ extrasEscaneados.length }} extras</span></span><span>Turno C: fecha del día en que comienza a las 22:00.</span></footer></div>
+  </section>
+  <Teleport to="body"><div v-if="showGestion" class="modal-backdrop" @click.self="closeGestion"><section ref="gestionModal" class="management-modal" role="dialog" aria-modal="true" aria-labelledby="operators-master-title" tabindex="-1" @keydown="gestionKeyboard"><header><div><h2 id="operators-master-title">Maestro de operarios</h2><p>Asignaciones de turnos, nombres y puestos</p></div><button class="icon-btn" v-tippy="'Cerrar gestión de operarios'" aria-label="Cerrar gestión" :disabled="savingMaster" @click="closeGestion"><X /></button></header>
+    <div class="management-body"><p v-if="masterError" class="error" role="alert">{{ masterError }}</p><form class="employee-form" @submit.prevent="agregarOperario"><fieldset :disabled="savingMaster"><label>Legajo<input v-model="nuevoLegajo" type="number" min="1" step="1" required :disabled="editandoIdx!==-1" placeholder="N.º" /></label><label class="name-field">Apellido y nombre<input v-model="nuevoNombre" required placeholder="APELLIDO NOMBRE" /></label><label class="job-field">Puesto<input v-model="nuevoPuesto" placeholder="Puesto" /></label><label>Turno<select v-model="nuevoTurno"><option v-for="turno in ['A','B','C','D']" :key="turno">{{ turno }}</option></select></label><div class="form-actions"><button type="submit" class="btn primary"><Save v-if="editandoIdx!==-1" /><Plus v-else />{{ savingMaster ? 'Guardando…':editandoIdx!==-1 ? 'Guardar':'Agregar' }}</button><button v-if="gestionDirty" type="button" class="btn" @click="resetForm">Cancelar</button></div></fieldset></form><div class="management-filters"><div class="search"><Search /><input v-model="gestionSearch" aria-label="Buscar en maestro" placeholder="Buscar en el maestro…" /></div><select v-model="gestionTurno" aria-label="Filtrar turno del maestro"><option value="">Todos los turnos</option><option v-for="turno in ['A','B','C','D']" :key="turno" :value="turno">Turno {{ turno }}</option></select></div><div class="master-scroll"><table class="master-table"><colgroup><col style="width:80px" /><col /><col style="width:20%" /><col style="width:65px" /><col style="width:80px" /></colgroup><thead><tr><th>Legajo</th><th>Nombre</th><th>Puesto</th><th>Turno</th><th>Acciones</th></tr></thead><tbody><tr v-for="op in maestroFiltrado" :key="op.legajo"><td class="employee-id">{{ op.legajo }}</td><td><strong>{{ op.nombre }}</strong></td><td>{{ op.puesto || '—' }}</td><td>{{ op.turno }}</td><td><div class="actions"><button class="icon-btn" v-tippy="'Editar operario'" aria-label="Editar operario" :disabled="savingMaster" @click="editOperario(op)"><Pencil /></button><button class="icon-btn danger" v-tippy="'Eliminar del maestro'" aria-label="Eliminar del maestro" :disabled="savingMaster || gestionDirty" @click="eliminarOperario(op.legajo)"><Trash2 /></button></div></td></tr></tbody></table><p v-if="!maestroFiltrado.length" class="empty">No hay operarios que coincidan.</p></div></div><footer><span>{{ maestroFiltrado.length }} de {{ maestroOperarios.length }} operarios</span><button class="btn" :disabled="savingMaster" @click="closeGestion">Cerrar</button></footer></section></div></Teleport>
 </template>
+
+<style scoped>
+.operators-page{height:100%;min-height:0;display:flex;flex-direction:column;gap:10px;padding:14px 16px;color:#334155;font-size:13px}.page-header,.actions,.toolbar,.date-controls,.shift-selector,.panel-footer{display:flex;align-items:center;gap:8px}.page-header{justify-content:space-between;flex-wrap:wrap}.page-header h1{font-size:19px;font-weight:700;color:#1e293b}.page-header p{font-size:12px;color:#64748b;margin-top:3px}.btn,.icon-btn,.view-switch button,.shift-selector button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:0 10px;border:1px solid #cbd5e1;border-radius:5px;background:white;color:#475569;font-weight:600}.btn svg,.icon-btn svg,.view-switch svg{width:16px;height:16px}.btn:hover,.icon-btn:hover,.view-switch button:hover{background:#f1f5f9}.primary{background:#2563eb;border-color:#2563eb;color:white}.primary:hover{background:#1d4ed8}.danger{color:#dc2626}.danger:hover{background:#fef2f2}.icon-btn{width:30px;min-height:30px;padding:0}.btn:disabled,button:disabled{opacity:.4;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.toolbar{flex-wrap:wrap;border:1px solid #e2e8f0;padding:9px;background:white;border-radius:7px}.date-controls{gap:4px}.today{font-size:11px;padding:0 7px}.shift-selector{gap:4px}.shift-selector>span{font-size:11px;color:#64748b;margin-right:3px}.shift-selector button{width:32px;padding:0;border-radius:4px}.selected{background:#eff6ff!important;color:#2563eb!important;border-color:#93c5fd!important}.search{position:relative;flex:1;min-width:190px}.search svg{position:absolute;left:9px;top:9px;width:16px;height:16px;color:#94a3b8}.search input{width:100%;padding-left:31px!important}input:not([type=checkbox]),select{border:1px solid #cbd5e1;background:white;border-radius:5px;padding:7px 9px;font-size:13px;min-width:0;color:#334155}.view-switch{display:flex}.view-switch button{border-radius:4px;padding:0 8px}.data-panel{flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid #e2e8f0;border-radius:7px;overflow:hidden;background:white}.data-scroll{flex:1;min-height:0;overflow:auto}.operators-table,.master-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0}th{position:sticky;top:0;z-index:1;background:#f1f5f9;color:#475569;font-size:11px;text-align:left;font-weight:700;border-bottom:1px solid #cbd5e1}th,td{padding:10px 12px;overflow-wrap:anywhere}td{border-bottom:1px solid #eef2f6;vertical-align:middle}tbody tr:nth-child(even){background:#fafbfd}tbody tr:hover{background:#eff6ff}.id-col{width:85px}.job-col{width:18%}.time-col{width:95px}.action-col{width:60px}.employee-id{font-variant-numeric:tabular-nums;color:#2563eb;font-weight:600}.operators-table strong{font-weight:600}.time{text-align:center}.time-value{font-variant-numeric:tabular-nums;font-weight:600;font-size:13px;white-space:nowrap;display:inline-block;padding:3px 6px;border-radius:4px}.ingreso{color:#047857}.salida{color:#b91c1c}.inicio{color:#1d4ed8}.final{color:#9a3412}.time-value.ingreso{background:#ecfdf5}.time-value.salida{background:#fef2f2}.time-value.inicio{background:#eff6ff}.time-value.final{background:#fff7ed}.time-value.missing{background:transparent;color:#94a3b8}.badge{display:inline-block;font-size:10px;font-weight:600;padding:3px 6px;border-radius:4px;margin-left:7px}.badge.otro_turno{background:#fffbeb;color:#92400e}.badge.desconocido{background:#fef2f2;color:#b91c1c}tr.otro_turno td:first-child{border-left:3px solid #f59e0b}tr.desconocido td:first-child{border-left:3px solid #ef4444}.muted{color:#64748b;font-size:12px}.panel-footer{justify-content:space-between;flex-wrap:wrap;border-top:1px solid #e2e8f0;background:#f8fafc;padding:8px 12px;font-size:11px;color:#64748b}.operator-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:12px}.operator-cards article{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}.operator-cards article.otro_turno{border-color:#fcd34d}.operator-cards article.desconocido{border-color:#fca5a5}.operator-cards header{display:flex;justify-content:space-between;align-items:flex-start;padding:12px;gap:8px}.operator-cards h2{font-size:14px;font-weight:600;margin-top:5px;overflow-wrap:anywhere}.operator-cards p{font-size:11px;color:#64748b;margin-top:3px}.operator-cards dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #e2e8f0;padding:10px 6px;gap:3px;text-align:center}.operator-cards dt{font-size:10px;color:#64748b;margin-bottom:3px}.operator-cards .time-value{padding:2px 3px}.empty{padding:50px 16px;text-align:center;color:#64748b;flex:1}.error,.notice{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:5px;padding:9px 12px;font-size:12px;line-height:1.5}.error{background:#fef2f2;color:#b91c1c}.error button{text-decoration:underline}.notice{background:#eff6ff;color:#1d4ed8}.notice svg{width:16px;height:16px}.modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.4);display:flex;align-items:center;justify-content:center;padding:16px}.management-modal{width:min(1200px,100%);height:min(850px,calc(100dvh - 32px));min-height:0;background:white;border-radius:9px;display:flex;flex-direction:column;color:#334155;box-shadow:0 20px 60px #0f172a33;font-size:13px}.management-modal>header,.management-modal>footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid #e2e8f0;flex:none}.management-modal h2{font-size:17px;font-weight:700}.management-modal header p{font-size:12px;color:#64748b;margin-top:3px}.management-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:16px}.employee-form fieldset{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;border:0}.employee-form label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#64748b}.employee-form label:first-child{width:90px}.name-field{flex:2;min-width:180px}.job-field{flex:1;min-width:110px}.form-actions,.management-filters{display:flex;gap:8px;align-items:center}.master-scroll{flex:1;min-height:130px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px}.management-modal>footer{border-top:1px solid #e2e8f0;border-bottom:0;font-size:11px;color:#64748b}.spinning{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:1100px){.operators-page{padding:10px;gap:8px}.time-col{width:72px}.id-col{width:65px}.job-col{width:15%}.action-col{width:45px}th,td{padding:8px}.time-value{padding:2px 4px;font-size:12px}.toolbar{gap:7px}.toolbar select{max-width:160px}}
+@media(max-width:767px){.operators-page{height:auto;min-height:100%}.data-panel{flex:none;min-height:300px}.data-scroll{max-height:65vh}.operators-table{min-width:610px}.page-header h1{font-size:17px}.actions{flex-wrap:wrap}.toolbar .search{flex-basis:100%;order:1}.panel-footer span:last-child{display:none}.operator-cards{grid-template-columns:1fr}.modal-backdrop{padding:10px}.management-modal{height:calc(100dvh - 20px)}.management-body{padding:10px}.master-scroll{flex:none;max-height:45vh}.master-table{min-width:540px}.name-field{flex-basis:calc(100% - 110px);min-width:0}.employee-form .job-field{flex:1}.employee-form .form-actions{flex-basis:100%}.management-filters select{max-width:140px}.management-filters .search{min-width:0}.management-modal>header,.management-modal>footer{padding:10px 12px}}
+</style>

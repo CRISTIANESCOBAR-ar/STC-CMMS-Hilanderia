@@ -475,3 +475,19 @@ test('symptom scoped queries and transactions remain available only to approved 
   await assertSucceeds(runTransaction(db, async transaction => { await transaction.get(reference); transaction.update(reference, { nombre:'Renombrado', orden:2 }); }));
   await assertSucceeds(runTransaction(db, async transaction => { await transaction.get(reference); transaction.delete(reference); }));
 });
+
+test('operator master is admin-only while auxiliary schedules can be saved and cleared in Tejeduria', async () => {
+  await approve('operators-admin','admin'); await approve('operators-aux','auxiliar','TEJEDURIA'); await approve('operators-reader','mecanico','TEJEDURIA');
+  const adminDb=identity('operators-admin').firestore(),auxDb=identity('operators-aux').firestore(),readerDb=identity('operators-reader').firestore();
+  const master={ operarios:[{ legajo:1,nombre:'OPERARIO',turno:'A',puesto:'TELAR' }],updatedAt:serverTimestamp() };
+  await assertSucceeds(setDoc(doc(adminDb,'config/operarios_tejeduria'),master));
+  await assertSucceeds(getDoc(doc(auxDb,'config/operarios_tejeduria')));
+  await assertFails(setDoc(doc(auxDb,'config/operarios_tejeduria'),master));
+  const reference=doc(auxDb,'operarios_horarios/2026-10-11_A');
+  await assertSucceeds(setDoc(reference,{ fecha:'2026-10-11',turno:'A',horarios:{ 1:{ ingreso:'06:00',salida:'14:00' } },extras:[],updatedAt:serverTimestamp() },{ merge:true }));
+  await assertSucceeds(getDoc(doc(readerDb,'operarios_horarios/2026-10-11_A')));
+  await assertFails(setDoc(doc(readerDb,'operarios_horarios/2026-10-11_A'),{ horarios:{} },{ merge:true }));
+  await assertSucceeds(setDoc(reference,{ fecha:'2026-10-11',turno:'A',horarios:{},extras:[],updatedAt:serverTimestamp() },{ merge:true }));
+  assert.deepEqual((await getDoc(reference)).data().horarios,{});
+  await assertFails(deleteDoc(reference));
+});

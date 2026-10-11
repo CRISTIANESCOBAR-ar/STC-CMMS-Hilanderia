@@ -897,3 +897,49 @@ test('rounds load failures stop loading and retry; partial creation keeps its ID
   await state.guardarRuta(); assert.equal(state.editandoId,'created-id'); assert.match(state.formError,/Read failed/);
   failLoad=false; await state.guardarRuta(); assert.deepEqual(writes,[null,'created-id']); assert.equal(state.formError,''); app.unmount();
 });
+
+test('operator view filters accents, preserves failed master forms and limits administration by role', async () => {
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/OperariosTejeduria.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'operators-test' });
+  const template=compileTemplate({ id:'operators-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors,[]);
+  const role=Vue.ref('admin'),profile=Vue.ref({ role:'admin' }),writes=[];
+  const employees=[{ legajo:1,nombre:'JOSÉ OPERARIO',puesto:'TELAR',turno:'A' },{ legajo:2,nombre:'OTRO',puesto:'',turno:'B' }];
+  let failWrite=true,confirm=false,leave;
+  const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,'../utils/plantTime':{ shiftSlot:() => ({ fecha:'2026-10-11',turno:'A' }),plantShift:() => 'A',addDays },'../firebase/config':{ db:{} },'../services/authService':{ userRole:role,userProfile:profile },'../services/profileService':{ canAccessViewForUser:() => true },'../utils/sectorScope':{ getSectorScope:() => ['TEJEDURIA'] },'../utils/tooltipDirective':{ vTippy },'./PlantDatePicker.vue':{ render:() => Vue.h('button','Fecha') },'./CameraCapture.vue':{ render:() => Vue.h('div','Camera') },'../services/geminiClient':{ generateGeminiText:async () => ({ text:'{}' }),GEMINI_SETUP_MSG:'Setup' },sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },'firebase/firestore':{ doc:(db,collection,id) => `${collection}/${id}`,serverTimestamp:() => 'server-time',getDoc:async path => path.startsWith('config/') ? { exists:() => true,data:() => ({ operarios:employees }) } : { exists:() => true,data:() => ({ horarios:{ 1:{ ingreso:'06:00' },3:{ ingreso:'06:10' } },extras:[{ legajo:3,nombre:'DESCONOCIDO' }] }) },setDoc:async (path,data) => { writes.push({ path,data }); if(failWrite) throw new Error('Write failed'); } } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(state.isLoading,false); assert.equal(state.listaCompleta.length,2);
+  state.searchQuery='jose'; assert.equal(state.operariosFiltrados.length,1); state.searchQuery=''; state.statusFilter='desconocido'; assert.equal(state.operariosFiltrados[0].legajo,3);
+  state.openGestion(); assert.equal(state.showGestion,true); state.nuevoLegajo='4'; state.nuevoNombre='NUEVO';
+  await state.agregarOperario(); assert.equal(state.maestroOperarios.length,2); assert.equal(state.nuevoNombre,'NUEVO'); assert.equal(state.masterError,'Write failed');
+  await state.closeGestion(); assert.equal(state.showGestion,true); assert.equal(await leave(),false);
+  failWrite=false; await state.agregarOperario(); assert.equal(state.maestroOperarios.length,3); assert.equal(state.nuevoNombre,'');
+  state.editOperario(state.maestroOperarios[0]); state.nuevoNombre='EDITADO'; await state.agregarOperario(); assert.equal(state.maestroOperarios[0].nombre,'EDITADO'); assert.equal(state.maestroOperarios[0].legajo,1);
+  state.maestroOperarios.push({ legajo:3,nombre:'DESCONOCIDO',turno:'A' }); assert.equal(state.listaCompleta.filter(employee => employee.legajo===3).length,1); assert.equal(state.listaCompleta.find(employee => employee.legajo===3).ingreso,'06:10');
+  confirm=true; failWrite=true; const before=state.listaCompleta.map(employee => employee.ingreso); await state.limpiarHorarios(); assert.deepEqual(state.listaCompleta.map(employee => employee.ingreso),before);
+  await state.closeGestion(); role.value='auxiliar'; profile.value={ role:'auxiliar' }; state.openGestion(); assert.equal(state.showGestion,false); const count=writes.length; await state.agregarOperario(); assert.equal(writes.length,count);
+  assert.deepEqual(errors,[]); app.unmount();
+});
+
+test('operator OCR loads the detected date and shift once, keeps failed schedules and ignores stale reads', async t => {
+  const originalReader=globalThis.FileReader;
+  globalThis.FileReader=class { readAsDataURL() { this.result='data:image/jpeg;base64,test'; this.onloadend(); } };
+  t.after(() => { if(originalReader===undefined) delete globalThis.FileReader; else globalThis.FileReader=originalReader; });
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/OperariosTejeduria.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'operators-ocr-test' });
+  const template=compileTemplate({ id:'operators-ocr-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  const reads=[],writes=[],dialogs=[]; let failWrite=true,leave;
+  const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,'../utils/plantTime':{ shiftSlot:() => ({ fecha:'2026-10-11',turno:'A' }),plantShift:() => 'A',addDays },'../firebase/config':{ db:{} },'../services/authService':{ userRole:Vue.ref('auxiliar'),userProfile:Vue.ref({ role:'auxiliar' }) },'../services/profileService':{ canAccessViewForUser:() => true },'../utils/sectorScope':{ getSectorScope:() => ['TEJEDURIA'] },'../utils/tooltipDirective':{ vTippy },'./PlantDatePicker.vue':{ render:() => Vue.h('button','Fecha') },'./CameraCapture.vue':{ render:() => Vue.h('div','Camera') },'../services/geminiClient':{ generateGeminiText:async () => ({ text:JSON.stringify({ fecha:'2026-10-10',turno:'B',operarios:[{ legajo:'2',nombre:'OTRO',ingreso:'14:00',salida:'22:00' }] }) }),GEMINI_SETUP_MSG:'Setup' },sweetalert2:{ fire:async value => { dialogs.push(value); return { isConfirmed:true }; } },'firebase/firestore':{ doc:(db,collection,id) => `${collection}/${id}`,serverTimestamp:() => 'server-time',getDoc:path => path.startsWith('config/') ? Promise.resolve({ exists:() => true,data:() => ({ operarios:[{ legajo:2,nombre:'OTRO',turno:'B' }] }) }) : new Promise(resolve => reads.push({ path,resolve })),setDoc:async (path,data) => { writes.push({ path,data }); if(failWrite) throw new Error('Disconnected'); } } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
+  await new Promise(resolve => setImmediate(resolve)); reads[0].resolve({ exists:() => false }); await new Promise(resolve => setImmediate(resolve));
+  const scan=state.handleCapture({}); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads.length,2); assert.equal(reads[1].path,'operarios_horarios/2026-10-10_B');
+  reads[1].resolve({ exists:() => false }); await scan; assert.equal(state.pendingSchedule,true); assert.equal(state.listaCompleta[0].ingreso,'14:00'); assert.equal(writes[0].path,'operarios_horarios/2026-10-10_B'); assert.equal(writes[0].data.horarios[2].salida,'22:00'); assert.equal(await leave(),false); assert.ok(!dialogs.some(dialog => dialog?.icon==='success'));
+  failWrite=false; await state.retrySchedule(); assert.equal(state.pendingSchedule,false);
+  state.turnoActivo='A'; await Vue.nextTick(); state.turnoActivo='C'; await Vue.nextTick();
+  reads[2].resolve({ exists:() => true,data:() => ({ horarios:{ 99:{ ingreso:'00:00' } } }) }); await new Promise(resolve => setImmediate(resolve)); assert.equal(state.registroDia.length,0);
+  reads[3].resolve({ exists:() => false }); await new Promise(resolve => setImmediate(resolve)); assert.equal(state.isLoading,false); assert.equal(state.registroDia.length,0);
+  assert.deepEqual(errors,[]); app.unmount();
+});

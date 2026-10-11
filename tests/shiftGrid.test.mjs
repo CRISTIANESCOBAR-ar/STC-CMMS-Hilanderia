@@ -8,7 +8,9 @@ test('grid arrows traverse adjacent cells, shifts and rows without leaving the s
   assert.equal(shiftGridTarget(14, 'ArrowRight', 45), 15);
   assert.equal(shiftGridTarget(17, 'ArrowUp', 45), 2);
   assert.equal(shiftGridTarget(2, 'ArrowDown', 45), 17);
-  assert.equal(shiftGridTarget(2, 'Enter', 45), 17);
+  assert.equal(shiftGridTarget(2, 'Enter', 45), 3);
+  assert.equal(shiftGridTarget(14, 'Enter', 45), 15);
+  assert.equal(shiftGridTarget(44, 'Enter', 45), 44);
   assert.equal(shiftGridTarget(0, 'ArrowLeft', 45), 0);
   assert.equal(shiftGridTarget(44, 'ArrowRight', 45), 44);
   assert.equal(shiftGridTarget(2, 'Tab', 45), null);

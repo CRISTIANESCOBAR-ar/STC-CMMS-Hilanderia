@@ -6,7 +6,7 @@ export const SHIFT_GRID_FIELDS = [
   { field: 'rpm', label: 'RPM', max: 3 },
 ];
 export function shiftGridTarget(index, key, count, columns = 15) {
-  const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Enter: columns }[key];
+  const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Enter: 1 }[key];
   if (delta === undefined) return null;
   const target = index + delta;
   return target >= 0 && target < count ? target : index;

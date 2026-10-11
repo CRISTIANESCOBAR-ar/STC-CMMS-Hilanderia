@@ -7,6 +7,8 @@ import * as Vue from 'vue';
 import * as icons from 'lucide-vue-next';
 import { catalogColumnLayout } from '../src/utils/catalogColumnLayout.js';
 import { createLatestLoad } from '../src/utils/latestLoad.js';
+import { eventView } from '../src/utils/faultEvents.js';
+import { canExecuteIntervention } from '../src/utils/interventionAccess.js';
 
 function evaluate(code, dependencies) {
   code = code.replace(/^import\s+['"][^'"]+['"];?\s*/gm, '');
@@ -47,6 +49,73 @@ function host({ missingDesktopPortal = false } = {}) {
   });
   return { renderer, root: node('root'), body };
 }
+
+test('intervention management filters grouped requests and only takes permitted items once', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/IntervencionesView.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id: 'intervention-management-test' });
+  const template = compileTemplate({ id: 'intervention-management-test', source: descriptor.template.content,
+    compilerOptions: { bindingMetadata: script.bindings } });
+  assert.deepEqual(template.errors, []);
+  const subscriptions = [], writes = [];
+  let finishWrite;
+  const dependencies = {
+    vue: Vue, 'lucide-vue-next': icons, 'vue-router': { useRouter: () => ({ push() {} }) },
+    'firebase/auth': { getAuth: () => ({ currentUser: { uid:'inspector', displayName:'Inspector' } }) },
+    '../services/authService': { userRole:Vue.ref('inspector'), userProfile:Vue.ref({ sectoresAsignados:['TEJEDURIA'] }) },
+    '../services/profileService': { getEffectivePermisosForUser: () => ({}) },
+    '../utils/interventionAccess': { canExecuteIntervention }, '../utils/faultEvents': { eventView },
+    '../utils/tooltipDirective': { vTippy },
+    '../constants/organization': { DEFAULT_SECTOR:'TEJEDURIA', normalizeSectorValue:v => v,
+      sanitizeSectorList:v => v, canDespacharIntervencion: () => true },
+    './OperationalImage.vue': { render: () => Vue.h('img') },
+    sweetalert2: { fire: async () => ({ isConfirmed:true }) },
+    '../services/intervencionService': { intervencionService: {
+      suscribirActivas: (sectors, callback, error) => { subscriptions.push({ callback, error }); return () => {}; },
+      actualizarEstadoBatch: ids => { writes.push(ids); return new Promise(resolve => { finishWrite = resolve; }); },
+      actualizarEstado: id => { writes.push([id]); return Promise.resolve(); },
+    } },
+  };
+  const component = evaluate(script.content, dependencies);
+  component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host();
+  const app = renderer.createApp(component), errors = [];
+  app.config.errorHandler = error => errors.push(error);
+  app.mount(root);
+  const state = root._vnode.component.setupState;
+  const requests = [
+    { id:'quality', maquinaId:'35001', numeroMaquina:35001, tipoMaquina:'TELAR', tipoIntervencion:'CALIDAD', estado:'PENDIENTE', estadoMaquina:'PARADA', sector:'TEJEDURIA', sintomaNombre:'Pérdida', createdAt:{ seconds:Date.now()/1000 } },
+    { id:'mechanic', maquinaId:'35001', numeroMaquina:35001, tipoMaquina:'TELAR', tipoIntervencion:'MECANICO', estado:'PENDIENTE', sector:'TEJEDURIA' },
+    { id:'assigned', maquinaId:'35064', numeroMaquina:35064, tipoMaquina:'TELAR', tipoIntervencion:'CALIDAD', estado:'EN_PROCESO', asignadoA:'inspector', sector:'TEJEDURIA' },
+  ];
+  subscriptions[0].callback(requests);
+  await Vue.nextTick();
+  assert.equal(state.grupos[0].items.length, 2);
+  assert.equal(state.numeroCorto(requests[0]), '1');
+  state.busqueda = 'perdida';
+  assert.deepEqual(state.intervencionesFiltered.map(i => i.id), ['quality']);
+  state.limpiarFiltros();
+  state.filtroTipo = 'CALIDAD';
+  assert.equal(state.intervencionesFiltered.length, 1);
+  state.limpiarFiltros();
+  const taking = state.onTomarGrupo(state.grupos[0]);
+  await new Promise(resolve => setImmediate(resolve));
+  await state.onTomar(requests[0]);
+  assert.deepEqual(writes, [['quality']]);
+  finishWrite(); await taking;
+  state.filtroAsignacion = 'mine';
+  assert.deepEqual(state.intervencionesFiltered.map(i => i.id), ['assigned']);
+  subscriptions[0].error(new Error('Unavailable'));
+  await Vue.nextTick();
+  assert.equal(state.errorCarga, true);
+  state.cargarIntervenciones();
+  subscriptions[0].callback(requests);
+  assert.equal(state.intervenciones.length, 0);
+  subscriptions[1].callback(requests);
+  await Vue.nextTick();
+  assert.equal(state.loading, false);
+  app.unmount();
+  assert.deepEqual(errors.map(error => error.message), []);
+});
 
 test('real catalog template renders loading, data and model changes for admin without Vue errors', async () => {
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/CatalogoExplorer.vue', import.meta.url), 'utf8'));

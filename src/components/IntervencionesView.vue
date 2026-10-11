@@ -10,6 +10,10 @@ import { canExecuteIntervention } from '../utils/interventionAccess';
 import { sanitizeSectorList, normalizeSectorValue, DEFAULT_SECTOR, canDespacharIntervencion } from '../constants/organization';
 import { Wrench, Zap, Clock, ChevronRight, AlertTriangle, BellOff, Plus, OctagonX, CirclePlay, ChevronDown, ChevronUp, Package, Stethoscope, User, Flame, ArrowUp, Minus, Layers } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
+import { vTippy } from '../utils/tooltipDirective';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
+import { eventView } from '../utils/faultEvents';
 
 const router = useRouter();
 
@@ -20,6 +24,11 @@ const filtroEstado   = ref(userRole.value === 'inspector' ? 'PENDIENTE' : 'EN_PR
 const actualizando   = ref(null);          // id o 'batch-xxx'
 const expandedId     = ref(null);          // intervención expandida
 const collapsedMaq   = ref(new Set());     // maquinaIds colapsados (grupos)
+const busqueda = ref('');
+const filtroTipo = ref('');
+const filtroSector = ref('');
+const filtroAsignacion = ref('');
+const errorCarga = ref(false);
 
 const toggleExpand   = (id) => { expandedId.value = expandedId.value === id ? null : id; };
 const toggleMaqGroup = (key) => {
@@ -36,17 +45,23 @@ const sectoresUsuario = computed(() => {
 
 // ── Suscripción realtime ───────────────────────────────────────────────────────
 let unsubscribe = null;
+let subscriptionVersion = 0;
 
-watch(sectoresUsuario, (sectores) => {
+function cargarIntervenciones(sectores = sectoresUsuario.value) {
+  const version = ++subscriptionVersion;
   if (unsubscribe) unsubscribe();
+  intervenciones.value = [];
   loading.value = true;
+  errorCarga.value = false;
   unsubscribe = intervencionService.suscribirActivas(sectores, (docs) => {
+    if (version !== subscriptionVersion) return;
     intervenciones.value = docs;
     loading.value = false;
-  });
-}, { immediate: true });
+  }, () => { if (version === subscriptionVersion) { loading.value = false; errorCarga.value = true; } });
+}
+watch(sectoresUsuario, cargarIntervenciones, { immediate: true });
 
-onUnmounted(() => { unsubscribe?.(); });
+onUnmounted(() => { subscriptionVersion++; unsubscribe?.(); });
 
 // ── Filtros ────────────────────────────────────────────────────────────────────
 const countPendiente  = computed(() => intervenciones.value.filter(i => i.estado === 'PENDIENTE').length);
@@ -64,8 +79,17 @@ const intervencionesFiltered = computed(() => {
   const list = filtroEstado.value === 'TODO'
     ? intervenciones.value
     : intervenciones.value.filter(i => i.estado === filtroEstado.value);
-  return [...list].sort((a, b) => calcPrioridad(a).score - calcPrioridad(b).score);
+  const term = busqueda.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return list.filter(item => (!filtroTipo.value || item.tipoIntervencion === filtroTipo.value)
+    && (!filtroSector.value || item.sector === filtroSector.value)
+    && (!filtroAsignacion.value || (filtroAsignacion.value === 'mine' ? isAssignedToMe(item) : !item.asignadoA))
+    && (!term || [item.numeroMaquina, nombreMaquina(item), item.sintomaNombre, item.observaciones, item.asignadoNombre, item.creadoPorNombre, item.sector]
+      .join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(term)))
+    .sort((a, b) => calcPrioridad(a).score - calcPrioridad(b).score);
 });
+const limpiarFiltros = () => { busqueda.value = ''; filtroTipo.value = ''; filtroSector.value = ''; filtroAsignacion.value = ''; };
+const numeroCorto = item => eventView(item).numeroMaquinaDisplay;
+const fechaCompleta = ts => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleString('es-AR') : 'Fecha pendiente';
 
 // ── Prioridad ──────────────────────────────────────────────────────────────────
 const calcPrioridad = (item) => {
@@ -170,6 +194,7 @@ const canTomarItem = (item) => {
 
 // ── Acciones individuales ──────────────────────────────────────────────────────
 const onTomar = async (item) => {
+  if (actualizando.value || item.estado !== 'PENDIENTE' || !canTomarItem(item)) return;
   const user = getAuth().currentUser;
   actualizando.value = item.id;
   try {
@@ -186,24 +211,21 @@ const onTomar = async (item) => {
 
 // ── Acciones batch por grupo (Fase C) ──────────────────────────────────────────
 const onTomarGrupo = async (grupo) => {
+  if (actualizando.value) return;
   const user = getAuth().currentUser;
-  const pendientes = grupo.items.filter(i => i.estado === 'PENDIENTE');
+  const pendientes = grupo.items.filter(i => i.estado === 'PENDIENTE' && canTomarItem(i));
   if (!pendientes.length) return;
 
   const confirm = await Swal.fire({
     title: `Tomar ${pendientes.length} en ${grupo.nombre}`,
-    html: pendientes.map(i =>
-      `<div class="text-left text-sm py-1 border-b border-gray-100">
-        <b>${tipoConfig[i.tipoIntervencion]?.label || i.tipoIntervencion}</b> — ${i.sintomaNombre || 'Sin síntoma'}
-      </div>`
-    ).join(''),
+    text: pendientes.map(i => `${tipoConfig[i.tipoIntervencion]?.label || i.tipoIntervencion} — ${i.sintomaNombre || 'Sin síntoma'}`).join('\n'),
     icon: 'question',
     showCancelButton: true,
     confirmButtonText: `Tomar ${pendientes.length}`,
     cancelButtonText: 'Cancelar',
     confirmButtonColor: '#f97316',
   });
-  if (!confirm.isConfirmed) return;
+  if (!confirm.isConfirmed || actualizando.value) return;
 
   actualizando.value = `batch-${grupo.key}`;
   try {
@@ -222,14 +244,16 @@ const onTomarGrupo = async (grupo) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-8">
+  <div class="interventions-page min-h-screen bg-gray-50 pb-8">
+    <header class="management-header"><div><h1>Intervenciones</h1><p>Gestión de solicitudes · Prioridad más alta primero</p></div><button v-if="canDespacharIntervencion(userRole)" class="management-button primary" @click="router.push('/llamar')" v-tippy="'Registrar una nueva solicitud de intervención'"><Plus :size="16" />Nueva solicitud</button></header>
 
     <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
-    <div class="bg-white border-b border-gray-100 px-2.5 py-2 flex items-center gap-1 sticky top-[54px] z-30">
+    <div class="management-tabs bg-white border-b border-gray-100 px-2.5 py-2 flex items-center gap-1 sticky top-[54px] z-30">
       <button
         v-for="tab in tabs"
         :key="tab.id"
         @click="filtroEstado = tab.id"
+        :aria-pressed="filtroEstado === tab.id"
         class="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap min-w-0"
         :class="filtroEstado === tab.id
           ? 'bg-gray-900 text-white shadow-sm'
@@ -247,14 +271,22 @@ const onTomarGrupo = async (grupo) => {
         v-if="canDespacharIntervencion(userRole)"
         @click="router.push('/llamar')"
         class="ml-auto w-8 h-8 flex items-center justify-center bg-orange-600 text-white rounded-full shadow-sm shadow-orange-500/20 active:scale-95 transition shrink-0"
-        title="Nueva intervención"
+        aria-label="Nueva intervención" v-tippy="'Nueva intervención'"
       >
         <Plus class="w-4 h-4" />
       </button>
     </div>
+    <div class="management-filters">
+      <label class="management-search">Buscar<input v-model="busqueda" type="search" placeholder="Máquina, síntoma o persona…" /></label>
+      <label>Categoría<select v-model="filtroTipo"><option value="">Todas</option><option v-for="(config, key) in tipoConfig" :key="key" :value="key">{{ config.label }}</option></select></label>
+      <label v-if="sectoresUsuario.length > 1">Sector<select v-model="filtroSector"><option value="">Todos los permitidos</option><option v-for="sector in sectoresUsuario" :key="sector" :value="sector">{{ sector }}</option></select></label>
+      <label>Asignación<select v-model="filtroAsignacion"><option value="">Todas</option><option value="mine">Asignadas a mí</option><option value="free">Sin asignar</option></select></label>
+      <button class="management-button" @click="limpiarFiltros" v-tippy="'Limpiar búsqueda, categoría, sector y asignación'">Limpiar</button>
+    </div>
 
     <!-- ── Loading ───────────────────────────────────────────────────────────── -->
-    <div v-if="loading" class="flex items-center justify-center py-24">
+    <div v-if="errorCarga" class="management-error" role="alert">No se pudieron cargar las intervenciones. Revisá tu conexión o permisos. <button class="management-button" @click="cargarIntervenciones()">Reintentar</button></div>
+    <div v-else-if="loading" class="flex items-center justify-center py-24">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
     </div>
 
@@ -273,7 +305,21 @@ const onTomarGrupo = async (grupo) => {
     </div>
 
     <!-- ── Lista agrupada ────────────────────────────────────────────────────── -->
-    <div v-else class="max-w-lg mx-auto px-3 pt-3 space-y-3">
+    <div v-else class="management-results">
+    <div class="management-table-scroll"><table class="management-table"><thead><tr><th>Prioridad</th><th>Máquina</th><th>Categoría / estado</th><th>Solicitud</th><th>Asignación</th><th>Ingreso</th><th>Acciones</th></tr></thead>
+      <tbody v-for="g in grupos" :key="g.key">
+        <tr v-if="g.items.length > 1" class="machine-group-row"><td colspan="7"><div><span>{{ g.nombre }} · {{ g.items.length }} solicitudes</span><button v-if="g.items.some(i => i.estado === 'PENDIENTE' && canTomarItem(i))" class="management-button" :disabled="!!actualizando" @click="onTomarGrupo(g)">Tomar {{ g.items.filter(i => i.estado === 'PENDIENTE' && canTomarItem(i)).length }} permitidas</button></div></td></tr>
+        <tr v-for="item in g.items" :key="item.id" :class="{ 'stopped-row': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
+          <td><span class="management-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span><small v-if="item.critico">Crítica</small></td>
+          <td><strong>{{ numeroCorto(item) }}</strong><small>{{ item.tipoMaquina }} · {{ item.sector }}</small><small v-if="item.grupoTelar">GP {{ item.grupoTelar }}<span v-if="item.gmTelar"> · GM {{ item.gmTelar }}</span></small></td>
+          <td><span class="management-badge" :class="tipoConfig[item.tipoIntervencion]?.bg">{{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }}</span><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="management-badge" :class="estadoConfig[item.estado]?.bg">{{ estadoConfig[item.estado]?.label || item.estado }}</span></td>
+          <td class="request-description"><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><p>{{ item.observaciones }}</p><small v-if="item.fotoUrl">Foto adjunta</small></td>
+          <td>{{ item.asignadoNombre || 'Sin asignar' }}<small>Solicita: {{ item.creadoPorNombre || 'Sin identificar' }}</small></td>
+          <td><span v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</span></td>
+          <td><div class="management-row-actions"><button class="management-button" @click="router.push('/intervenciones/' + item.id)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
+        </tr>
+      </tbody></table></div>
+    <div class="management-cards max-w-lg mx-auto px-3 pt-3 space-y-3">
       <div v-for="g in grupos" :key="g.key">
 
         <!-- ═══ GRUPO CON MÚLTIPLES ═══ -->
@@ -325,7 +371,7 @@ const onTomarGrupo = async (grupo) => {
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
                     :class="tipoConfig[item.tipoIntervencion]?.bg || 'bg-gray-100 text-gray-600'"
                   >
-                    <component :is="item.tipoIntervencion === 'MECANICO' ? Wrench : Zap" class="w-3 h-3" />
+                    <component :is="item.tipoIntervencion === 'MECANICO' ? Wrench : item.tipoIntervencion === 'CALIDAD' ? Stethoscope : Zap" class="w-3 h-3" />
                     {{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }}
                   </span>
                   <span v-if="item.estadoMaquina"
@@ -352,10 +398,10 @@ const onTomarGrupo = async (grupo) => {
                     <User class="w-3 h-3" /> {{ item.asignadoNombre }}
                   </span>
                   <div class="ml-auto flex items-center gap-1">
-                    <button @click.stop="router.push('/intervenciones/' + item.id)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
+                    <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="router.push('/intervenciones/' + item.id)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
                       <ChevronRight class="w-3 h-3" />
                     </button>
-                    <button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="actualizando === item.id"
+                    <button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="!!actualizando"
                       class="px-2 py-0.5 bg-orange-500 text-white rounded-lg text-[10px] font-black active:scale-95 transition disabled:opacity-50">
                       Tomar
                     </button>
@@ -374,12 +420,12 @@ const onTomarGrupo = async (grupo) => {
               <button
                 v-if="g.items.some(i => i.estado === 'PENDIENTE' && canTomarItem(i))"
                 @click.stop="onTomarGrupo(g)"
-                :disabled="actualizando === `batch-${g.key}`"
+                :disabled="!!actualizando"
                 class="flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white rounded-lg text-[10px] font-black active:scale-95 transition disabled:opacity-50"
               >
                 <span v-if="actualizando === `batch-${g.key}`" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full inline-block"></span>
                 <ChevronRight v-else class="w-3 h-3" />
-                Tomar {{ g.items.filter(i => i.estado === 'PENDIENTE').length }}
+                Tomar {{ g.items.filter(i => i.estado === 'PENDIENTE' && canTomarItem(i)).length }}
               </button>
             </div>
           </div>
@@ -409,7 +455,7 @@ const onTomarGrupo = async (grupo) => {
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
                 :class="tipoConfig[g.items[0].tipoIntervencion]?.bg || 'bg-gray-100 text-gray-600'"
               >
-                <component :is="g.items[0].tipoIntervencion === 'MECANICO' ? Wrench : Zap" class="w-3 h-3" />
+                <component :is="g.items[0].tipoIntervencion === 'MECANICO' ? Wrench : g.items[0].tipoIntervencion === 'CALIDAD' ? Stethoscope : Zap" class="w-3 h-3" />
                 {{ tipoConfig[g.items[0].tipoIntervencion]?.label || g.items[0].tipoIntervencion }}
               </span>
               <span v-if="g.items[0].estadoMaquina"
@@ -479,14 +525,14 @@ const onTomarGrupo = async (grupo) => {
             <span v-else-if="g.items[0].creadoPorNombre" class="text-xs text-gray-400 ml-1">{{ g.items[0].creadoPorNombre }}</span>
 
             <div class="ml-auto flex items-center gap-1.5">
-              <button @click.stop="toggleExpand(g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 transition-all">
+              <button aria-label="Mostrar diagnóstico" v-tippy="'Mostrar u ocultar diagnóstico'" @click.stop="toggleExpand(g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 transition-all">
                 <ChevronDown v-if="expandedId !== g.items[0].id" class="w-3.5 h-3.5" />
                 <ChevronUp v-else class="w-3.5 h-3.5" />
               </button>
-              <button @click.stop="router.push('/intervenciones/' + g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
+              <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="router.push('/intervenciones/' + g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
                 <ChevronRight class="w-3.5 h-3.5" />
               </button>
-              <button v-if="g.items[0].estado === 'PENDIENTE' && canTomarItem(g.items[0])" @click.stop="onTomar(g.items[0])" :disabled="actualizando === g.items[0].id"
+              <button v-if="g.items[0].estado === 'PENDIENTE' && canTomarItem(g.items[0])" @click.stop="onTomar(g.items[0])" :disabled="!!actualizando"
                 class="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-xl text-[11px] font-black active:scale-95 transition disabled:opacity-50 shadow-sm shadow-orange-500/20">
                 <span v-if="actualizando === g.items[0].id" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full inline-block"></span>
                 <ChevronRight v-else class="w-3.5 h-3.5" />
@@ -498,10 +544,63 @@ const onTomarGrupo = async (grupo) => {
 
       </div>
     </div>
+    <footer class="management-footer">{{ intervencionesFiltered.length }} solicitudes · {{ grupos.length }} máquinas · Cerradas: últimas 24 horas</footer>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.management-header,.management-table-scroll,.management-footer { display:none; }
+.management-filters { display:flex; gap:8px; flex-wrap:wrap; padding:10px 12px; align-items:end; background:white; border-bottom:1px solid #e2e8f0; }
+.management-filters label { display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:600; color:#64748b; }
+.management-filters input,.management-filters select { height:34px; padding:0 9px; border:1px solid #cbd5e1; border-radius:7px; font-size:12px; color:#334155; background:white; max-width:100%; }
+.management-search { flex:1; min-width:180px; }
+.management-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:1px solid #cbd5e1; border-radius:7px; background:white; color:#334155; font-size:12px; font-weight:600; white-space:nowrap; cursor:pointer; }
+.management-button:hover { background:#f1f5f9; }
+.management-button.primary { background:#4f46e5; border-color:#4f46e5; color:white; }
+.management-button.primary:hover { background:#4338ca; }
+.management-button:disabled { opacity:.5; cursor:wait; }
+.management-button:focus-visible,.management-filters input:focus-visible,.management-filters select:focus-visible { outline:2px solid #818cf8; outline-offset:2px; }
+.management-error { padding:24px; color:#b91c1c; font-size:14px; }
+@media(min-width:768px) {
+ .interventions-page { height:100%; min-height:0; display:flex; flex-direction:column; padding:12px; gap:10px; overflow:hidden; }
+ .management-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; }
+ .management-header h1 { font-size:19px; font-weight:650; color:#0f172a; }
+ .management-header p { margin-top:2px; font-size:12px; color:#64748b; }
+ .management-tabs { position:static; border:1px solid #e2e8f0; border-radius:9px; padding:6px; flex-shrink:0; }
+ .management-tabs > button { min-height:34px; border-radius:7px; font-size:12px; }
+ .management-tabs > button[aria-pressed="true"] { background:#eef2ff; color:#4338ca; box-shadow:none; }
+ .management-tabs > button:last-child:not([aria-pressed]) { display:none; }
+ .management-filters { border:1px solid #e2e8f0; border-radius:9px; flex-shrink:0; }
+ .management-results { flex:1; min-height:0; display:flex; flex-direction:column; }
+ .management-cards { max-width:none; width:100%; padding:0; overflow:auto; flex:1; min-height:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; align-content:start; }
+ .management-cards > div { margin:0; min-width:0; }
+ .management-cards .animate-pulse-subtle { animation:none; }
+ .management-cards button { min-height:32px; }
+ .management-cards button.bg-orange-500 { background:#4f46e5; border-radius:7px; font-size:12px; font-weight:600; box-shadow:none; }
+ .management-footer { display:block; flex-shrink:0; font-size:11px; color:#64748b; padding:7px 2px 0; }
+}
+@media(min-width:981px) {
+ .management-cards { display:none; }
+ .management-table-scroll { display:block; flex:1; min-height:0; overflow:auto; border:1px solid #e2e8f0; border-radius:9px; background:white; }
+ .management-table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:12px; color:#334155; }
+ .management-table th { position:sticky; top:0; z-index:1; text-align:left; background:#f8fafc; color:#64748b; font-size:11px; font-weight:600; padding:11px 9px; border-bottom:1px solid #cbd5e1; }
+ .management-table th:nth-child(1) { width:9%; } .management-table th:nth-child(2) { width:13%; } .management-table th:nth-child(3) { width:15%; } .management-table th:nth-child(4) { width:25%; } .management-table th:nth-child(5) { width:15%; } .management-table th:nth-child(6) { width:9%; } .management-table th:nth-child(7) { width:14%; }
+ .management-table td { padding:10px 9px; border-bottom:1px solid #e2e8f0; vertical-align:top; overflow-wrap:anywhere; }
+ .management-table tr:hover td { background:#f8fafc; }
+ .management-table strong { font-weight:600; color:#0f172a; }
+ .management-table small { display:block; color:#64748b; font-size:11px; margin-top:4px; }
+ .management-table small.text-red-600 { color:#dc2626; }
+ .management-table small.text-amber-600 { color:#d97706; }
+ .management-table small.text-green-600 { color:#16a34a; }
+ .management-badge { display:inline-block; padding:3px 6px; border-radius:5px; font-size:10px; font-weight:600; }
+ .request-description p { margin-top:4px; color:#64748b; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+ .management-row-actions { display:flex; gap:5px; flex-wrap:wrap; }
+ .management-row-actions button { padding:5px 8px; }
+ .machine-group-row td { background:#f1f5f9; padding:6px 9px; }
+ .machine-group-row td > div { display:flex; align-items:center; justify-content:space-between; gap:8px; font-weight:600; }
+ .stopped-row td:first-child { border-left:3px solid #ef4444; }
+}
 @keyframes pulse-subtle {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }

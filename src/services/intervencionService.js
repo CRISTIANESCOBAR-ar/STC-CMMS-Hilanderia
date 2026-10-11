@@ -122,7 +122,7 @@ export const intervencionService = {
    * Suscripción realtime a intervenciones (PENDIENTE + EN_PROCESO + COMPLETADO recientes) de uno o varios sectores.
    * Acepta string o array de sectores.
    */
-  suscribirActivas(sector, callback) {
+  suscribirActivas(sector, callback, onError) {
     const sectores = (Array.isArray(sector) ? sector : [sector])
       .map(s => normalizeSectorValue(s))
       .filter(Boolean);
@@ -148,7 +148,7 @@ export const intervencionService = {
           return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
         });
       callback(docs);
-    });
+    }, onError);
   },
 
   /**

@@ -320,3 +320,13 @@ pruebas del servicio en entorno piloto.
 - Desktop confirma en una franja con acción manual Compartir, sin diálogo obligatorio por cada envío. Mobile mantiene su diálogo. Un fallo al compartir se distingue del guardado confirmado; no se vuelve a registrar la solicitud.
 - Diez índices adicionales para filtros globales y combinados de intervenciones; no se despliegan reglas, Functions ni migraciones. Rollback: revertir los commits y desplegar Hosting; índices aditivos pueden permanecer.
 - Validación: 58 pruebas unitarias/componentes y 51 en emuladores (109 total), build correcto. Pendiente revisión visual real y ensayo de 10–30 usuarios antes de declarar preparación completa para producción.
+
+### V5 — Gestión de intervenciones (/intervenciones)
+
+- Tabla desde 981 px, con ancho completo y scroll vertical dentro del espacio disponible. Tarjetas en dos columnas entre 768 y 980 px; mobile conserva la agrupación y acciones existentes.
+- Prioridad y grupos por máquina conservados. Tabla con número corto, categoría, estado de máquina y solicitud, descripción, asignado/solicitante, antigüedad y acciones. Detalle y diagnóstico se abren en la ruta existente.
+- Filtros de categoría, sector permitido, asignadas a mí/sin asignar y búsqueda sin distinción de acentos sobre la suscripción actual. Las cerradas siguen limitadas a las últimas 24 horas en el resultado del servicio.
+- Tomar grupo selecciona únicamente las solicitudes que el usuario puede ejecutar; acciones bloqueadas mientras se procesa una escritura. Confirmación con texto seguro. Error de carga con reintento y protección contra callbacks de suscripciones anteriores.
+- La consulta existente por sector sigue leyendo documentos del sector antes de filtrar cerradas en cliente; queda pendiente acotar esa lectura en servidor como bloque de rendimiento, sin confundirlo con paginación ya implementada en /llamar.
+- Prueba del componente Vue real: filtros, agrupación, permisos mixtos, envío duplicado, error/reintento y respuesta atrasada. No cambian reglas, índices ni estructura de documentos. Rollback mediante revert del commit y despliegue de Hosting.
+- Pendiente revisión visual del usuario en las resoluciones de planta. Patrulla se posterga hasta disponer del registro del inspector.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { faultEventWindow, filterFaultEvents } from '../src/utils/faultEvents.js';
+import { faultEventWindow, filterFaultEvents, eventView, eventKindConfig, eventStateClass, machineStateLabel } from '../src/utils/faultEvents.js';
 
 test('fault windows preserve the night shift start and use plant midnight for today', () => {
   const now = new Date('2026-10-11T05:00:00Z'); // Sunday 02:00 in plant.
@@ -33,4 +33,18 @@ test('custom fault ranges include the whole last day and reject reversed or exce
   assert.equal(range.to.toISOString(), '2026-10-12T03:00:00.000Z');
   assert.throws(() => faultEventWindow('range', new Date(), { from:'2026-10-12', to:'2026-10-11' }));
   assert.throws(() => faultEventWindow('range', new Date(), { from:'2026-09-01', to:'2026-10-11' }));
+});
+
+test('interventions use their own categories, states and summaries without mutating stored events', () => {
+  const event = { id:'1', tipoIntervencion:'CALIDAD', estado:'EN_PROCESO', sintomaNombre:'Mancha de aceite', asignadoNombre:'Inspector Uno' };
+  assert.equal(filterFaultEvents([event], { kind:'interventions', category:'CALIDAD', state:'EN_PROCESO', search:'inspector' }).length, 1);
+  assert.equal(filterFaultEvents([event], { kind:'interventions', category:'MECANICO' }).length, 0);
+  const view = eventView(event, 'interventions');
+  assert.equal(view.tipoProblema, 'Calidad');
+  assert.equal(view.motivo, 'Mancha de aceite');
+  assert.equal(event.motivo, undefined);
+  assert.equal(eventStateClass(view.estado), 'en-proceso');
+  assert.equal(machineStateLabel('PARADA'), 'Parada');
+  assert.deepEqual(eventKindConfig('interventions').pendingStates, ['PENDIENTE', 'EN_PROCESO']);
+  assert.throws(() => eventKindConfig('usuarios'));
 });

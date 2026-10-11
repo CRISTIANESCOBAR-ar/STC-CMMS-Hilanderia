@@ -60,6 +60,31 @@ test('fault event pagination enforces sectors, time windows and older pending st
   const older = await getDocs(faultEventsQuery(db, ['HILANDERIA'], { ...options, period:'older' }));
   assert.deepEqual(older.docs.map(doc => doc.id), ['older']);
 });
+
+test('intervention event queries paginate and filter quality while enforcing sector scope', async () => {
+  await approve('request-reader', 'jefe_sector', 'TEJEDURIA');
+  await environment.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await Promise.all(Array.from({ length:54 }, (_, i) => setDoc(doc(db, `intervenciones/request-${String(i).padStart(2, '0')}`), {
+      sector:'TEJEDURIA', estado:'PENDIENTE', tipoIntervencion:i % 2 ? 'MECANICO' : 'CALIDAD', createdAt:Timestamp.fromDate(new Date('2026-10-11T10:00:00Z')),
+    })));
+    await setDoc(doc(db, 'intervenciones/other-sector'), { sector:'HILANDERIA', estado:'PENDIENTE', tipoIntervencion:'CALIDAD', createdAt:Timestamp.fromDate(new Date('2026-10-11T10:00:00Z')) });
+    await setDoc(doc(db, 'intervenciones/older-request'), { sector:'TEJEDURIA', estado:'EN_PROCESO', tipoIntervencion:'CALIDAD', createdAt:Timestamp.fromDate(new Date('2026-10-10T10:00:00Z')) });
+    await setDoc(doc(db, 'intervenciones/closed-request'), { sector:'TEJEDURIA', estado:'COMPLETADO', tipoIntervencion:'CALIDAD', createdAt:Timestamp.fromDate(new Date('2026-10-10T10:00:00Z')) });
+  });
+  const db = identity('request-reader').firestore();
+  const options = { kind:'interventions', period:'today', order:'asc', now:new Date('2026-10-11T12:00:00Z') };
+  const first = await getDocs(faultEventsQuery(db, ['TEJEDURIA'], options));
+  assert.equal(first.size, 50);
+  const second = await loadFaultEventsPage(db, ['TEJEDURIA'], options, first.docs.at(-1));
+  assert.equal(second.events.length, 4);
+  const quality = await getDocs(faultEventsQuery(db, ['TEJEDURIA'], { ...options, category:'CALIDAD', state:'PENDIENTE' }));
+  assert.equal(quality.size, 27);
+  await assertFails(getDocs(faultEventsQuery(db, null, options)));
+  const older = await getDocs(faultEventsQuery(db, ['TEJEDURIA'], { ...options, period:'older' }));
+  assert.deepEqual(older.docs.map(doc => doc.id), ['older-request']);
+  assert.throws(() => faultEventsQuery(db, ['TEJEDURIA'], { ...options, period:'older', state:'COMPLETADO' }));
+});
 const intervention = (uid, sector = 'HILANDERIA', type = 'MECANICO') => ({
   sector, tipoIntervencion: type, estado: 'PENDIENTE', creadoPorUid: uid,
   createdAt: serverTimestamp(), asignadoA: null, fechaAsignacion: null, fechaInicio: null, fechaFin: null,

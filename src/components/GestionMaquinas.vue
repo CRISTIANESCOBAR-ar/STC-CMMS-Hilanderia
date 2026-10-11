@@ -955,6 +955,7 @@ const exportCatalogToExcel = async () => {
               </div>
               <div class="catalog-data"><div class="catalog-table-scroll" tabindex="0" aria-label="Datos del catálogo; desplazamiento dentro del modal">
                 <table class="catalog-table"><caption class="sr-only">Piezas y artículos del catálogo {{ catalogoModelo }}</caption>
+                  <colgroup><col class="catalog-col-section" /><col class="catalog-col-group" /><col class="catalog-col-subgroup" /><col /><col class="catalog-col-code" /><col class="catalog-col-code" /><col v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="catalog-col-actions" /></colgroup>
                   <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 tracking-widest shadow-sm">
                     <tr>
                       <th class="px-3 py-3 bg-gray-50 w-20">Sección</th>
@@ -1147,15 +1148,24 @@ const exportCatalogToExcel = async () => {
 .catalog-data { flex:1; min-height:0; min-width:0; display:flex; padding:12px 20px; overflow:hidden; }
 .catalog-table-scroll { flex:1; min-height:0; min-width:0; overflow:auto; border:1px solid #dce3ec; border-radius:7px; scrollbar-gutter:stable; }
 .catalog-table-scroll:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
-.catalog-table { width:100%; min-width:720px; border-collapse:separate; border-spacing:0; text-align:left; font-size:13px; font-variant-numeric:tabular-nums; }
+.catalog-table { width:100%; min-width:980px; table-layout:fixed; border-collapse:separate; border-spacing:0; text-align:left; font-size:13px; font-variant-numeric:tabular-nums; }
 .catalog-table thead { position:sticky; top:0; z-index:2; }
 .catalog-table th { padding:11px 12px; background:#f8fafc; font-size:12px; font-weight:600; letter-spacing:0; white-space:nowrap; color:#64748b; border-bottom:1px solid #dce3ec; }
 .catalog-table td { padding:8px 12px; height:44px; font-size:13px; font-weight:400; color:#475569; border-bottom:1px solid #edf1f6; overflow-wrap:anywhere; }
 .catalog-table tbody tr:nth-child(even) { background:#fbfcfe; }
 .catalog-table tbody tr:hover { background:#f0f4ff; }
-.catalog-table td:nth-child(4) { min-width:220px; color:#334155; }
-.catalog-table input { min-width:72px; font-size:13px; padding:6px 8px; }
-.catalog-table td:nth-child(4) input { min-width:180px; }
+.catalog-col-section { width:22%; }
+.catalog-col-group { width:72px; }
+.catalog-col-subgroup { width:96px; }
+.catalog-col-code { width:140px; }
+.catalog-col-actions { width:104px; }
+.catalog-table td:nth-child(1),.catalog-table td:nth-child(4) { white-space:normal; overflow-wrap:break-word; word-break:normal; }
+.catalog-table td:nth-child(4) { color:#334155; }
+.catalog-table td:nth-child(2),.catalog-table td:nth-child(3),.catalog-table td:nth-child(5),.catalog-table td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
+.catalog-table input { width:100%; min-width:0; }
+.catalog-table td:nth-child(4) input { min-width:0; }
+.catalog-table input { font-size:13px; padding:6px 8px; }
+
 .catalog-icon-button { width:36px; min-width:36px; padding:7px; }
 .catalog-empty { text-align:center; padding:32px !important; color:#64748b; }
 .catalog-footer { padding:12px 20px; border-top:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; color:#64748b; font-size:12px; }

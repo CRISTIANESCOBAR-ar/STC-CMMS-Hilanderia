@@ -252,3 +252,10 @@ pruebas del servicio en entorno piloto.
 - Filtros con columnas flexibles que no ensanchan el modal; distribución reducida para pantallas pequeñas. Denominaciones extensas pueden partirse dentro de la celda.
 - Prueba del componente real incluye apertura del catálogo, registro con texto extenso, edición/cancelación, filtros vacíos y cierre sin errores Vue. 40 pruebas correctas y build correcto.
 - Ensayo visual pendiente en las resoluciones de planta; cambios de presentación, sin modificación de permisos o datos remotos.
+
+### V1 — Distribución de columnas del catálogo
+
+- Anchos definidos con colgroup y table-layout fixed para impedir que Denominación absorba el espacio de los códigos.
+- Sección ocupa 22%; Grupo/Sub-G y Catálogo/Artículo tienen anchos propios. Sección y Denominación parten por palabras, códigos permanecen en una línea.
+- Tabla de al menos 980 px, con desplazamiento horizontal dentro del modal en pantallas reducidas; edición respeta los anchos de celda.
+- 40 pruebas correctas; ajuste visual pendiente de revisión en navegador del usuario.

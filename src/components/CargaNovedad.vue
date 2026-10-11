@@ -24,7 +24,6 @@ import { getMotivos } from '../constants/motivos';
 import { getMotivosList } from '../services/motivosService';
 
 const desktop = ref(false);
-const activePanel = ref('events');
 const eventsRefresh = ref(0);
 let desktopMedia;
 function updateDesktop() { desktop.value = desktopMedia.matches; }
@@ -506,7 +505,6 @@ const onSubmit = async () => {
     uploadProgress.value = 100;
     successMessage.value = "Novedad reportada correctamente.";
     eventsRefresh.value++;
-    activePanel.value = 'events';
     cerrarMenuAcciones();
     
     if (imagenPreview.value && imagenPreview.value.startsWith('blob:')) {
@@ -607,7 +605,7 @@ const enviarNotaTurno = async () => {
 
 <template>
   <div class="fault-page bg-transparent pb-24">
-    <header class="fault-page-heading"><div><h1>Reportar falla</h1><p>Carga y seguimiento de eventos del sector</p></div><nav class="fault-view-tabs" aria-label="Panel de trabajo"><button type="button" :aria-pressed="activePanel === 'events'" @click="activePanel = 'events'">Eventos</button><button type="button" :aria-pressed="activePanel === 'form'" @click="activePanel = 'form'">Nueva falla</button></nav></header>
+    <header class="fault-page-heading"><div><h1>Reportar falla</h1><p>Carga y seguimiento de eventos del sector</p></div></header>
     <!-- Header -->
     <!-- El header ahora se maneja globalmente en App.vue -->
 
@@ -628,7 +626,7 @@ const enviarNotaTurno = async () => {
       </div>
     </Teleport>
 
-    <div class="fault-workspace" :class="'fault-active-' + activePanel">
+    <div class="fault-workspace">
     <main class="fault-form-panel max-w-sm mx-auto pt-2">
       <header class="fault-form-heading"><h2>Nueva falla</h2><div class="fault-category-select"><button type="button" :disabled="isSubmitting" :aria-pressed="tipoProblema === 'Mecánico'" @click="tipoProblema = 'Mecánico'"><Wrench :size="15" />Mecánico</button><button type="button" :disabled="isSubmitting" :aria-pressed="tipoProblema === 'Eléctrico'" @click="tipoProblema = 'Eléctrico'"><Zap :size="15" />Eléctrico</button></div></header>
       <!-- Success/Error Message (Mantenerlos flotantes o arriba) -->
@@ -1084,15 +1082,14 @@ const enviarNotaTurno = async () => {
   .fault-page-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:12px; }
   .fault-page-heading h1 { font-size:20px; font-weight:600; color:#0f172a; }
   .fault-page-heading p { font-size:12px; color:#64748b; }
-  .fault-view-tabs { display:none; }
   .fault-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(350px,390px) minmax(0,1fr); gap:14px; }
   .fault-form-panel { width:100%; max-width:none; margin:0; padding:0; overflow:auto; min-height:0; border:1px solid #dce3ec; border-radius:8px; background:white; display:flex; flex-direction:column; }
   .fault-form-heading { display:block; flex-shrink:0; padding:12px 14px; }
   .fault-form-heading h2 { color:#0f172a; font-size:17px; font-weight:600; margin-bottom:10px; }
   .fault-category-select { display:flex; gap:6px; }
-  .fault-category-select button,.fault-view-tabs button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 12px; border:1px solid #dce3ec; border-radius:6px; font-size:13px; color:#475569; cursor:pointer; }
+  .fault-category-select button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 12px; border:1px solid #dce3ec; border-radius:6px; font-size:13px; color:#475569; cursor:pointer; }
   .fault-category-select button { flex:1; }
-  .fault-category-select button[aria-pressed=true],.fault-view-tabs button[aria-pressed=true] { background:#eef2ff; color:#4338ca; border-color:#a5b4fc; }
+  .fault-category-select button[aria-pressed=true] { background:#eef2ff; color:#4338ca; border-color:#a5b4fc; }
   .fault-form { border-bottom:0; flex:1; display:flex; flex-direction:column; }
   .fault-form fieldset { flex:1; display:flex; flex-direction:column; }
   .fault-form fieldset > div { flex-shrink:0; }
@@ -1122,10 +1119,11 @@ const enviarNotaTurno = async () => {
 @media(min-width:768px) and (max-width:980px) {
   .fault-page { padding:10px; gap:10px; }
   .fault-page-heading h1 { font-size:18px; }
-  .fault-view-tabs { display:flex; gap:6px; }
-  .fault-workspace { display:flex; flex-direction:column; }
-  .fault-form-panel,.fault-events-panel { flex:1; min-height:0; }
-  .fault-active-events .fault-form-panel,.fault-active-form .fault-events-panel { display:none; }
+  .fault-page { overflow:auto; }
+  .fault-workspace { display:flex; flex-direction:column; flex:none; gap:12px; }
+  .fault-form-panel { flex:none; overflow:visible; }
+  .fault-events-panel { flex:none; height:clamp(360px,65vh,560px); }
+  .fault-observations-input { flex:none; height:140px; }
   .fault-form-panel { width:min(680px,100%); align-self:center; }
 }
 </style>

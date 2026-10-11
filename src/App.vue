@@ -318,10 +318,10 @@ const navigateTab = (action) => {
     />
   </div>
   
-  <div v-else class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
+  <div v-else :class="{ 'machine-workspace-shell': currentPath === '/maquinas' }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
     
     <!-- SIDEBAR DESKTOP (App Shell) -->
-    <aside v-if="user" class="hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-4 shadow-sm select-none z-50">
+    <aside v-if="user" class="desktop-navigation hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-4 shadow-sm select-none z-50">
       
       <!-- Logo Superior -->
       <div class="w-12 h-12 flex items-center justify-center mb-4 border border-gray-100 rounded-xl shadow-sm overflow-hidden shrink-0">
@@ -588,12 +588,12 @@ const navigateTab = (action) => {
         <div 
           v-if="isMenuOpen" 
           @click="closeMenu"
-          class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[45] lg:hidden"
+          class="mobile-navigation fixed inset-0 bg-black/40 backdrop-blur-sm z-[45] lg:hidden"
         ></div>
       </transition>
 
       <!-- Barra de Navegación Móvil / Tablet (Oculta en Desktop) -->
-      <nav v-if="user" class="lg:hidden bg-white text-gray-900 shadow-sm border-b border-gray-100 shrink-0 z-50 relative">
+      <nav v-if="user" class="mobile-navigation lg:hidden bg-white text-gray-900 shadow-sm border-b border-gray-100 shrink-0 z-50 relative">
         <div class="px-4 h-[54px] flex justify-between items-center">
           <div class="flex items-center space-x-3 flex-1 min-w-0 overflow-hidden">
             <div class="bg-white p-px rounded-xs border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
@@ -735,12 +735,12 @@ const navigateTab = (action) => {
       <!-- Router View Workspace -->
       <!-- Keep the desktop Teleport destination mounted before routed views. -->
       <div id="navbar-actions" class="hidden lg:flex items-center px-4 py-2 bg-white border-b border-gray-100 shrink-0 empty:hidden"></div>
-      <main class="flex-1 overflow-y-auto relative w-full h-full min-h-0 bg-transparent pb-0" :style="showTabBar ? (isPreviewMode ? 'padding-bottom: 96px' : 'padding-bottom: 56px') : (isPreviewMode ? 'padding-bottom: 40px' : '')">
+      <main class="app-workspace flex-1 overflow-y-auto relative w-full min-h-0 bg-transparent" :style="{ '--mobile-bottom': showTabBar ? (isPreviewMode ? '96px' : '56px') : (isPreviewMode ? '40px' : '0px'), '--desktop-bottom': isPreviewMode ? '40px' : '0px' }">
         <router-view></router-view>
       </main>
 
       <!-- 📱 Tab Bar global Mobile -->
-      <div v-if="showTabBar" class="lg:hidden fixed inset-x-0 z-[90] bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" :style="isPreviewMode ? 'bottom: 40px' : 'bottom: 0'">
+      <div v-if="showTabBar" class="mobile-navigation lg:hidden fixed inset-x-0 z-[90] bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" :style="isPreviewMode ? 'bottom: 40px' : 'bottom: 0'">
         <div class="max-w-lg mx-auto flex items-center justify-around px-1 py-1">
           <button
             v-for="tab in tabActions"
@@ -783,3 +783,16 @@ const navigateTab = (action) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.app-workspace { padding-bottom: var(--mobile-bottom, 0px); }
+@media (min-width: 1024px) {
+  .app-workspace { padding-bottom: var(--desktop-bottom, 0px); }
+}
+/* Plant PCs keep the compact desktop shell; other views retain their existing portals. */
+@media (min-width: 768px) {
+  .machine-workspace-shell .desktop-navigation { display: flex; }
+  .machine-workspace-shell .mobile-navigation { display: none; }
+  .machine-workspace-shell .app-workspace { padding-bottom: var(--desktop-bottom, 0px); }
+}
+</style>

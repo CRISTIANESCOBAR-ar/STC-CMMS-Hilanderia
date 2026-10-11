@@ -236,3 +236,10 @@ pruebas del servicio en entorno piloto.
 - Patrón para siguientes vistas: padding 8/12/20 px según ancho, área de datos flex con min-height:0, desplazamiento interno, controles de 36 px y botones con icono más texto cuando haya espacio.
 - Próximos bloques: aprobar esta vista; trasladar el patrón a históricos/órdenes; revisar formularios y paneles. R3 y recuperación ante cortes siguen pendientes antes de ampliar producción.
 - Reversión: revertir únicamente el commit de V1, compilar y desplegar hosting:main; no requiere rollback de base de datos.
+
+### V1 — Ajustes tras prueba en PC
+
+- Corregida la reserva de 56 px para navegación móvil que se aplicaba también en escritorio; la reserva para vista previa de roles se mantiene cuando corresponde.
+- En /maquinas, desde 768 px se usa navegación lateral compacta y se ocultan cabecera/barra rápida móviles. Otras vistas mantienen su comportamiento hasta adaptar sus portales.
+- Exportar se cierra antes de ejecutar la descarga, al pulsar fuera y con Escape; Escape devuelve el foco al botón. Listeners liberados al salir de la vista.
+- 40 pruebas correctas, incluyendo selección de exportación, cierre exterior y Escape. Validación visual del ajuste pendiente en las PC del usuario.

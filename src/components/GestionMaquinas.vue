@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { authService, userRole } from '../services/authService';
 import { db, storage } from '../firebase/config';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -57,6 +57,34 @@ const uploadingPasoIndex = ref(null);
 const showModal = ref(false);
 const isEditing = ref(false);
 const viewMode = ref('table');
+
+const exportMenuOpen = ref(false);
+const exportMenuElement = ref(null);
+const closeExportMenu = () => { exportMenuOpen.value = false; };
+const handleExportOutside = (event) => {
+  if (!exportMenuElement.value?.contains(event.target)) closeExportMenu();
+};
+const handleExportKeydown = (event) => {
+  if (event.key === 'Escape' && exportMenuOpen.value) {
+    closeExportMenu();
+    exportMenuElement.value?.querySelector('button')?.focus();
+  }
+};
+const runExport = (exporter) => {
+  closeExportMenu();
+  return exporter();
+};
+onMounted(() => {
+  if (typeof document === 'undefined') return;
+  document.addEventListener('pointerdown', handleExportOutside);
+  document.addEventListener('keydown', handleExportKeydown);
+});
+onUnmounted(() => {
+  if (typeof document === 'undefined') return;
+  document.removeEventListener('pointerdown', handleExportOutside);
+  document.removeEventListener('keydown', handleExportKeydown);
+});
+
 
 const editingRowId = ref(null);
 const editingRow = ref({});
@@ -583,7 +611,13 @@ const exportCatalogToExcel = async () => {
         <div class="machines-heading"><div class="machines-eyebrow">Activos de planta</div><h1>Máquinas <span>{{ maquinas.length }}</span></h1></div>
         <div class="machines-actions">
           <button class="cmms-button" @click="openCatalogModal()"><BookOpen :size="16" />Ver catálogo</button>
-          <details class="machines-export"><summary class="cmms-button"><Download :size="16" />Exportar</summary><div class="machines-export-menu"><button @click="exportMaquinasToExcel">Listado de máquinas · XLSX</button><button @click="exportToExcel">Catálogo R-60 · XLSX</button></div></details>
+          <div ref="exportMenuElement" class="machines-export">
+            <button class="cmms-button" :aria-expanded="exportMenuOpen" aria-controls="machines-export-options" @click="exportMenuOpen = !exportMenuOpen"><Download :size="16" />Exportar</button>
+            <div v-if="exportMenuOpen" id="machines-export-options" class="machines-export-menu">
+              <button @click="runExport(exportMaquinasToExcel)">Listado de máquinas · XLSX</button>
+              <button @click="runExport(exportToExcel)">Catálogo R-60 · XLSX</button>
+            </div>
+          </div>
           <button v-if="userRole === 'admin'" class="cmms-button cmms-button-primary" @click="openAddModal"><Plus :size="16" />Agregar máquina</button>
         </div>
       </header>
@@ -1052,8 +1086,6 @@ const exportCatalogToExcel = async () => {
 .cmms-button:disabled { opacity:.35; cursor:default; }
 .cmms-button:focus-visible,.cmms-control:focus-visible,.machines-search:focus-within,.cmms-segment button:focus-visible,.machines-table-scroll:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
 .machines-export { position:relative; }
-.machines-export summary { list-style:none; }
-.machines-export summary::-webkit-details-marker { display:none; }
 .machines-export-menu { position:absolute; right:0; top:calc(100% + 6px); width:230px; z-index:40; padding:5px; border:1px solid #d8e0ea; background:white; border-radius:8px; box-shadow:0 8px 24px #0f172a18; }
 .machines-export-menu button { width:100%; text-align:left; padding:10px; font-size:13px; cursor:pointer; }
 .machines-export-menu button:hover { background:#eef2ff; }

@@ -25,7 +25,7 @@ globalThis.ShadowRoot ??= class ShadowRoot {};
 function host({ missingDesktopPortal = false } = {}) {
   const node = (type, text = '') => ({ type, text, children: [], parent: null,
     tagName: type.toUpperCase(), options: [], addEventListener() {}, removeEventListener() {},
-    getRootNode() { return { activeElement: null }; }, setAttribute() {}, removeAttribute() {}, getAttribute() { return null; } });
+    querySelector() { return null; }, contains() { return false; }, getRootNode() { return { activeElement: null }; }, setAttribute() {}, removeAttribute() {}, getAttribute() { return null; } });
   const body = node('body');
   const insert = (child, parent, anchor) => {
     if (child.parent) child.parent.children.splice(child.parent.children.indexOf(child), 1);
@@ -127,6 +127,20 @@ test('machine view renders table, cards and empty filters without depending on d
       assert.equal(root._vnode.component.setupState.maquinas.length, 1);
       const state = root._vnode.component.setupState;
       assert.equal(state.viewMode, 'table');
+      state.exportMenuOpen = true;
+      await Vue.nextTick();
+      let exported = false;
+      state.runExport(() => { exported = true; });
+      assert.equal(exported, true);
+      assert.equal(state.exportMenuOpen, false);
+      state.exportMenuOpen = true;
+      state.handleExportKeydown({ key: 'Escape' });
+      assert.equal(state.exportMenuOpen, false);
+      state.exportMenuElement = { contains: () => false };
+      state.exportMenuOpen = true;
+      state.handleExportOutside({ target: {} });
+      assert.equal(state.exportMenuOpen, false);
+      state.exportMenuElement = null;
       state.showModal = true;
       await Vue.nextTick();
       state.showModal = false;

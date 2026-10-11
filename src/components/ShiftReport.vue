@@ -4,7 +4,9 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { collection, getDocs, query, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { parseShiftReportCSV, transformRows, generarReportePRD } from '../services/shiftReportService';
-import { guardarReporteCSV, guardarRegistro, suscribirReporte } from '../services/shiftReportFirestore';
+import { guardarReporteCSV, guardarCambiosManual, suscribirReporte } from '../services/shiftReportFirestore';
+import { onBeforeRouteLeave } from 'vue-router';
+import { SHIFT_GRID_FIELDS, shiftGridTarget, cleanShiftDigits } from '../utils/shiftGrid';
 import { Upload, Download, Cloud, X, Save, ChevronLeft, ChevronRight, FolderOpen } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
@@ -23,13 +25,92 @@ const telaresMaquinas = ref([]);
 const telarAbiertoIdx = ref(null); // null = ninguno abierto
 
 const registros = ref({});
+const dirtyRecords = ref({});
+const inputDrafts = ref({});
+const remoteRecords = ref({});
+const dirtyCount = computed(() => Object.keys(dirtyRecords.value).length);
+const gridElement = ref(null);
+const dateElement = ref(null);
+const gridFields = SHIFT_GRID_FIELDS;
+const gridTurnos = ['A', 'B', 'C'];
+const gridCount = computed(() => telaresMaquinas.value.length * 15);
+function focusGrid(index) {
+  nextTick(() => {
+    const input = gridElement.value?.querySelector('[data-grid-index="' + index + '"]');
+    if (input) { input.focus(); input.select(); }
+  });
+}
+function gridKeydown(event, index) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = shiftGridTarget(index, event.key, gridCount.value);
+  if (target !== null) { event.preventDefault(); focusGrid(target); }
+}
+function gridInput(event, loom, turno, field, index) {
+  const cleaned = cleanShiftDigits(event.target.value, field.max);
+  event.target.value = cleaned;
+  setVal(loom, turno, field.field, cleaned);
+  if (cleaned.length === field.max) {
+    let next = index + 1;
+    while (next < gridCount.value && gridElement.value?.querySelector('[data-grid-index="' + next + '"]')?.readOnly) next++;
+    if (next < gridCount.value) focusGrid(next);
+    else nextTick(() => gridElement.value?.querySelector('[data-grid-save]')?.focus());
+  }
+}
+function hasUnsavedChanges() {
+  if (!dirtyCount.value && !isSaving.value) return false;
+  Swal.fire({ icon: 'info', title: 'Cambios sin guardar', text: 'Guardá los cambios antes de cambiar la fecha, importar o exportar.' });
+  return true;
+}
+async function guardarPlanilla(loom = null) {
+  if (isSaving.value) return false;
+  const changes = Object.entries(dirtyRecords.value).filter(([key]) => !loom || registros.value[key]?.loom === loom)
+    .map(([key, base]) => ({ key, base, data: { ...registros.value[key] } }));
+  if (!changes.length) return true;
+  const date = fechaReporte.value;
+  isSaving.value = true;
+  for (const change of changes) pendingSaves.add(change.key);
+  try {
+    await guardarCambiosManual(date, changes);
+    for (const change of changes) {
+      delete dirtyRecords.value[change.key];
+      for (const field of gridFields) delete inputDrafts.value[change.key + '_' + field.field];
+    }
+    showToast('Cambios guardados ✓');
+    return true;
+  } catch (error) {
+    Swal.fire({ icon: 'error', title: error.code === 'shiftreport/conflict' ? 'Otro usuario modificó estos datos' : 'No se pudo guardar', text: error.code === 'shiftreport/conflict' ? error.message + ' Tus cambios siguen en pantalla; revisá el conflicto antes de continuar.' : 'Tus cambios siguen pendientes. Revisá la conexión y reintentá.' });
+    return false;
+  } finally {
+    for (const change of changes) pendingSaves.delete(change.key);
+    isSaving.value = false;
+  }
+}
+async function descartarCambios() {
+  if (isSaving.value) return;
+  const answer = await Swal.fire({ icon: 'warning', title: 'Descartar cambios pendientes', text: 'Se recuperarán los últimos datos recibidos del servidor.', showCancelButton: true, confirmButtonText: 'Descartar', cancelButtonText: 'Seguir cargando' });
+  if (!answer.isConfirmed) return;
+  dirtyRecords.value = {};
+  inputDrafts.value = {};
+  registros.value = { ...remoteRecords.value };
+}
+function protectUnload(event) {
+  if (dirtyCount.value) { event.preventDefault(); event.returnValue = ''; }
+}
+onMounted(() => window.addEventListener('beforeunload', protectUnload));
+onUnmounted(() => { window.removeEventListener('beforeunload', protectUnload); if (toast.value.timer) clearTimeout(toast.value.timer); });
+onBeforeRouteLeave(async () => {
+  if (isSaving.value) return false;
+  if (!dirtyCount.value) return true;
+  const answer = await Swal.fire({ icon: 'warning', title: 'Cambios sin guardar', text: '¿Salir y descartar los cambios pendientes?', showCancelButton: true, confirmButtonText: 'Descartar y salir', cancelButtonText: 'Seguir cargando' });
+  return answer.isConfirmed;
+});
 
 const fechaAyer = () => addDays(plantDate(), -1).replaceAll('-', '/');
 const fechaReporte = ref(fechaAyer());
 
 const fechaInput = computed({
   get: () => fechaReporte.value.replace(/\//g, '-'),
-  set: (v) => { fechaReporte.value = v.replace(/-/g, '/'); }
+  set: (v) => { if (hasUnsavedChanges()) { nextTick(() => { if (dateElement.value) dateElement.value.value = fechaInput.value; }); return; } fechaReporte.value = v.replace(/-/g, '/'); }
 });
 
 let unsubscribeFn = null;
@@ -172,16 +253,17 @@ async function elegirCarpeta() {
 function suscribir() {
   if (unsubscribeFn) unsubscribeFn();
   unsubscribeFn = suscribirReporte(fechaReporte.value, (data) => {
+    remoteRecords.value = { ...(data?.registros || {}) };
     if (data) {
       const incoming = data.registros || {};
       const merged = { ...incoming };
-      for (const key of pendingSaves) {
+      for (const key of new Set([...pendingSaves, ...Object.keys(dirtyRecords.value)])) {
         if (registros.value[key]) merged[key] = registros.value[key];
       }
       registros.value = merged;
       csvMeta.value = data.csvMeta || null;
       csvLoaded.value = Object.values(incoming).some(r => r.source === 'csv');
-    } else if (pendingSaves.size === 0) {
+    } else if (pendingSaves.size === 0 && !dirtyCount.value) {
       registros.value = {};
       csvMeta.value = null;
       csvLoaded.value = false;
@@ -209,6 +291,7 @@ onMounted(async () => {
 });
 
 watch(fechaReporte, () => {
+  inputDrafts.value = {};
   registros.value = {};
   csvMeta.value = null;
   csvLoaded.value = false;
@@ -311,11 +394,18 @@ function getVal(loom, turno, field) {
   return registros.value[key]?.[field] ?? null;
 }
 
+function getInputVal(loom, turno, field) {
+  const key = loom + '_' + turno + '_' + field;
+  return inputDrafts.value[key] ?? getVal(loom, turno, field) ?? '';
+}
 function setVal(loom, turno, field, value) {
+  if (isSaving.value || isLoading.value) return;
   const key = `${loom}_${turno}`;
+  if (!(key in dirtyRecords.value)) dirtyRecords.value[key] = registros.value[key] ? { ...registros.value[key] } : null;
   if (!registros.value[key]) {
     registros.value[key] = { loom, turno, rpm: null, picks: null, weftCount: null, warpCount: null, otherCount: null, style: '', beam: '', source: 'manual' };
   }
+  inputDrafts.value[key + '_' + field] = String(value);
   const num = parseInt(value, 10);
   registros.value[key] = { ...registros.value[key], [field]: isNaN(num) ? null : num };
 }
@@ -329,33 +419,30 @@ const fieldOrder = [
   { turno: 'C', field: 'picks', max: 3 }, { turno: 'C', field: 'weftCount', max: 2 }, { turno: 'C', field: 'warpCount', max: 2 }, { turno: 'C', field: 'otherCount', max: 2 }, { turno: 'C', field: 'rpm', max: 3 },
 ];
 
+function focusMobile(index) {
+  nextTick(() => {
+    const next = fieldOrder[index];
+    const input = next && document.querySelector('[data-sr="' + next.turno + '_' + next.field + '"]');
+    if (input) { input.focus(); input.select(); }
+  });
+}
+function mobileKeydown(event, turno, field) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const index = fieldOrder.findIndex(item => item.turno === turno && item.field === field);
+  const target = shiftGridTarget(index, event.key, fieldOrder.length, 5);
+  if (target !== null) { event.preventDefault(); focusMobile(target); }
+}
 function onInput(ev, loom, turno, field, maxLen) {
-  // Solo dígitos, limitar a maxLen
-  const cleaned = ev.target.value.replace(/\D/g, '').slice(0, maxLen);
+  const cleaned = cleanShiftDigits(ev.target.value, maxLen);
   ev.target.value = cleaned;
   setVal(loom, turno, field, cleaned);
-
-  if (cleaned.length >= maxLen) {
-    const curIdx = fieldOrder.findIndex(f => f.turno === turno && f.field === field);
-    if (curIdx === -1) return;
-
-    for (let i = curIdx + 1; i < fieldOrder.length; i++) {
-      const next = fieldOrder[i];
-      const val = getVal(loom, next.turno, next.field);
-      if (val == null) {
-        nextTick(() => {
-          const el = document.querySelector(`[data-sr="${next.turno}_${next.field}"]`);
-          if (el) el.focus();
-        });
-        return;
-      }
-    }
-    // Todos completos → foco en Guardar
-    nextTick(() => {
-      const btn = document.querySelector('[data-sr-save]');
-      if (btn) btn.focus();
-    });
+  if (cleaned.length < maxLen) return;
+  const index = fieldOrder.findIndex(item => item.turno === turno && item.field === field);
+  for (let i = index + 1; i < fieldOrder.length; i++) {
+    const next = fieldOrder[i];
+    if (document.querySelector('[data-sr="' + next.turno + '_' + next.field + '"]')) { focusMobile(i); return; }
   }
+  nextTick(() => document.querySelector('[data-sr-save]')?.focus());
 }
 
 async function guardarTelar() {
@@ -393,38 +480,9 @@ async function guardarTelar() {
     if (!res.isConfirmed) return;
   }
 
-  isSaving.value = true;
-
-  // Capturar y proteger TODOS los turnos con datos antes de cualquier await,
-  // para que el onSnapshot que dispara cada guardado no los sobreescriba.
-  const keysToSave = [];
-  for (const turno of ['A', 'B', 'C']) {
-    const key = `${loom}_${turno}`;
-    if (registros.value[key]) {
-      keysToSave.push({ key, turno, data: { ...registros.value[key] } });
-      pendingSaves.add(key);
-    }
-  }
-
-  try {
-    for (const { key, turno, data } of keysToSave) {
-      await guardarRegistro(fechaReporte.value, loom, turno, data);
-      pendingSaves.delete(key);
-    }
-    showToast('Guardado ✓');
-    // Saltar al siguiente telar o cerrar si es el último
+  if (await guardarPlanilla(loom)) {
     const nextIdx = telarAbiertoIdx.value + 1;
-    if (nextIdx < telaresMaquinas.value.length) {
-      telarAbiertoIdx.value = nextIdx;
-    } else {
-      telarAbiertoIdx.value = null;
-    }
-  } catch (e) {
-    for (const { key } of keysToSave) pendingSaves.delete(key);
-    console.error(e);
-    Swal.fire('Error', 'No se pudo guardar', 'error');
-  } finally {
-    isSaving.value = false;
+    telarAbiertoIdx.value = nextIdx < telaresMaquinas.value.length ? nextIdx : null;
   }
 }
 
@@ -441,6 +499,7 @@ function pickCSVFile() {
 }
 
 async function procesarArchivoCSV(file) {
+  if (hasUnsavedChanges()) return;
   const text = await file.text();
   const { meta, rows } = parseShiftReportCSV(text);
   const records = transformRows(rows);
@@ -515,6 +574,7 @@ async function cargarCSV() {
 }
 
 function exportarPRD() {
+  if (hasUnsavedChanges()) return;
   const merged = todosRegistrosMerged.value;
   const incompletos = merged.filter(r => !r.rpm);
   if (incompletos.length > 0) {
@@ -538,6 +598,7 @@ function descargarTXT(records) {
 const isExporting = ref(false);
 
 async function exportarXLSX() {
+  if (hasUnsavedChanges()) return;
   if (isExporting.value) return;
   isExporting.value = true;
   try {
@@ -710,19 +771,19 @@ async function exportarXLSX() {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-110px)] bg-gray-50 flex flex-col">
+  <div class="shift-page">
     <!-- Toast de guardado -->
     <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="opacity-0 translate-y-2" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition duration-150 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 translate-y-2">
       <div v-if="toast.visible" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-gray-800 text-white text-sm font-semibold rounded-full shadow-lg pointer-events-none">
         {{ toast.message }}
       </div>
     </Transition>
-    <main class="flex-1 max-w-4xl mx-auto w-full px-3 pt-3 pb-6 flex flex-col space-y-3 overflow-y-auto">
+    <main class="shift-workspace">
 
       <!-- Header compacto -->
       <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div class="px-3 py-2 flex items-center gap-2">
-          <input type="date" v-model="fechaInput" class="px-2 py-1.5 rounded-lg border border-gray-300 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500" />
+          <input ref="dateElement" type="date" :disabled="isSaving || isLoading" v-model="fechaInput" class="px-2 py-1.5 rounded-lg border border-gray-300 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500" />
           <Cloud class="w-4 h-4 shrink-0 transition-colors" :class="isSaving ? 'text-amber-500 animate-pulse' : 'text-emerald-500'" />
           <div class="flex-1" />
           <!-- Badge de carpeta guardada o botón para elegir carpeta -->
@@ -767,8 +828,13 @@ async function exportarXLSX() {
         </div>
       </div>
 
+      <section ref="gridElement" class="shift-desktop">
+        <header class="shift-grid-toolbar"><div><h1>Producción por turno</h1><p>Pts × 1.000 · tres dígitos para avanzar · flechas para navegar</p></div><div class="shift-grid-actions"><span aria-live="polite">{{ dirtyCount ? dirtyCount + ' registros pendientes' : 'Sin cambios pendientes' }}</span><button data-grid-save class="shift-button shift-button-primary" :disabled="!dirtyCount || isSaving" @click="guardarPlanilla()"><Save :size="16" />{{ isSaving ? 'Guardando…' : 'Guardar cambios' }}</button><button v-if="dirtyCount" class="shift-button" :disabled="isSaving" @click="descartarCambios">Descartar</button><button class="shift-button" :disabled="!!dirtyCount || isSaving" @click="exportarPRD"><Download :size="16" />TXT PRD</button><button class="shift-button" :disabled="!!dirtyCount || isSaving || isExporting" @click="exportarXLSX"><Download :size="16" />Excel</button></div></header>
+        <div class="shift-grid-scroll"><table class="shift-grid"><caption class="sr-only">Puntos en miles, paradas de trama, urdimbre y otras, y RPM por telar y turno</caption><thead><tr><th rowspan="2" class="shift-loom">Telar</th><th v-for="turno in gridTurnos" :key="turno" colspan="5" :class="'shift-turn-' + turno">Turno {{ turno }}</th></tr><tr><template v-for="turno in gridTurnos" :key="turno"><th v-for="field in gridFields" :key="field.field" :class="'shift-turn-' + turno">{{ field.label }}</th></template></tr></thead><tbody><tr v-for="(telar, row) in telaresResumen" :key="telar.loom"><th class="shift-loom" scope="row" :title="'Máquina ' + telar.loom">{{ telar.label }}</th><template v-for="(turno, ti) in gridTurnos" :key="turno"><td v-for="(field, fi) in gridFields" :key="field.field" :class="[{ 'shift-dirty': (telar.loom + '_' + turno) in dirtyRecords, 'shift-imported': registros[telar.loom + '_' + turno]?.source === 'csv' }, { 'shift-turn-start': fi === 0, 'shift-attention': field.alertAbove != null && getVal(telar.loom, turno, field.field) > field.alertAbove }]"><input type="text" inputmode="numeric" :maxlength="field.max" :value="getInputVal(telar.loom, turno, field.field)" :readonly="registros[telar.loom + '_' + turno]?.source === 'csv'" :disabled="isSaving || isLoading" :data-grid-index="row * 15 + ti * 5 + fi" :aria-label="'Telar ' + telar.label + ', turno ' + turno + ', ' + field.label" :title="registros[telar.loom + '_' + turno]?.source === 'csv' ? 'Importado de CSV; solo lectura' : field.field === 'picks' ? 'Miles de picks: 261 = 261.000 picks' : field.label" @focus="$event.target.select()" @keydown="gridKeydown($event, row * 15 + ti * 5 + fi)" @input="gridInput($event, telar.loom, turno, field, row * 15 + ti * 5 + fi)" /></td></template></tr><tr v-if="!telaresResumen.length"><td colspan="16" class="shift-grid-empty">No hay telares activos para mostrar.</td></tr></tbody></table></div>
+        <footer class="shift-grid-help">Amarillo: cambios pendientes · Gris: datos importados de CSV · Enter y ↑/↓ recorren la columna · Tab y ←/→ recorren los campos</footer>
+      </section>
       <!-- Lista de telares con tarjeta expandible -->
-      <div class="space-y-1">
+      <div class="shift-mobile space-y-1">
         <div v-for="t in telaresResumen" :key="t.loom">
           <!-- Fila del telar -->
           <button
@@ -828,27 +894,27 @@ async function exportarXLSX() {
 
                   <td class="px-0.5 py-0.5 text-center">
                     <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.picks }}</span>
-                    <input v-else :data-sr="`${row.turno}_picks`" type="text" inputmode="numeric" maxlength="3" :value="getVal(telarAbierto.loom, row.turno, 'picks') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'picks', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                    <input v-else :data-sr="`${row.turno}_picks`" @keydown="mobileKeydown($event, row.turno, 'picks')" type="text" :disabled="isSaving || isLoading" @focus="$event.target.select()" inputmode="numeric" maxlength="3" :value="getInputVal(telarAbierto.loom, row.turno, 'picks')" @input="onInput($event, telarAbierto.loom, row.turno, 'picks', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
                   </td>
 
                   <td class="px-0.5 py-0.5 text-center">
                     <span v-if="row.tieneCSV" class="text-sm font-bold" :class="row.weftCount > 10 ? 'text-red-600' : 'text-gray-700'">{{ row.weftCount }}</span>
-                    <input v-else :data-sr="`${row.turno}_weftCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'weftCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'weftCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                    <input v-else :data-sr="`${row.turno}_weftCount`" @keydown="mobileKeydown($event, row.turno, 'weftCount')" type="text" :disabled="isSaving || isLoading" @focus="$event.target.select()" inputmode="numeric" maxlength="2" :value="getInputVal(telarAbierto.loom, row.turno, 'weftCount')" @input="onInput($event, telarAbierto.loom, row.turno, 'weftCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
                   </td>
 
                   <td class="px-0.5 py-0.5 text-center">
                     <span v-if="row.tieneCSV" class="text-sm font-bold" :class="row.warpCount > 5 ? 'text-red-600' : 'text-gray-700'">{{ row.warpCount }}</span>
-                    <input v-else :data-sr="`${row.turno}_warpCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'warpCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'warpCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                    <input v-else :data-sr="`${row.turno}_warpCount`" @keydown="mobileKeydown($event, row.turno, 'warpCount')" type="text" :disabled="isSaving || isLoading" @focus="$event.target.select()" inputmode="numeric" maxlength="2" :value="getInputVal(telarAbierto.loom, row.turno, 'warpCount')" @input="onInput($event, telarAbierto.loom, row.turno, 'warpCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
                   </td>
 
                   <td class="px-0.5 py-0.5 text-center">
                     <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.otherCount }}</span>
-                    <input v-else :data-sr="`${row.turno}_otherCount`" type="text" inputmode="numeric" maxlength="2" :value="getVal(telarAbierto.loom, row.turno, 'otherCount') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'otherCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                    <input v-else :data-sr="`${row.turno}_otherCount`" @keydown="mobileKeydown($event, row.turno, 'otherCount')" type="text" :disabled="isSaving || isLoading" @focus="$event.target.select()" inputmode="numeric" maxlength="2" :value="getInputVal(telarAbierto.loom, row.turno, 'otherCount')" @input="onInput($event, telarAbierto.loom, row.turno, 'otherCount', 2)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
                   </td>
 
                   <td class="px-0.5 py-0.5 text-center">
                     <span v-if="row.tieneCSV" class="text-sm font-bold text-gray-700">{{ row.rpm }}</span>
-                    <input v-else :data-sr="`${row.turno}_rpm`" type="text" inputmode="numeric" maxlength="3" :value="getVal(telarAbierto.loom, row.turno, 'rpm') ?? ''" @input="onInput($event, telarAbierto.loom, row.turno, 'rpm', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
+                    <input v-else :data-sr="`${row.turno}_rpm`" @keydown="mobileKeydown($event, row.turno, 'rpm')" type="text" :disabled="isSaving || isLoading" @focus="$event.target.select()" inputmode="numeric" maxlength="3" :value="getInputVal(telarAbierto.loom, row.turno, 'rpm')" @input="onInput($event, telarAbierto.loom, row.turno, 'rpm', 3)" class="w-full text-center text-sm font-bold border border-amber-300 bg-amber-50 rounded px-1 py-1 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-300" />
                   </td>
                 </tr>
               </tbody>
@@ -856,7 +922,7 @@ async function exportarXLSX() {
 
             <!-- Botón guardar siempre visible -->
             <div class="px-3 py-2 border-t border-gray-100">
-              <button data-sr-save @click="guardarTelar" :disabled="isSaving" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50">
+              <button data-sr-save @click="guardarTelar" :disabled="isSaving || isLoading" class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50">
                 <Save class="w-4 h-4" /> Guardar
               </button>
             </div>
@@ -865,7 +931,7 @@ async function exportarXLSX() {
       </div>
 
       <!-- Botones exportar -->
-      <div class="pb-4 pt-2 flex flex-col gap-2">
+      <div class="shift-mobile pb-4 pt-2 flex flex-col gap-2">
         <button @click="exportarPRD" class="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-base font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-md active:scale-[0.98]">
           <Download class="w-5 h-5" /> Exportar TXT para PRD
         </button>
@@ -879,3 +945,45 @@ async function exportarXLSX() {
     </main>
   </div>
 </template>
+<style scoped>
+.shift-page { height:100%; min-height:0; background:#f5f7fa; display:flex; flex-direction:column; font-family:Inter,ui-sans-serif,system-ui,sans-serif; color:#334155; }
+.shift-workspace { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; gap:12px; padding:12px 20px; overflow:auto; }
+.shift-workspace > :first-child { flex-shrink:0; }
+.shift-desktop { display:none; }
+.shift-button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 11px; border:1px solid #d8e0ea; border-radius:6px; background:white; font-size:13px; font-weight:550; cursor:pointer; white-space:nowrap; }
+.shift-button:hover { background:#f1f5f9; }
+.shift-button:disabled { opacity:.4; cursor:default; }
+.shift-button-primary { background:#4f46e5; color:white; border-color:#4f46e5; }
+.shift-button-primary:hover { background:#4338ca; }
+.shift-button:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
+.shift-grid-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; flex-shrink:0; }
+.shift-grid-toolbar h1 { color:#0f172a; font-size:20px; font-weight:600; }
+.shift-grid-toolbar p,.shift-grid-actions span { font-size:12px; color:#64748b; }
+.shift-grid-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.shift-grid-scroll { flex:1; min-height:0; overflow:auto; border:1px solid #dce3ec; border-radius:8px; background:white; scrollbar-gutter:stable; }
+.shift-grid { width:100%; min-width:1080px; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:13px; font-variant-numeric:tabular-nums; }
+.shift-grid thead { position:sticky; top:0; z-index:3; }
+.shift-grid th { padding:8px 6px; text-align:center; background:#f8fafc; color:#475569; font-weight:600; border-bottom:1px solid #dce3ec; }
+.shift-grid thead tr:first-child th { height:34px; }
+.shift-grid thead tr:nth-child(2) th { font-size:12px; }
+.shift-grid th.shift-turn-A { background:#eef2ff; color:#4338ca; }
+.shift-grid th.shift-turn-B { background:#ecfdf5; color:#047857; }
+.shift-grid th.shift-turn-C { background:#fff7ed; color:#9a3412; }
+.shift-grid .shift-loom { position:sticky; left:0; z-index:2; width:70px; background:#f8fafc; border-right:1px solid #dce3ec; }
+.shift-grid thead .shift-loom { z-index:4; }
+.shift-grid td { padding:3px; height:40px; border-bottom:1px solid #edf1f6; border-right:1px solid #edf1f6; }
+.shift-grid tr:nth-child(even) td { background:#fbfcfe; }
+.shift-grid tr:hover td { background:#f0f4ff; }
+.shift-grid td.shift-dirty { background:#fffbeb; }
+.shift-grid td.shift-imported { background:#f1f5f9; }
+.shift-grid .shift-turn-start { border-left:1px solid #cbd5e1; }
+.shift-grid input { width:100%; min-width:0; height:32px; border:1px solid transparent; border-radius:4px; background:transparent; text-align:center; font-size:13px; color:#334155; outline:none; }
+.shift-grid input:focus { border-color:#6366f1; background:white; box-shadow:0 0 0 2px #6366f130; }
+.shift-grid input[readonly] { color:#64748b; }
+.shift-grid .shift-attention input { color:#b91c1c; font-weight:600; }
+.shift-grid-help { font-size:11px; color:#64748b; flex-shrink:0; }
+.shift-grid-empty { padding:24px !important; text-align:center; color:#64748b; }
+@media (min-width:768px) { .shift-workspace { overflow:hidden; } .shift-desktop { display:flex; flex:1; min-height:0; flex-direction:column; gap:10px; } .shift-mobile { display:none; } }
+@media (max-width:1100px) { .shift-workspace { padding:10px; } .shift-grid-toolbar h1 { font-size:18px; } }
+@media (max-width:767px) { .shift-workspace { max-width:896px; margin:0 auto; padding:12px; } }
+</style>

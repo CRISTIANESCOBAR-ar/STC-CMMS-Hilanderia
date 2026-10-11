@@ -191,3 +191,77 @@ test('machine view renders table, cards and empty filters without depending on d
   const shell = fs.readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8');
   assert.ok(shell.indexOf('id="navbar-actions"') < shell.indexOf('<router-view>'));
 });
+import * as plantTime from '../src/utils/plantTime.js';
+import * as shiftGrid from '../src/utils/shiftGrid.js';
+import * as shiftReportService from '../src/services/shiftReportService.js';
+
+test('real shift sheet auto-advances, selects arrow targets and preserves unsaved data on snapshots and save failure', async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/ShiftReport.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id: 'shift-render-test' });
+  const template = compileTemplate({ id: 'shift-render-test', source: descriptor.template.content, compilerOptions: { bindingMetadata: script.bindings } });
+  assert.deepEqual(template.errors, []);
+  let pushSnapshot;
+  let failSave = true;
+  let saved;
+  const dependencies = {
+    // CSS transitions are excluded from this in-memory renderer.
+    vue: { ...Vue, Transition: { inheritAttrs: false, setup(_, { slots }) { return () => slots.default?.(); } } }, 'lucide-vue-next': icons, 'vue-router': { onBeforeRouteLeave() {} },
+    '../utils/plantTime': plantTime, '../utils/shiftGrid': shiftGrid,
+    'firebase/firestore': { collection() {}, query() {}, getDocs: async () => ({ docs: [{ id: 'loom1', data: () => ({ tipo: 'TELAR', maquina: 35001, activo: true }) }] }) },
+    '../firebase/config': {}, '../services/shiftReportService': shiftReportService,
+    '../services/shiftReportFirestore': {
+      guardarReporteCSV() {},
+      guardarCambiosManual: async (date, changes) => { saved = { date, changes }; if (failSave) throw Object.assign(new Error('Conflict'), { code: 'shiftreport/conflict' }); },
+      suscribirReporte: (_, callback) => { pushSnapshot = callback; callback(null); return () => {}; },
+    },
+    sweetalert2: { fire: async () => ({ isConfirmed: true }) },
+  };
+  const component = evaluate(script.content, dependencies);
+  component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host();
+  const app = renderer.createApp(component);
+  const errors = [];
+  app.config.errorHandler = error => errors.push(error.message);
+  try {
+    app.mount(root);
+    await new Promise(resolve => setImmediate(resolve));
+    const state = root._vnode.component.setupState;
+    let focused;
+    let selected = 0;
+    state.gridElement.querySelector = selector => ({ readOnly: false, focus() { focused = selector; }, select() { selected++; } });
+    state.gridInput({ target: { value: '261' } }, '35001', 'A', state.gridFields[0], 0);
+    await Vue.nextTick();
+    assert.equal(focused, '[data-grid-index="1"]');
+    assert.equal(selected, 1);
+    let prevented = false;
+    state.gridKeydown({ key: 'ArrowLeft', preventDefault() { prevented = true; } }, 1);
+    await Vue.nextTick();
+    assert.equal(prevented, true);
+    assert.equal(focused, '[data-grid-index="0"]');
+    assert.equal(selected, 2);
+    state.setVal('35001', 'A', 'picks', '001');
+    await Vue.nextTick();
+    assert.equal(state.getInputVal('35001', 'A', 'picks'), '001');
+    assert.equal(state.getVal('35001', 'A', 'picks'), 1);
+    state.setVal('35001', 'A', 'picks', '261');
+    pushSnapshot({ registros: { '35002_A': { loom: '35002', turno: 'A', picks: 300 } } });
+    await Vue.nextTick();
+    assert.equal(state.getVal('35001', 'A', 'picks'), 261);
+    assert.equal(state.getVal('35002', 'A', 'picks'), 300);
+    assert.equal(await state.guardarPlanilla(), false);
+    assert.equal(state.dirtyCount, 1);
+    assert.equal(state.getVal('35001', 'A', 'picks'), 261);
+    failSave = false;
+    assert.equal(await state.guardarPlanilla(), true);
+    assert.equal(saved.changes[0].data.picks, 261);
+    assert.equal(saved.changes[0].base, null);
+    assert.equal(state.dirtyCount, 0);
+    app.unmount();
+    assert.deepEqual(errors, []);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});

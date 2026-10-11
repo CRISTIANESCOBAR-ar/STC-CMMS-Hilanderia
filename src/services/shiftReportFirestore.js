@@ -14,6 +14,7 @@
  *   style, beam, source ("csv"|"manual")
  */
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { saveManualShiftChanges } from './shiftReportWrites';
 import { db } from '../firebase/config';
 
 const COLLECTION = 'shift_reports';
@@ -126,4 +127,8 @@ export function suscribirReporte(fecha, callback) {
   return onSnapshot(doc(db, COLLECTION, docId), (snap) => {
     callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
   });
+}
+
+export async function guardarCambiosManual(fecha, changes) {
+  return saveManualShiftChanges(db, fecha, changes);
 }

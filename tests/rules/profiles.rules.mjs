@@ -1,3 +1,4 @@
+import { saveManualShiftChanges } from '../../src/services/shiftReportWrites.js';
 import { before, after, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -353,4 +354,36 @@ test('finalizer fails closed when emulator retains tokens; authenticated bytes r
   assert.equal(revoked.status, 200);
   const bytes = await assertSucceeds(getBytes(reference));
   assert.equal(bytes.byteLength, 3);
+});
+
+
+test('manual shift transactions create one day without losing independent concurrent records', async () => {
+  await approve('production', 'auxiliar', 'TEJEDURIA');
+  const db = identity('production').firestore();
+  const a = { loom: '1', turno: 'A', picks: 261, rpm: 750, source: 'manual' };
+  const b = { loom: '2', turno: 'A', picks: 297, rpm: 750, source: 'manual' };
+  await Promise.all([
+    saveManualShiftChanges(db, '2026/10/10', [{ key: '1_A', base: null, data: a }]),
+    saveManualShiftChanges(db, '2026/10/10', [{ key: '2_A', base: null, data: b }]),
+  ]);
+  const snapshot = await getDoc(doc(db, 'shift_reports/2026-10-10'));
+  assert.equal(snapshot.data().registros['1_A'].picks, 261);
+  assert.equal(snapshot.data().registros['2_A'].picks, 297);
+});
+
+test('a conflicting shift transaction cannot partially write or overwrite imported records', async () => {
+  await approve('production', 'auxiliar', 'TEJEDURIA');
+  const db = identity('production').firestore();
+  const base = { loom: '1', turno: 'A', picks: 261, rpm: 750, source: 'manual' };
+  await saveManualShiftChanges(db, '2026/10/10', [{ key: '1_A', base: null, data: base }]);
+  const imported = { ...base, picks: 300, source: 'csv' };
+  await updateDoc(doc(db, 'shift_reports/2026-10-10'), { 'registros.1_A': imported, updatedAt: serverTimestamp() });
+  await assert.rejects(saveManualShiftChanges(db, '2026/10/10', [
+    { key: '1_A', base, data: { ...base, picks: 262 } },
+    { key: '2_A', base: null, data: { ...base, loom: '2' } },
+  ]), { code: 'shiftreport/conflict' });
+  const snapshot = await getDoc(doc(db, 'shift_reports/2026-10-10'));
+  assert.equal(snapshot.data().registros['1_A'].source, 'csv');
+  assert.equal(snapshot.data().registros['1_A'].picks, 300);
+  assert.equal(snapshot.data().registros['2_A'], undefined);
 });

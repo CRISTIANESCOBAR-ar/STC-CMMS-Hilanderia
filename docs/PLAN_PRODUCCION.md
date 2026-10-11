@@ -280,3 +280,19 @@ pruebas del servicio en entorno piloto.
 - Modal Procedimiento unificado con catálogo: tipografía, botones de 36 px, cabecera y pie fijos, alto/ancho acotados, scroll interior, tarjetas numeradas e imágenes contenidas.
 - Acciones de eliminar paso/quitar imagen y campos con nombres accesibles; adjuntar imagen admite foco de teclado.
 - Prueba real cubre procedimiento vacío, agregar/eliminar paso, abrir con texto e imagen y cancelar sin modificar el registro cargado. 43 pruebas correctas; validación visual pendiente en PC.
+
+### V2 — Shift Report: primera planilla desktop
+
+- Desde 768 px: tabla con una fila por telar, grupos A/B/C y Pts, Rot T, Rot U, Rot O, RPM. Cabecera y Telar fijos, ancho completo y scroll interior. En pantallas menores se conserva carga por tarjeta.
+- Pts en miles: 261 representa 261.000 picks. Entrada manual de tres dígitos, sin multiplicar el valor en el TXT existente.
+- Avance automático: Pts y RPM al tercer dígito; roturas al segundo (límites existentes). Continúa al campo siguiente incluso si ya tiene valor; importados se omiten al avanzar automáticamente. Último campo lleva a Guardar.
+- Flechas izquierda/derecha navegan campos; arriba/abajo y Enter recorren la columna en desktop. Tab/Shift+Tab conservan navegación nativa. Cada foco selecciona todo el valor; comportamiento de selección y flechas disponible también en la tarjeta móvil.
+- Borradores en memoria separados mediante baseline por registro; snapshots conservan registros editados. Cambios pendientes visibles, guardar explícito y descartar para recuperar los datos remotos recibidos.
+- Guardado transaccional atómico de registros editados: compara baseline con el servidor y rechaza conflictos sobre el mismo telar/turno sin escritura parcial. Crear reportes simultáneamente conserva registros independientes.
+- Cambiar fecha/importar/exportar exige resolver cambios pendientes. Navegar fuera confirma descarte y cerrar/recargar advierte; no hay recuperación automática de borradores después de cerrar el navegador todavía.
+- Importados de CSV siguen en solo lectura. TXT conserva columnas, tabulaciones, orden, nombre y valores anteriores; el generador no fue modificado.
+- Pruebas: componente Vue real para salto/selección, snapshots y fallos de guardado; emuladores para concurrencia/atomicidad; regresión del TXT. Validación visual pendiente en PC y ensayo real desktop+móvil antes de ampliar producción.
+- Pendientes siguientes: pegar bloques de Excel, corrección explícita de importados, validación de completitud para exportación, comparación de archivo con importador real y ensayo de 10–30 usuarios.
+- El rollback de este bloque no requiere migración de datos ni reglas nuevas; solo revertir el commit, compilar y desplegar hosting:main.
+- Validación final de V2: 48 pruebas unitarias y 49 de reglas/transacciones (97 total); build correcto. Se conservan alertas visuales existentes de Trama >10 y Urdimbre >5 también en la planilla.
+- Entrada con ceros iniciales preservada durante la carga (001/000): permite completar los tres dígitos para el salto, manteniendo el valor numérico 1/0 en los registros y TXT.

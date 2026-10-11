@@ -943,3 +943,40 @@ test('operator OCR loads the detected date and shift once, keeps failed schedule
   reads[3].resolve({ exists:() => false }); await new Promise(resolve => setImmediate(resolve)); assert.equal(state.isLoading,false); assert.equal(state.registroDia.length,0);
   assert.deepEqual(errors,[]); app.unmount();
 });
+
+test('stop workspace filters records, preserves failed drafts, validates time and updates the original night document', async () => {
+  const { descriptor }=parse(fs.readFileSync(new URL('../src/components/ParosAnudado.vue',import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'stops-test' });
+  const template=compileTemplate({ id:'stops-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors,[]);
+  const subscriptions=[],writes=[],role=Vue.ref('admin'),profile=Vue.ref({ role:'admin' });
+  let finishWrite,confirm=false,leave;
+  const record={ id:'night',fechaDocumento:'2026-10-12',fecha:'2026-10-11',telar:'35001',codigo:'101',horaParo:'23:50',horaInicioAnudado:'00:00',horaFinAnudado:'00:10',tiempoTotal:'20',turno:'C',articulo:'AF311',partida:'0-1234-56',anudadores:[352],revisor:77 };
+  const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,'../utils/plantTime':{ shiftSlot:() => ({ fecha:'2026-10-11',turno:'C' }),addDays },'../composables/usePlantClock':{ usePlantClock:() => Vue.ref(new Date()) },'../constants/organization':{ getTurnoActual:() => 'C' },'../firebase/config':{ db:{},auth:{ currentUser:{ uid:'admin',displayName:'Supervisor' } } },'../services/authService':{ userRole:role,userProfile:profile },'../services/profileService':{ canAccessViewForUser:() => role.value==='admin' },'../utils/sectorScope':{ getSectorScope:() => ['TEJEDURIA'] },'../utils/tooltipDirective':{ vTippy },'./PlantDatePicker.vue':{ render:() => Vue.h('button','Fecha') },sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },'firebase/firestore':{ collection:() => 'machines',query:value => value,getDocs:async () => ({ docs:[{ id:'m',data:() => ({ maquina:'35001',tipo:'TELAR',activo:true }) }] }) },'../services/paroTelarService':{ suscribirParos:(day,callback,onError) => { const subscription={ day,callback,onError,stopped:false }; subscriptions.push(subscription); return () => { subscription.stopped=true; }; },crearParo:(day,data) => { writes.push({ type:'create',day,data }); return new Promise((resolve,reject) => { finishWrite={ resolve,reject }; }); },actualizarParo:(day,id,data) => { writes.push({ type:'update',day,id,data }); return new Promise((resolve,reject) => { finishWrite={ resolve,reject }; }); },eliminarParo:async () => {} } };
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
+  const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
+  await new Promise(resolve => setImmediate(resolve)); subscriptions[0].callback([record,{ ...record,id:'other',telar:'35064',codigo:102,turno:'A',horaFinAnudado:'',tiempoTotal:30,hilosCruzados:true }]);
+  assert.equal(state.parosFiltrados.length,2); assert.equal(state.stats.tiempoStr,'0:50'); assert.equal(state.stats.termino,1);
+  state.search='64'; assert.equal(state.parosFiltrados.length,1); state.search=''; state.shiftFilter='C'; assert.equal(state.parosFiltrados.length,1); state.shiftFilter=''; state.stateFilter='crossed'; assert.equal(state.parosFiltrados.length,1); state.stateFilter='';
+  state.abrirEdicion(record); assert.equal(state.form.revisor,'77'); assert.equal(state.form.anudadores[0],'352');
+  state.onHoraInput({ target:{ value:'9999',dataset:{} } },'horaParo'); await state.guardar(); assert.match(state.formError,/horarios/); assert.equal(writes.length,0);
+  state.onHoraInput({ target:{ value:'2350',dataset:{} } },'horaParo'); state.form.color='ABCD'; assert.equal(state.tiempoTotal,20);
+  assert.equal(await state.cerrarForm(),false); assert.equal(await leave(),false);
+  const failed=state.guardar(); await state.guardar(); assert.equal(writes.length,1); assert.equal(writes[0].day,'2026-10-12'); assert.equal(writes[0].data.turno,'C');
+  finishWrite.reject(new Error('Offline')); await failed; assert.equal(state.mostrarForm,true); assert.equal(state.form.color,'ABCD'); assert.equal(state.formError,'Offline');
+  const saved=state.guardar(); finishWrite.resolve(); await saved; assert.equal(state.mostrarForm,false);
+  state.fechaInput='2026-10-10'; await Vue.nextTick(); assert.equal(subscriptions[0].stopped,true); subscriptions[0].callback([record]); assert.equal(state.paros.length,0); subscriptions[1].onError(new Error('Permission denied')); assert.equal(state.cargando,false); assert.equal(state.error,'Permission denied');
+  role.value='mecanico'; profile.value={ role:'mecanico' }; state.abrirEdicion(record); state.form.color='READ'; const count=writes.length; await state.guardar(); assert.equal(writes.length,count); assert.equal(state.dirty,false);
+  assert.deepEqual(errors,[]); app.unmount(); assert.equal(subscriptions[1].stopped,true);
+});
+
+test('stop subscription reports failures and retains normalized night records from the following day', () => {
+  const source=fs.readFileSync(new URL('../src/services/paroTelarService.js',import.meta.url),'utf8');
+  const calls=[],updates=[],failures=[];
+  const dependencies={ '../firebase/config':{ db:{} },'../utils/plantTime':{ SHIFT_DATE_CRITERION:'inicio_turno',addDays,normalizeShiftRecord:record => ({ ...record,fecha:record.turno==='C' ? '2026-10-11':record.fecha }) },'firebase/firestore':{ collection:(db,...path) => path.join('/'),query:(...args) => args,orderBy:() => 'createdAt',onSnapshot:(query,callback,onError) => { calls.push({ query,callback,onError,stopped:false }); return () => { calls.at(calls.findIndex(item => item.callback===callback)).stopped=true; }; } } };
+  const service=evaluate(source.replace(/export (async function|function)/g,'$1')+'\nreturn { suscribirParos };',dependencies);
+  const stop=service.suscribirParos('2026/10/11',records => updates.push(records),error => failures.push(error));
+  assert.equal(calls.length,2); calls[0].callback({ docs:[] }); assert.equal(updates.length,0);
+  calls[1].callback({ docs:[{ id:'night',data:() => ({ fecha:'2026-10-12',turno:'C' }) }] }); assert.equal(updates[0][0].fechaDocumento,'2026-10-12');
+  calls[0].onError(new Error('Failed')); assert.equal(failures[0].message,'Failed'); stop(); assert.ok(calls.every(call => call.stopped));
+});

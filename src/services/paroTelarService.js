@@ -50,7 +50,7 @@ export async function eliminarParo(fecha, paroId) {
  * Suscripción en tiempo real a los paros de una fecha.
  * Retorna función unsubscribe.
  */
-export function suscribirParos(fecha, callback) {
+export function suscribirParos(fecha, callback, onError) {
   const selected = fechaToDocId(fecha);
   const results = new Map();
   const dates = [selected, addDays(selected, 1)];
@@ -59,6 +59,6 @@ export function suscribirParos(fecha, callback) {
     if (results.size !== dates.length) return;
     callback([...results.values()].flat().filter(record => record.fecha === selected)
       .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
-  }));
+  }, onError));
   return () => stops.forEach(stop => stop());
 }

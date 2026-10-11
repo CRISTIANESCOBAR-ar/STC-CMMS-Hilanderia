@@ -665,7 +665,7 @@ const onSubmit = async () => {
           <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
             :class="sintomaSeleccionado ? 'bg-orange-50 border-orange-300' : 'bg-gray-50 border-gray-200'"
           >
-            <select
+            <select id="call-symptom"
               v-model="sintomaIdSel"
               class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
               :class="sintomaSeleccionado ? 'text-orange-700' : 'text-gray-400'"

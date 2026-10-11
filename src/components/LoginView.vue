@@ -73,7 +73,7 @@ const limpiarCacheYActualizar = async () => {
     window.location.reload();
   } catch (err) {
     console.error("Error al limpiar caché:", err);
-    errorMsg.value = "No se pudo actualizar. Intentá nuevamente cuando tengas conexión.";
+    errorMsg.value = err.message || 'No se pudo actualizar. Intentá nuevamente.';
     isLoading.value = '';
   }
 };

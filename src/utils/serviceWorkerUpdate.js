@@ -12,10 +12,15 @@ export function createUpdateNoticeTracker() {
 }
 
 export async function activateWaitingWorker(registration, { timeoutMs = 15000 } = {}) {
-  const worker = registration?.waiting;
+  // Another tab can activate the release while the notice is still visible.
+  // Reloading is then sufficient: navigation always fetches fresh HTML.
+  const worker = registration?.waiting || registration?.active;
   if (!worker) throw new Error('La actualización ya no está disponible. Volvé a comprobarla.');
   await new Promise((resolve, reject) => {
+    let settled = false;
     const finish = error => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       worker.removeEventListener('statechange', changed);
       error ? reject(error) : resolve();
@@ -26,7 +31,10 @@ export async function activateWaitingWorker(registration, { timeoutMs = 15000 } 
     };
     const timer = setTimeout(() => finish(new Error('La actualización demoró demasiado. Intentá nuevamente.')), timeoutMs);
     worker.addEventListener('statechange', changed);
-    worker.postMessage({ type: 'SKIP_WAITING' });
     changed();
+    if (!settled && worker.state === 'installed') {
+      try { worker.postMessage({ type: 'SKIP_WAITING' }); }
+      catch (error) { finish(error); }
+    }
   });
 }

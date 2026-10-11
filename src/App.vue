@@ -184,7 +184,8 @@ const limpiarCacheYActualizar = async () => {
     window.location.reload();
   } catch (err) {
     console.error("Error updating:", err);
-    Swal.fire('Error', 'No se pudo actualizar. Intenta de nuevo.', 'error');
+    Swal.fire('Error al actualizar', err.message || 'No se pudo actualizar. Intentá nuevamente.', 'error');
+    if (!updateCheckInterval) updateCheckInterval = setInterval(checkForUpdates, 10 * 60 * 1000);
   }
 };
 

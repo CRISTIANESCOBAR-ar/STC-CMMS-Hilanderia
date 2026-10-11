@@ -1,7 +1,7 @@
 <script setup>
 import { sectorConstraints } from '../services/accessScope';
 
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, computed, watch, nextTick, onUnmounted } from 'vue';
 import { collection, addDoc, getDocs, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -11,14 +11,29 @@ import { userProfile, userRole } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
 import { UploadCloud, CheckCircle, Wrench, Zap, Info, Camera, Trash2, Grid2x2, X, BookOpen, AlertTriangle, History, ArrowLeftRight, NotebookPen, Package, ChevronLeft, Loader2 } from 'lucide-vue-next';
-import { useRouter } from 'vue-router';
+import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import Swal from 'sweetalert2';
 
 import { compressImage, formatSize } from '../utils/imageCompressor';
 import CameraCapture from './CameraCapture.vue';
+import FaultEventsPanel from './FaultEventsPanel.vue';
+import { vTippy } from '../utils/tooltipDirective';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 import { getMotivos } from '../constants/motivos';
 import { getMotivosList } from '../services/motivosService';
 
+const desktop = ref(false);
+const activePanel = ref('events');
+const eventsRefresh = ref(0);
+let desktopMedia;
+function updateDesktop() { desktop.value = desktopMedia.matches; }
+onMounted(() => {
+  desktopMedia = window.matchMedia('(min-width: 768px)');
+  updateDesktop();
+  desktopMedia.addEventListener('change', updateDesktop);
+});
+onUnmounted(() => desktopMedia?.removeEventListener('change', updateDesktop));
 const maquinas = ref([]);
 const router = useRouter();
 const tipoSeleccionado = ref('');
@@ -45,6 +60,18 @@ const imagenPreview = ref(null);
 const isSubmitting = ref(false);
 const uploadProgress = ref(0);
 const successMessage = ref('');
+let successTimer;
+function protectReportUnload(event) {
+  if (observaciones.value.trim() || imagenFile.value || isSubmitting.value) { event.preventDefault(); event.returnValue = ''; }
+}
+onMounted(() => window.addEventListener('beforeunload', protectReportUnload));
+onUnmounted(() => { window.removeEventListener('beforeunload', protectReportUnload); clearTimeout(successTimer); });
+onBeforeRouteLeave(async () => {
+  if (isSubmitting.value) return false;
+  if (!observaciones.value.trim() && !imagenFile.value) return true;
+  const answer = await Swal.fire({ icon:'warning', title:'Falla sin enviar', text:'¿Salir y descartar la falla que estás cargando?', showCancelButton:true, confirmButtonText:'Descartar y salir', cancelButtonText:'Seguir cargando' });
+  return answer.isConfirmed;
+});
 const maquinasError = ref(false);
 const isCompressing = ref(false);
 const menuAccionesAbierto = ref(false);
@@ -431,11 +458,12 @@ const onCameraCapture = async (blob) => {
 };
 
 const onSubmit = async () => {
+  if (isSubmitting.value || isCompressing.value) return;
   if (!maquinaSeleccionadaId.value) {
     Swal.fire({ icon: 'warning', title: 'Falta seleccionar', text: 'Por favor seleccione una máquina.', confirmButtonColor: '#2563eb' });
     return;
   }
-  if (!observaciones.value) {
+  if (!observaciones.value.trim()) {
     Swal.fire({ icon: 'warning', title: 'Falta descripción', text: 'Por favor ingrese las observaciones de la falla.', confirmButtonColor: '#2563eb' });
     return;
   }
@@ -477,6 +505,9 @@ const onSubmit = async () => {
     
     uploadProgress.value = 100;
     successMessage.value = "Novedad reportada correctamente.";
+    eventsRefresh.value++;
+    activePanel.value = 'events';
+    cerrarMenuAcciones();
     
     if (imagenPreview.value && imagenPreview.value.startsWith('blob:')) {
       URL.revokeObjectURL(imagenPreview.value);
@@ -491,7 +522,8 @@ const onSubmit = async () => {
     clearImageFromDB(NOVEDAD_IMG_KEY);
     resetCatalogo();
 
-    setTimeout(() => { successMessage.value = ''; }, 4000);
+    clearTimeout(successTimer);
+    successTimer = setTimeout(() => { successMessage.value = ''; }, 4000);
 
   } catch (error) {
     console.error("Error detallado en onSubmit:", error);
@@ -574,13 +606,14 @@ const enviarNotaTurno = async () => {
 </script>
 
 <template>
-  <div class="bg-transparent pb-24">
+  <div class="fault-page bg-transparent pb-24">
+    <header class="fault-page-heading"><div><h1>Reportar falla</h1><p>Carga y seguimiento de eventos del sector</p></div><nav class="fault-view-tabs" aria-label="Panel de trabajo"><button type="button" :aria-pressed="activePanel === 'events'" @click="activePanel = 'events'">Eventos</button><button type="button" :aria-pressed="activePanel === 'form'" @click="activePanel = 'form'">Nueva falla</button></nav></header>
     <!-- Header -->
     <!-- El header ahora se maneja globalmente en App.vue -->
 
 
     <!-- Teleport para la cabecera (Mecánica / Eléctrica) -->
-    <Teleport to="#navbar-header-portal">
+    <Teleport v-if="!desktop" to="#navbar-header-portal">
       <div class="flex items-center justify-center gap-1 bg-gray-50 p-0.5 rounded-xs border border-gray-200 w-28 sm:w-44">
         <label class="flex-1 flex justify-center py-1.5 rounded-xs cursor-pointer transition-all items-center"
                :class="tipoProblema === 'Mecánico' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'">
@@ -595,7 +628,9 @@ const enviarNotaTurno = async () => {
       </div>
     </Teleport>
 
-    <main class="max-w-sm mx-auto pt-2">
+    <div class="fault-workspace" :class="'fault-active-' + activePanel">
+    <main class="fault-form-panel max-w-sm mx-auto pt-2">
+      <header class="fault-form-heading"><h2>Nueva falla</h2><div class="fault-category-select"><button type="button" :disabled="isSubmitting" :aria-pressed="tipoProblema === 'Mecánico'" @click="tipoProblema = 'Mecánico'"><Wrench :size="15" />Mecánico</button><button type="button" :disabled="isSubmitting" :aria-pressed="tipoProblema === 'Eléctrico'" @click="tipoProblema = 'Eléctrico'"><Zap :size="15" />Eléctrico</button></div></header>
       <!-- Success/Error Message (Mantenerlos flotantes o arriba) -->
       <div v-if="successMessage" class="mx-2 mb-2 bg-green-50 border border-green-100 text-green-800 p-3 rounded-xl flex items-center shadow-sm">
         <CheckCircle class="w-5 h-5 mr-2 text-green-600" />
@@ -606,7 +641,7 @@ const enviarNotaTurno = async () => {
         <span class="font-semibold text-sm">⚠️ Error al conectar con la base de datos.</span>
       </div>
 
-      <form @submit.prevent="onSubmit" class="bg-white border-y border-gray-100">
+      <form @submit.prevent="onSubmit" class="fault-form bg-white border-y border-gray-100"><fieldset :disabled="isSubmitting"><legend class="sr-only">Datos del reporte de falla</legend>
 
         <!-- Selección de Máquina -->
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
@@ -800,7 +835,7 @@ const enviarNotaTurno = async () => {
                   <p class="text-[10px] font-extrabold text-gray-400 tracking-widest mb-0.5">IMAGEN ADJUNTA</p>
                   <p class="text-xs font-black text-green-600">{{ formatSize(imagenFile?.size) }}</p>
                 </div>
-                <button type="button" @click="imagenPreview=null; imagenFile=null" class="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition active:scale-95 font-bold text-xs" title="Eliminar imagen">
+                <button type="button" @click="imagenPreview=null; imagenFile=null" class="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition active:scale-95 font-bold text-xs" v-tippy="'Eliminar imagen'">
                   <Trash2 class="w-4 h-4" />
                   Quitar
                 </button>
@@ -810,19 +845,19 @@ const enviarNotaTurno = async () => {
 
         <div
           v-if="menuAccionesAbierto"
-          class="fixed inset-0 z-30 bg-slate-900/12"
+          class="fault-actions-overlay fixed inset-0 z-30 bg-slate-900/12"
           @click="cerrarMenuAcciones"
         ></div>
 
         <!-- Acciones Fijas (Bottom Bar Compacta e Integrada) -->
-        <div class="fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2 sm:px-3">
+        <div class="fault-form-actions fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2 sm:px-3">
           <div
             class="max-w-sm mx-auto bg-white border border-gray-200 shadow-[0_-10px_35px_rgba(15,23,42,0.14)] overflow-hidden transition-all duration-200"
             :class="menuAccionesAbierto ? 'rounded-[1.75rem]' : 'rounded-[1.4rem]'"
           >
             <div
               v-if="menuAccionesAbierto"
-              class="px-3 pt-3 pb-2 border-b border-gray-100 animate-in slide-in-from-bottom-4 duration-200"
+              class="fault-extra-actions px-3 pt-3 pb-2 border-b border-gray-100 animate-in slide-in-from-bottom-4 duration-200"
             >
               <div class="w-12 h-1.5 rounded-full bg-gray-300 mx-auto mb-3"></div>
               <!-- Header dinámico -->
@@ -876,7 +911,7 @@ const enviarNotaTurno = async () => {
                   <span class="text-[10px] font-bold text-gray-600 leading-tight text-center px-1">Nota Turno</span>
                 </button>
                 <!-- Pedir Pieza (placeholder) -->
-                <button type="button" disabled title="Próximamente"
+                <button type="button" disabled v-tippy="'Próximamente'"
                   class="h-20 rounded-2xl border border-gray-100 bg-gray-50/50 opacity-40 cursor-not-allowed flex flex-col items-center justify-center gap-1">
                   <span class="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400">
                     <Package class="w-4 h-4" />
@@ -949,7 +984,7 @@ const enviarNotaTurno = async () => {
             </div>
 
             <div class="p-3">
-              <div class="flex items-center gap-3">
+              <div class="fault-primary-actions flex items-center gap-3">
             
             <!-- Criticidad (Toggle Discreto) -->
             <label class="flex items-center gap-2 cursor-pointer group shrink-0">
@@ -961,7 +996,7 @@ const enviarNotaTurno = async () => {
               <span class="text-[10px] font-black transition-colors" :class="isCritico ? 'text-red-600' : 'text-gray-400 group-hover:text-gray-600'">Crítico</span>
             </label>
 
-            <button type="button" @click="openCamera" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition-all active:scale-90 relative shadow-sm group">
+            <button type="button" @click="openCamera" aria-label="Adjuntar foto" v-tippy="'Capturar o adjuntar una foto de la falla'" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition-all active:scale-90 relative shadow-sm group">
               <Camera class="w-6 h-6" :class="imagenPreview ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'" />
               <div v-if="imagenPreview" class="absolute -top-1 -right-1 w-3 h-3 bg-blue-600 rounded-full border-2 border-white ring-2 ring-blue-600/20"></div>
             </button>
@@ -974,7 +1009,7 @@ const enviarNotaTurno = async () => {
               aria-label="Abrir menu de acciones"
             >
               <Grid2x2 class="w-5 h-5" />
-              <span class="text-xs font-black tracking-wide">Menu</span>
+              <span class="text-xs font-black tracking-wide">Menú</span>
             </button>
 
                 <!-- Boton Enviar -->
@@ -992,8 +1027,10 @@ const enviarNotaTurno = async () => {
           </div>
         </div>
 
-      </form>
+      </fieldset></form>
     </main>
+    <FaultEventsPanel v-if="desktop" class="fault-events-panel" :refresh-key="eventsRefresh" />
+    </div>
 
     <!-- Modal Visualizador de Procedimiento -->
     <Teleport to="body">
@@ -1038,3 +1075,52 @@ const enviarNotaTurno = async () => {
   <CameraCapture v-if="showCamera" @capture="onCameraCapture" @cancel="showCamera = false" />
 </template>
 
+
+<style scoped>
+.fault-page-heading,.fault-form-heading { display:none; }
+.fault-form fieldset { min-width:0; }
+@media(min-width:768px) {
+  .fault-page { height:100%; min-height:0; display:flex; flex-direction:column; padding:12px 16px; gap:12px; overflow:hidden; font-family:Inter,system-ui,sans-serif; }
+  .fault-page-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:12px; }
+  .fault-page-heading h1 { font-size:20px; font-weight:600; color:#0f172a; }
+  .fault-page-heading p { font-size:12px; color:#64748b; }
+  .fault-view-tabs { display:none; }
+  .fault-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(350px,390px) minmax(0,1fr); gap:14px; }
+  .fault-form-panel { width:100%; max-width:none; margin:0; padding:0; overflow:auto; min-height:0; border:1px solid #dce3ec; border-radius:8px; background:white; }
+  .fault-form-heading { display:block; padding:12px 14px; }
+  .fault-form-heading h2 { color:#0f172a; font-size:17px; font-weight:600; margin-bottom:10px; }
+  .fault-category-select { display:flex; gap:6px; }
+  .fault-category-select button,.fault-view-tabs button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 12px; border:1px solid #dce3ec; border-radius:6px; font-size:13px; color:#475569; cursor:pointer; }
+  .fault-category-select button { flex:1; }
+  .fault-category-select button[aria-pressed=true],.fault-view-tabs button[aria-pressed=true] { background:#eef2ff; color:#4338ca; border-color:#a5b4fc; }
+  .fault-form { border-bottom:0; }
+  .fault-form :deep(select),.fault-form :deep(textarea) { font-size:13px; font-weight:450; }
+  .fault-form :deep(label) { letter-spacing:normal; }
+  .fault-form :deep(.font-black),.fault-form :deep(.font-extrabold) { font-weight:600; }
+  .fault-form :deep(.tracking-widest) { letter-spacing:normal; }
+  .fault-form :deep(.text-base) { font-size:13px; }
+  .fault-form-actions { position:sticky; bottom:0; left:auto; right:auto; z-index:5; padding:10px; background:white; border-top:1px solid #e2e8f0; }
+  .fault-form-actions > div { max-width:none; box-shadow:none; border:0; border-radius:6px; }
+  .fault-form-actions :deep(button) { border-radius:6px; min-height:36px; }
+  .fault-primary-actions { display:grid; grid-template-columns:1fr 40px 90px; gap:8px; }
+  .fault-primary-actions > button { height:36px; padding:6px; box-shadow:none; }
+  .fault-primary-actions > button[type=submit] { grid-column:1 / -1; font-size:13px; }
+  .fault-primary-actions :deep(svg) { width:18px; height:18px; }
+  .fault-extra-actions { max-height:40vh; overflow:auto; }
+  .fault-actions-overlay { display:none; }
+  .fault-form :deep(.mb-16) { margin-bottom:0; }
+}
+@media(min-width:981px) and (max-width:1200px) {
+  .fault-workspace { grid-template-columns:320px minmax(0,1fr); gap:10px; }
+  .fault-page { padding:10px; }
+}
+@media(min-width:768px) and (max-width:980px) {
+  .fault-page { padding:10px; gap:10px; }
+  .fault-page-heading h1 { font-size:18px; }
+  .fault-view-tabs { display:flex; gap:6px; }
+  .fault-workspace { display:flex; flex-direction:column; }
+  .fault-form-panel,.fault-events-panel { flex:1; min-height:0; }
+  .fault-active-events .fault-form-panel,.fault-active-form .fault-events-panel { display:none; }
+  .fault-form-panel { width:min(680px,100%); align-self:center; }
+}
+</style>

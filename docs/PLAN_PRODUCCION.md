@@ -298,3 +298,14 @@ pruebas del servicio en entorno piloto.
 - El rollback de este bloque no requiere migración de datos ni reglas nuevas; solo revertir el commit, compilar y desplegar hosting:main.
 - Validación final de V2: 48 pruebas unitarias y 49 de reglas/transacciones (97 total); build correcto. Se conservan alertas visuales existentes de Trama >10 y Urdimbre >5 también en la planilla.
 - Entrada con ceros iniciales preservada durante la carga (001/000): permite completar los tres dígitos para el salto, manteniendo el valor numérico 1/0 en los registros y TXT.
+
+### V3 — Reportar Falla en desktop
+
+- Formulario y tabla lado a lado desde 981 px; formulario de 320 px en PC de 1024 px. Entre 768 y 980 px se alterna Eventos/Nueva falla sin desmontar ni perder la carga. Mobile conserva su formulario y barra de acciones.
+- En desktop las acciones de carga están dentro del formulario. Categoría con texto, botones y fuentes uniformes, tooltips Tippy claros; detalle de evento con descripción completa, foto, foco de teclado y cierre con Escape.
+- Consulta por sector autorizado, turno actual por defecto, Hoy, últimos 7 días, pendientes anteriores o rango personalizado de hasta 31 días. El calendario respeta la fecha de planta y el turno C conserva el día de inicio.
+- Páginas de 50 mediante cursor; primera página en tiempo real, páginas adicionales bajo demanda. Cambios en la primera página reinician las adicionales para no conservar filas obsoletas ni cursors inconsistentes.
+- Mecánico/Eléctrico y Estado filtran en servidor; orden ascendente por ingreso o descendente. Búsqueda textual y Otras/sin categoría filtran filas cargadas, indicado en el pie. Categorías nuevas de carga siguen pendientes de definición funcional.
+- Guardado mantiene borrador ante fallo, bloquea envíos simultáneos y edición durante subida, actualiza la tabla al confirmar, advierte al salir/recargar con datos pendientes. La tabla no altera los campos del reporte.
+- Índices agregados para consultas globales por estado y combinaciones de categoría/estado/sector con fecha en ambos órdenes. No cambian documentos, reglas ni Functions. Rollback: revertir commit y desplegar Hosting; los índices adicionales pueden permanecer.
+- Pruebas de ventanas nocturnas/rangos, filtros, render de componentes Vue reales, actualizaciones/páginas atrasadas, error de guardado/envío doble y alcance de consultas en emuladores. Pendiente aprobación visual en 1920×1200, 1360×768, 1024×768 y 800×600 y ensayo de carga de 10–30 usuarios.

@@ -309,3 +309,14 @@ pruebas del servicio en entorno piloto.
 - Guardado mantiene borrador ante fallo, bloquea envíos simultáneos y edición durante subida, actualiza la tabla al confirmar, advierte al salir/recargar con datos pendientes. La tabla no altera los campos del reporte.
 - Índices agregados para consultas globales por estado y combinaciones de categoría/estado/sector con fecha en ambos órdenes. No cambian documentos, reglas ni Functions. Rollback: revertir commit y desplegar Hosting; los índices adicionales pueden permanecer.
 - Pruebas de ventanas nocturnas/rangos, filtros, render de componentes Vue reales, actualizaciones/páginas atrasadas, error de guardado/envío doble y alcance de consultas en emuladores. Pendiente aprobación visual en 1920×1200, 1360×768, 1024×768 y 800×600 y ensayo de carga de 10–30 usuarios.
+
+### V4 — Solicitar intervención (/llamar)
+
+- Formulario siempre visible junto al panel de solicitudes: 320 px hasta 1200 px de pantalla, ancho de 350–390 px en pantallas amplias. Tarjetas de eventos entre 768–980 px y tabla en anchos mayores; scroll independiente, sin pestañas ni expansión del formulario. Mobile conserva la carga y barra inferior.
+- Acciones integradas dentro del formulario en desktop, Observaciones aprovecha el alto disponible, categorías con botones de fondo claro y texto/íconos consistentes, estado de máquina y criticidad visibles, tooltips Tippy y nombres accesibles.
+- Panel y consultas de eventos reutilizados mediante configuración explícita faults/interventions. /llamar lee intervenciones y usa MECANICO/ELECTRICO/CALIDAD, PENDIENTE/EN_PROCESO/COMPLETADO; no altera los documentos ni los estados existentes de novedades. Filtros de categoría/estado en servidor, alcance por sector, turno/fechas, calendario personalizado, orden y cursor de 50 filas.
+- Detalle de solicitud con foto, descripción, estado de máquina, asignado y Grupo/GM. La gestión de tomar/cerrar órdenes sigue en su vista existente.
+- Guardado bloquea envíos repetidos y edición durante subida; preserva datos ante error; PARADA fuerza criticidad en el payload. Precarga desde Patrulla/Roturas y retorno conservados. Navegación/cierre advierten sobre solicitudes sin enviar.
+- Desktop confirma en una franja con acción manual Compartir, sin diálogo obligatorio por cada envío. Mobile mantiene su diálogo. Un fallo al compartir se distingue del guardado confirmado; no se vuelve a registrar la solicitud.
+- Diez índices adicionales para filtros globales y combinados de intervenciones; no se despliegan reglas, Functions ni migraciones. Rollback: revertir los commits y desplegar Hosting; índices aditivos pueden permanecer.
+- Validación: 58 pruebas unitarias/componentes y 51 en emuladores (109 total), build correcto. Pendiente revisión visual real y ensayo de 10–30 usuarios antes de declarar preparación completa para producción.

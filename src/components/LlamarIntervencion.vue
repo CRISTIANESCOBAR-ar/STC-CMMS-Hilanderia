@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { ref, onMounted, computed, watch, nextTick, onUnmounted } from 'vue';
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
@@ -11,7 +11,39 @@ import { Camera, Trash2, BellRing, Wrench, Zap, ShieldAlert, CirclePlay, AlertTr
 import Swal from 'sweetalert2';
 import { compressImage, formatSize } from '../utils/imageCompressor';
 import CameraCapture from './CameraCapture.vue';
+import FaultEventsPanel from './FaultEventsPanel.vue';
+import { vTippy } from '../utils/tooltipDirective';
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
 
+const desktop = ref(false);
+const eventsRefresh = ref(0);
+const lastSent = ref(null);
+const shareBusy = ref(false);
+let desktopMedia;
+function updateDesktop() { desktop.value = desktopMedia.matches; }
+function protectUnload(event) {
+  if (maquinaSeleccionadaId.value || observaciones.value.trim() || imagenFile.value || isSubmitting.value) { event.preventDefault(); event.returnValue = ''; }
+}
+onMounted(() => {
+  desktopMedia = window.matchMedia('(min-width: 768px)');
+  updateDesktop();
+  desktopMedia.addEventListener('change', updateDesktop);
+  window.addEventListener('beforeunload', protectUnload);
+});
+onUnmounted(() => { desktopMedia?.removeEventListener('change', updateDesktop); window.removeEventListener('beforeunload', protectUnload); });
+onBeforeRouteLeave(async () => {
+  if (isSubmitting.value) return false;
+  if (!maquinaSeleccionadaId.value && !observaciones.value.trim() && !imagenFile.value) return true;
+  return (await Swal.fire({ icon:'warning', title:'Solicitud sin enviar', text:'¿Salir y descartar la solicitud que estás cargando?', showCancelButton:true, confirmButtonText:'Descartar y salir', cancelButtonText:'Seguir cargando' })).isConfirmed;
+});
+async function shareLastRequest() {
+  if (!lastSent.value || shareBusy.value) return;
+  const sent = lastSent.value; shareBusy.value = true;
+  try { await compartirWhatsApp(sent.data, sent.image); }
+  catch { Swal.fire({ icon:'info', title:'La solicitud está registrada', text:'No se pudo abrir la opción de compartir. Podés reintentar desde Compartir.' }); }
+  finally { shareBusy.value = false; }
+}
 // ── Tipos de intervención (extensible) ────────────────────────────────────────
 const TIPOS_INTERVENCION = [
   { id: 'MECANICO',  label: 'Mecánico',  ic: Wrench,      activeBg: 'bg-blue-600 border-blue-600 shadow-blue-500/25',   activeText: 'text-white' },
@@ -116,7 +148,7 @@ onMounted(async () => {
       // Restaurar formulario si el SO mató la pestaña al abrir cámara
       await restoreFormState();
     }
-  } catch { maquinasError.value = true; }
+  } catch { maquinasError.value = true; } finally { isPreloading.value = false; }
 });
 
 // ── Filtrado de máquinas (igual que CargaNovedad) ─────────────────────────────
@@ -416,7 +448,8 @@ const compartirWhatsApp = async (data, imageFile) => {
 
 // ── Submit ────────────────────────────────────────────────────────────────────
 const onSubmit = async () => {
-  if (!maquinaSeleccionadaId.value) {
+  if (isSubmitting.value || isCompressing.value) return;
+  if (!detallesMaquina.value) {
     Swal.fire({ icon: 'warning', title: 'Falta seleccionar', text: 'Seleccione una máquina.', confirmButtonColor: '#ea580c' });
     return;
   }
@@ -444,11 +477,11 @@ const onSubmit = async () => {
       motivoCodigo:      null,   // el mecánico lo asocia al cerrar
       motivoDescripcion: sintomaSeleccionado.value?.nombre || null,
       estadoMaquina:    estadoMaquina.value,
-      critico:          critico.value,
+      critico:          criticoForzado.value || critico.value,
       observaciones:    observaciones.value,
     };
 
-    await intervencionService.crearIntervencion(datos, imagenFile.value, (p) => { uploadProgress.value = p; });
+    const requestId = await intervencionService.crearIntervencion(datos, imagenFile.value, (p) => { uploadProgress.value = p; });
 
     // Capturar datos para compartir ANTES de limpiar el form
     const shareData = {
@@ -462,7 +495,8 @@ const onSubmit = async () => {
       grupo: datos.grupoTelar,
       gm: datos.gmTelar,
     };
-    const shareImageFile = imagenFile.value;
+    lastSent.value = { id:requestId, data:shareData, image:imagenFile.value };
+    eventsRefresh.value++;
 
     if (imagenPreview.value?.startsWith('blob:')) URL.revokeObjectURL(imagenPreview.value);
     maquinaSeleccionadaId.value = '';
@@ -474,22 +508,14 @@ const onSubmit = async () => {
     imagenPreview.value = null;
     clearImageFromDB(FORM_STATE_KEY);
 
-    // Mostrar diálogo de compartir
-    const { isConfirmed } = await Swal.fire({
-      icon: 'success',
-      title: '¡Solicitud enviada!',
-      html: '<p class="text-sm text-gray-500">¿Compartir por WhatsApp?</p>',
-      showCancelButton: true,
-      confirmButtonText: '📲 Compartir',
-      cancelButtonText: 'No, gracias',
-      confirmButtonColor: '#25D366',
-      cancelButtonColor: '#9ca3af',
-      allowOutsideClick: true,
-    });
-
-    if (isConfirmed) {
-      await compartirWhatsApp(shareData, shareImageFile);
-    }
+  } catch (error) {
+    Swal.fire({ icon:'error', title:'Error al registrar', text:error.message || 'Error desconocido' }); return;
+  } finally { isSubmitting.value = false; }
+  if (!desktop.value) {
+    const { isConfirmed } = await Swal.fire({ icon:'success', title:'¡Solicitud enviada!', text:'¿Compartir por WhatsApp?', showCancelButton:true, confirmButtonText:'Compartir', cancelButtonText:'No, gracias', confirmButtonColor:'#25D366' });
+    if (isConfirmed) await shareLastRequest();
+  }
+  const shareData = lastSent.value.data;
 
     // Si viene de roturas o patrulla, volver automáticamente
     if (route.query.origen === 'roturas') {
@@ -508,17 +534,16 @@ const onSubmit = async () => {
       }
       router.back();
     }
-  } catch (error) {
-    Swal.fire({ icon: 'error', title: 'Error al registrar', text: error.message || 'Error desconocido' });
-  } finally { isSubmitting.value = false; }
 };
 </script>
 
 <template>
-  <div class="bg-transparent pb-40">
+  <div class="call-page bg-transparent pb-40">
+    <header class="call-page-heading"><div><h1>Solicitar intervención</h1><p>Solicitud y seguimiento de asistencia del sector</p></div></header>
+    <div v-if="lastSent && desktop" class="call-success" role="status"><span>Solicitud registrada correctamente.</span><button type="button" class="call-button" :disabled="shareBusy" @click="shareLastRequest" v-tippy="'Compartir la última solicitud registrada'"><Share2 :size="16" />{{ shareBusy ? 'Abriendo…' : 'Compartir' }}</button></div>
 
     <!-- Botón volver (cuando viene de roturas o patrulla) -->
-    <div v-if="route.query.origen === 'roturas' || route.query.origen === 'patrulla'" class="max-w-sm mx-auto px-4 pt-2">
+    <div v-if="route.query.origen === 'roturas' || route.query.origen === 'patrulla'" class="call-back-link max-w-sm mx-auto px-4 pt-2">
       <button type="button" @click="route.query.origen === 'roturas' ? router.push('/patrulla/roturas') : router.back()"
         class="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 active:scale-95 transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
@@ -526,13 +551,13 @@ const onSubmit = async () => {
       </button>
     </div>
 
-    <main class="max-w-sm mx-auto pt-2">
+    <div class="call-workspace"><main class="call-form-panel max-w-sm mx-auto pt-2"><header class="call-form-heading"><h2>Nueva solicitud</h2></header>
 
       <div v-if="maquinasError" class="mx-2 mb-2 bg-red-50 border border-red-100 text-red-800 p-3 rounded-xl flex items-center shadow-sm">
         <span class="font-semibold text-sm">⚠️ Error al conectar con la base de datos.</span>
       </div>
 
-      <form id="intervencion-form" @submit.prevent="onSubmit" class="bg-white border-y border-gray-100">
+      <form id="intervencion-form" @submit.prevent="onSubmit" class="call-form bg-white border-y border-gray-100"><fieldset :disabled="isSubmitting"><legend class="sr-only">Datos de la solicitud de intervención</legend>
 
         <!-- ── Tipo de Intervención ──────────────────────────────────────────── -->
         <div class="px-4 pt-4 pb-3 border-b border-gray-100">
@@ -544,7 +569,7 @@ const onSubmit = async () => {
             <button
               v-for="tipo in TIPOS_INTERVENCION"
               :key="tipo.id"
-              type="button"
+              type="button" :data-request-type="tipo.id" :aria-pressed="tipoIntervencion === tipo.id" v-tippy="tipo.label"
               @click="tipoIntervencion = tipo.id"
               class="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all active:scale-[0.97] shadow-sm"
               :class="tipoIntervencion === tipo.id
@@ -668,7 +693,7 @@ const onSubmit = async () => {
             <button
               v-for="tipo in TIPOS_INTERVENCION.filter(t => t.id !== 'CALIDAD')"
               :key="tipo.id"
-              type="button"
+              type="button" :data-request-type="tipo.id" :aria-pressed="tipoIntervencion === tipo.id" v-tippy="tipo.label"
               @click="tipoIntervencion = tipo.id"
               class="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg border-2 text-xs font-black transition-all active:scale-95"
               :class="tipoIntervencion === tipo.id
@@ -690,7 +715,7 @@ const onSubmit = async () => {
           <div class="grid grid-cols-3 gap-2">
             <button
               v-for="e in ESTADOS_MAQUINA" :key="e.id"
-              type="button"
+              type="button" :aria-pressed="estadoMaquina === e.id" v-tippy="e.label"
               @click="estadoMaquina = e.id"
               class="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all active:scale-[0.97]"
               :class="estadoMaquina === e.id ? e.activeBg : 'bg-white border-gray-200'"
@@ -709,7 +734,7 @@ const onSubmit = async () => {
         </div>
 
         <!-- ── Observaciones ──────────────────────────────────────────────────── -->
-        <div class="px-4 py-3 border-b border-gray-50">
+        <div class="call-observations px-4 py-3 border-b border-gray-50">
           <div class="flex items-center gap-2 mb-2">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
             <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
@@ -718,7 +743,7 @@ const onSubmit = async () => {
             v-model="observaciones"
             rows="2"
             placeholder="Describe el problema observado... (opcional)"
-            class="w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-orange-400 focus:border-orange-400 block p-2.5 shadow-sm min-h-15 resize-none outline-none"
+            class="call-observations-input w-full bg-white border border-gray-200 text-gray-900 text-base rounded-md focus:ring-orange-400 focus:border-orange-400 block p-2.5 shadow-sm min-h-15 resize-none outline-none"
           ></textarea>
         </div>
 
@@ -736,7 +761,7 @@ const onSubmit = async () => {
                 <p class="text-[10px] font-extrabold text-gray-400 tracking-widest mb-0.5">IMAGEN ADJUNTA</p>
                 <p class="text-xs font-black text-green-600">{{ formatSize(imagenFile?.size) }}</p>
               </div>
-              <button type="button" @click="imagenPreview = null; imagenFile = null"
+              <button type="button" @click="imagenPreview = null; imagenFile = null" v-tippy="'Quitar la imagen adjunta'"
                 class="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition font-bold text-xs">
                 <Trash2 class="w-4 h-4" /> Quitar
               </button>
@@ -744,13 +769,10 @@ const onSubmit = async () => {
           </div>
         </div>
 
-      </form>
-    </main>
-
     <!-- ── Barra inferior fija ──────────────────────────────────────────────── -->
-    <div class="fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2">
+    <div class="call-form-actions fixed bottom-14 left-0 right-0 z-[95] px-2 pb-2">
       <div class="max-w-sm mx-auto bg-white border border-gray-200 rounded-[1.4rem] shadow-[0_-10px_35px_rgba(15,23,42,0.14)] p-3">
-        <div class="flex items-center gap-3">
+        <div class="call-primary-actions flex items-center gap-3">
 
           <!-- Criticidad -->
           <label class="flex items-center gap-2 shrink-0"
@@ -770,7 +792,7 @@ const onSubmit = async () => {
           </label>
 
           <!-- Cámara / Galería -->
-          <button type="button" @click="openCamera" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition active:scale-90 relative shadow-sm group">
+          <button type="button" @click="openCamera" aria-label="Adjuntar foto" v-tippy="'Capturar o adjuntar una foto de la solicitud'" class="p-3 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-100 transition active:scale-90 relative shadow-sm group">
             <Camera class="w-6 h-6" :class="imagenPreview ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-600'" />
             <div v-if="imagenPreview" class="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white ring-2 ring-orange-500/20"></div>
           </button>
@@ -779,7 +801,7 @@ const onSubmit = async () => {
           <button
             type="submit"
             form="intervencion-form"
-            :disabled="isSubmitting"
+            :disabled="isSubmitting || isCompressing"
             class="flex-1 flex items-center justify-center gap-2 h-12 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-base font-bold shadow-lg shadow-orange-600/20 active:scale-[0.98] transition-all disabled:opacity-50 relative overflow-hidden"
           >
             <div v-if="isSubmitting"
@@ -795,9 +817,75 @@ const onSubmit = async () => {
         </div>
       </div>
     </div>
-
+    </fieldset></form></main>
+    <FaultEventsPanel v-if="desktop" kind="interventions" :refresh-key="eventsRefresh" />
+    </div>
   </div>
 
   <!-- Cámara nativa -->
   <CameraCapture v-if="showCamera" @capture="onCameraCapture" @cancel="showCamera = false" />
 </template>
+
+<style scoped>
+.call-page-heading,.call-form-heading { display:none; }
+.call-form fieldset { min-width:0; }
+@media(min-width:768px) {
+  .call-page { height:100%; min-height:0; display:flex; flex-direction:column; padding:12px 16px; gap:12px; overflow:hidden; font-family:Inter,system-ui,sans-serif; }
+  .call-page-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:12px; }
+  .call-page-heading h1 { font-size:20px; font-weight:600; color:#0f172a; }
+  .call-page-heading p { font-size:12px; color:#64748b; }
+  .call-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(350px,390px) minmax(0,1fr); gap:14px; }
+  .call-form-panel { width:100%; max-width:none; margin:0; padding:0; overflow:auto; min-height:0; border:1px solid #dce3ec; border-radius:8px; background:white; display:flex; flex-direction:column; }
+  .call-form-heading { display:block; flex-shrink:0; padding:12px 14px; }
+  .call-form-heading h2 { color:#0f172a; font-size:17px; font-weight:600; margin-bottom:10px; }
+  .call-form { border-bottom:0; flex:1; display:flex; flex-direction:column; }
+  .call-form fieldset { flex:1; display:flex; flex-direction:column; }
+  .call-form fieldset > div { flex-shrink:0; }
+  .call-form .call-observations { flex:1; display:flex; flex-direction:column; }
+  .call-observations > div { flex-shrink:0; }
+  .call-observations-input { flex:1; min-height:100px; }
+  .call-form :deep(select),.call-form :deep(textarea) { font-size:13px; font-weight:450; }
+  .call-form :deep(label) { letter-spacing:normal; }
+  .call-form :deep(.font-black),.call-form :deep(.font-extrabold) { font-weight:600; }
+  .call-form :deep(.tracking-widest) { letter-spacing:normal; }
+  .call-form :deep(.text-base) { font-size:13px; }
+  .call-form-actions { position:sticky; bottom:0; left:auto; right:auto; z-index:5; padding:10px; background:white; border-top:1px solid #e2e8f0; }
+  .call-form-actions > div { max-width:none; box-shadow:none; border:0; border-radius:6px; }
+  .call-form-actions :deep(button) { border-radius:6px; min-height:36px; }
+  .call-primary-actions { display:grid; grid-template-columns:1fr 40px; gap:8px; }
+  .call-primary-actions > button { height:36px; padding:6px; box-shadow:none; }
+  .call-primary-actions > button[type=submit] { grid-column:1 / -1; font-size:13px; }
+  .call-primary-actions :deep(svg) { width:18px; height:18px; }
+  .call-form :deep(.mb-16) { margin-bottom:0; }
+}
+@media(min-width:981px) and (max-width:1200px) {
+  .call-workspace { grid-template-columns:320px minmax(0,1fr); gap:10px; }
+  .call-page { padding:10px; }
+}
+@media(min-width:768px) and (max-width:980px) {
+  .call-page { padding:10px; gap:10px; }
+  .call-page-heading h1 { font-size:18px; }
+  .call-workspace { grid-template-columns:320px minmax(0,1fr); gap:10px; }
+}
+
+.call-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 11px; border:1px solid #dce3ec; border-radius:6px; background:white; font-size:13px; color:#475569; cursor:pointer; }
+.call-button:disabled { opacity:.5; } .call-button:hover { background:#f1f5f9; }
+@media(min-width:768px) {
+.call-form-heading h2 { margin:0; }
+.call-success { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0; padding:8px 12px; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:6px; color:#047857; font-size:13px; }
+.call-back-link { max-width:none; margin:0; padding:0; flex-shrink:0; }
+.call-form-actions > div { padding:0; }
+.call-primary-actions { grid-template-columns:1fr 40px; }
+.call-primary-actions > button[type=submit] { background:#4f46e5; }
+.call-primary-actions > button[type=submit]:hover { background:#4338ca; }
+.call-form button[aria-pressed] { padding:8px 5px; min-height:36px; border-width:1px; }
+.call-form button[data-request-type] { flex-direction:row; gap:5px; padding:8px 3px; }
+.call-form button[data-request-type] :deep(svg) { width:16px; height:16px; }
+.call-form button[data-request-type] :deep(span) { font-size:12px; }
+.call-form button[data-request-type][aria-pressed=true] { background:#eef2ff; border-color:#a5b4fc; color:#4338ca; }
+.call-form button[data-request-type=ELECTRICO][aria-pressed=true] { background:#fffbeb; border-color:#fcd34d; color:#92400e; }
+.call-form button[data-request-type=CALIDAD][aria-pressed=true] { background:#fef2f2; border-color:#fca5a5; color:#b91c1c; }
+.call-form button[data-request-type][aria-pressed=true] :deep(svg),.call-form button[data-request-type][aria-pressed=true] :deep(span) { color:inherit; }
+.call-form :deep(button) { border-radius:6px; box-shadow:none; }
+}
+</style>

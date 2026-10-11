@@ -401,3 +401,119 @@ test('desktop report keeps failed drafts, prevents duplicate sends and refreshes
     if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
   }
 });
+for (const isDesktop of [true, false]) {
+test('request form preserves patrol preload and failed drafts, then saves once (' + (isDesktop ? 'desktop' : 'mobile') + ')', async () => {
+  const previousWindow = globalThis.window, previousStorage = globalThis.sessionStorage;
+  const store = new Map([['patrol_intervention_return', JSON.stringify({ tipoInterv:'MECANICO' })]]);
+  globalThis.sessionStorage = { getItem:key => store.get(key) || null, setItem:(key,value) => store.set(key,value), removeItem:key => store.delete(key) };
+  globalThis.window = { matchMedia:() => ({ matches:isDesktop, addEventListener() {}, removeEventListener() {} }), addEventListener() {}, removeEventListener() {} };
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/LlamarIntervencion.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id:'request-form-test' });
+  const template = compileTemplate({ id:'request-form-test', source:descriptor.template.content, compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors, []);
+  let calls = 0, fail = true, resolveSave, returned = 0, leaveGuard;
+  const route = { query:{ origen:'patrulla', maqId:'m1', tipo:'TELAR', grp:'01', obs:'Equipo parado', tipoInterv:'CALIDAD', sintomaName:'Mancha' } };
+  const machine = { tipo:'TELAR', maquina:35001, sector:'TEJEDURIA', nombre_maquina:'Toyota', grp_tear:'01', g_cmest:'02', lado:'U' };
+  const symptom = { sector:'TEJEDURIA', tipoMaquina:'TELAR', nombre:'Mancha', derivaA:'CALIDAD' };
+  const stub = { render:() => null };
+  const dependencies = {
+    vue:Vue, 'lucide-vue-next':icons,
+    'vue-router':{ useRouter:() => ({ back() { returned++; } }), useRoute:() => route, onBeforeRouteLeave:callback => { leaveGuard = callback; } },
+    'firebase/firestore':{ collection:(db,name) => name, query:value => value, where() {},
+      getDocs:async name => ({ docs:[{ id:name === 'maquinas' ? 'm1' : 's1', data:() => name === 'maquinas' ? machine : symptom }] }) },
+    '../firebase/config':{},
+    '../services/intervencionService':{ intervencionService:{ crearIntervencion:async data => {
+      calls++; assert.equal(data.sector, 'TEJEDURIA'); assert.equal(data.tipoIntervencion, 'CALIDAD');
+      assert.equal(data.critico, true); assert.equal(data.estadoMaquina, 'PARADA'); assert.equal(data.sintomaNombre, 'Mancha');
+      if (fail) throw new Error('Sin conexión');
+      await new Promise(resolve => { resolveSave = resolve; }); return 'request-id';
+    } } },
+    '../services/authService':{ userProfile:Vue.ref({ role:'admin', sectorDefault:'TEJEDURIA', sectoresAsignados:['TEJEDURIA'] }), userRole:Vue.ref('admin') },
+    '../constants/organization':{ DEFAULT_SECTOR:'HILANDERIA', normalizeSectorValue:value => value, sanitizeSectorList:(sectors, fallback) => sectors || [fallback] },
+    '../constants/motivos':{ MOTIVOS_POR_TIPO:{}, MOTIVOS_DEFAULT:{} },
+    sweetalert2:{ fire:async () => ({ isConfirmed:false }) },
+    '../utils/imageCompressor':{ compressImage() {}, formatSize:() => '' },
+    './CameraCapture.vue':stub, './FaultEventsPanel.vue':stub, '../utils/tooltipDirective':{ vTippy },
+  };
+  const component = evaluate(script.content, dependencies);
+  component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host();
+  const app = renderer.createApp(component), errors = [];
+  app.config.errorHandler = e => errors.push(e.message);
+  try {
+    app.mount(root);
+    await new Promise(resolve => setImmediate(resolve));
+    const state = root._vnode.component.setupState;
+    assert.equal(state.desktop, isDesktop);
+    assert.equal(state.maquinaSeleccionadaId, 'm1');
+    assert.equal(state.observaciones, 'Equipo parado');
+    assert.equal(state.tipoIntervencion, 'CALIDAD');
+    assert.equal(state.isPreloading, false);
+    state.estadoMaquina = 'PARADA';
+    await Vue.nextTick();
+    await state.onSubmit();
+    assert.equal(state.observaciones, 'Equipo parado');
+    assert.equal(state.sintomaSeleccionado.nombre, 'Mancha');
+    assert.equal(state.eventsRefresh, 0);
+    fail = false;
+    const pending = state.onSubmit();
+    await state.onSubmit();
+    assert.equal(calls, 2);
+    assert.equal(await leaveGuard(), false);
+    resolveSave(); await pending;
+    assert.equal(state.observaciones, '');
+    assert.equal(state.eventsRefresh, 1);
+    assert.equal(state.lastSent.id, 'request-id');
+    assert.equal(state.lastSent.data.obs, 'Equipo parado');
+    assert.equal(returned, 1);
+    assert.equal(JSON.parse(store.get('patrol_intervention_return')).sintomaLabel, 'Mancha');
+    assert.equal(await leaveGuard(), true);
+    assert.deepEqual(errors, []);
+  } finally {
+    app.unmount();
+    if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
+    if (previousStorage === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = previousStorage;
+  }
+});
+}
+
+test('shared event panel reads intervention categories and states through its kind prop', async () => {
+  const { descriptor } = parse(fs.readFileSync(new URL('../src/components/FaultEventsPanel.vue', import.meta.url), 'utf8'));
+  const script = compileScript(descriptor, { id:'requests-panel-test' });
+  const template = compileTemplate({ id:'requests-panel-test', source:descriptor.template.content, compilerOptions:{ bindingMetadata:script.bindings } });
+  let subscription;
+  const dependencies = {
+    vue:Vue, 'lucide-vue-next':icons, '../firebase/config':{},
+    '../services/authService':{ userProfile:Vue.ref({ role:'admin' }) },
+    '../utils/sectorScope':{ getSectorScope }, '../utils/faultEvents':faultUtilities,
+    '../utils/plantTime':{ plantDate }, './PlantDatePicker.vue':{ render:() => null }, '../utils/tooltipDirective':{ vTippy },
+    '../services/faultEvents':{
+      subscribeFaultEvents(db, sectors, options, receive) { subscription = { sectors, options, receive }; return () => {}; },
+      loadFaultEventsPage:async () => ({ events:[], hasMore:false }),
+    },
+  };
+  const component = evaluate(script.content, dependencies);
+  component.render = evaluate(template.code, dependencies);
+  const { renderer, root } = host(), app = renderer.createApp(component, { kind:'interventions' }), errors = [];
+  app.config.errorHandler = e => errors.push(e.message);
+  try {
+    app.mount(root);
+    const state = root._vnode.component.setupState;
+    assert.equal(subscription.options.kind, 'interventions');
+    assert.equal(subscription.sectors, null);
+    state.category = 'CALIDAD'; state.state = 'EN_PROCESO';
+    await Vue.nextTick();
+    assert.equal(subscription.options.category, 'CALIDAD');
+    assert.equal(subscription.options.state, 'EN_PROCESO');
+    subscription.receive({ events:[{ id:'quality', tipoIntervencion:'CALIDAD', estado:'EN_PROCESO', sintomaNombre:'Mancha', numeroMaquina:35001 }], hasMore:false });
+    await Vue.nextTick();
+    assert.equal(state.visible[0].tipoProblema, 'Calidad');
+    assert.equal(state.visible[0].motivo, 'Mancha');
+    assert.equal(state.stateLabel('EN_PROCESO'), 'En proceso');
+    state.state = 'COMPLETADO'; state.period = 'older';
+    await Vue.nextTick();
+    assert.equal(state.loading, false);
+    assert.equal(state.events.length, 0);
+    assert.deepEqual(errors, []);
+  } finally { app.unmount(); }
+});

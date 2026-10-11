@@ -590,12 +590,12 @@ const onSubmit = async () => {
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">2</span>
             <label class="text-xs font-extrabold text-gray-500 tracking-widest">SELECCIÓN DE MÁQUINA</label>
           </div>
-          <div class="flex gap-2">
+          <div class="call-machine-fields flex gap-2">
             <!-- Tipo -->
             <div :class="esTipoTelar ? 'flex-[0.8]' : 'flex-[1]'">
-              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">TIPO</label>
+              <label for="call-machine-type" class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">TIPO</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                <select v-model="tipoSeleccionado" :disabled="tiposDisponibles.length === 0"
+                <select id="call-machine-type" v-model="tipoSeleccionado" :disabled="tiposDisponibles.length === 0"
                   class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none">
                   <option v-if="tiposDisponibles.length === 0" value="" disabled>—</option>
                   <option v-for="t in tiposDisponibles" :key="t" :value="t">{{ t }}</option>
@@ -605,9 +605,9 @@ const onSubmit = async () => {
 
             <!-- Gp (solo TELAR) -->
             <div v-if="esTipoTelar" class="flex-[0.5]">
-              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GRUPO</label>
+              <label for="call-machine-group" class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">GRUPO</label>
               <div class="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5" :class="!gruposTelarDisponibles.length ? 'opacity-40' : ''">
-                <select v-model="gpSeleccionado" :disabled="!gruposTelarDisponibles.length"
+                <select id="call-machine-group" v-model="gpSeleccionado" :disabled="!gruposTelarDisponibles.length"
                   class="w-full bg-transparent border-0 p-0 text-gray-900 text-sm font-bold focus:ring-0 focus:outline-none">
                   <option value="" disabled>—</option>
                   <option v-for="g in gruposTelarDisponibles" :key="g.raw" :value="g.raw">{{ g.label }}</option>
@@ -617,13 +617,13 @@ const onSubmit = async () => {
 
             <!-- ID Máquina -->
             <div :class="esTipoTelar ? 'flex-[1.1]' : 'flex-[1.2]'">
-              <label class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">MÁQUINA</label>
+              <label for="call-machine-id" class="block text-[10px] font-bold text-gray-500 tracking-widest mb-1">MÁQUINA</label>
               <div class="border rounded-lg px-2.5 py-1.5 transition-colors"
                 :class="maquinaSeleccionadaId
                   ? 'bg-orange-50 border-orange-300'
                   : 'bg-gray-50 border-gray-200'"
               >
-                <select v-model="maquinaSeleccionadaId"
+                <select id="call-machine-id" v-model="maquinaSeleccionadaId"
                   class="w-full bg-transparent border-0 p-0 text-sm font-bold focus:ring-0 focus:outline-none"
                   :class="maquinaSeleccionadaId ? 'text-orange-700' : 'text-gray-400'"
                   style="min-width:0">
@@ -652,7 +652,7 @@ const onSubmit = async () => {
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
               <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">3</span>
-              <label class="text-xs font-extrabold text-gray-500 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
+              <label for="call-symptom" class="text-xs font-extrabold text-gray-500 tracking-widest">¿QUÉ ESTÁ PASANDO?</label>
             </div>
             <button v-if="sintomaSeleccionado" type="button"
               @click="sintomaSeleccionado = null"
@@ -737,9 +737,9 @@ const onSubmit = async () => {
         <div class="call-observations px-4 py-3 border-b border-gray-50">
           <div class="flex items-center gap-2 mb-2">
             <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-black flex items-center justify-center shrink-0">5</span>
-            <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
+            <label for="call-observations" class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>
           </div>
-          <textarea
+          <textarea id="call-observations"
             v-model="observaciones"
             rows="2"
             placeholder="Describe el problema observado... (opcional)"
@@ -829,6 +829,8 @@ const onSubmit = async () => {
 <style scoped>
 .call-page-heading,.call-form-heading { display:none; }
 .call-form fieldset { min-width:0; }
+.call-machine-fields > div { min-width:0; }
+.call-machine-fields select { min-width:0; }
 @media(min-width:768px) {
   .call-page { height:100%; min-height:0; display:flex; flex-direction:column; padding:12px 16px; gap:12px; overflow:hidden; font-family:Inter,system-ui,sans-serif; }
   .call-page-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:12px; }
@@ -869,6 +871,7 @@ const onSubmit = async () => {
 }
 
 .call-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:36px; padding:7px 11px; border:1px solid #dce3ec; border-radius:6px; background:white; font-size:13px; color:#475569; cursor:pointer; }
+.call-button:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }
 .call-button:disabled { opacity:.5; } .call-button:hover { background:#f1f5f9; }
 @media(min-width:768px) {
 .call-form-heading h2 { margin:0; }

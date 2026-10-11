@@ -7,7 +7,7 @@ import { parseShiftReportCSV, transformRows, generarReportePRD } from '../servic
 import { guardarReporteCSV, guardarCambiosManual, suscribirReporte } from '../services/shiftReportFirestore';
 import { onBeforeRouteLeave } from 'vue-router';
 import { SHIFT_GRID_FIELDS, shiftGridTarget, cleanShiftDigits } from '../utils/shiftGrid';
-import { Upload, Download, Cloud, X, Save, ChevronLeft, ChevronRight, FolderOpen } from 'lucide-vue-next';
+import { Upload, Download, Cloud, CalendarDays, X, Save, ChevronLeft, ChevronRight, FolderOpen } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 const isLoading = ref(false);
@@ -30,7 +30,32 @@ const inputDrafts = ref({});
 const remoteRecords = ref({});
 const dirtyCount = computed(() => Object.keys(dirtyRecords.value).length);
 const gridElement = ref(null);
-const dateElement = ref(null);
+const calendarOpen = ref(false);
+const calendarMonth = ref('');
+const calendarLabel = computed(() => calendarMonth.value ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(calendarMonth.value + '-01T12:00:00Z')) : '');
+const calendarDays = computed(() => {
+  if (!calendarMonth.value) return [];
+  const first = new Date(calendarMonth.value + '-01T12:00:00Z');
+  const offset = (first.getUTCDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_, i) => {
+    const date = addDays(calendarMonth.value + '-01', i - offset);
+    return { date, day: Number(date.slice(-2)), outside: !date.startsWith(calendarMonth.value) };
+  });
+});
+function toggleCalendar() {
+  calendarMonth.value = fechaInput.value.slice(0, 7);
+  calendarOpen.value = !calendarOpen.value;
+}
+function moveCalendarMonth(delta) {
+  const date = new Date(calendarMonth.value + '-01T12:00:00Z');
+  date.setUTCMonth(date.getUTCMonth() + delta);
+  calendarMonth.value = date.toISOString().slice(0, 7);
+}
+function selectReportDate(date) {
+  if (isSaving.value || isLoading.value || hasUnsavedChanges()) return;
+  fechaReporte.value = date.replaceAll('-', '/');
+  calendarOpen.value = false;
+}
 const gridFields = SHIFT_GRID_FIELDS;
 const gridTurnos = ['A', 'B', 'C'];
 const gridCount = computed(() => telaresMaquinas.value.length * 15);
@@ -108,10 +133,7 @@ onBeforeRouteLeave(async () => {
 const fechaAyer = () => addDays(plantDate(), -1).replaceAll('-', '/');
 const fechaReporte = ref(fechaAyer());
 
-const fechaInput = computed({
-  get: () => fechaReporte.value.replace(/\//g, '-'),
-  set: (v) => { if (hasUnsavedChanges()) { nextTick(() => { if (dateElement.value) dateElement.value.value = fechaInput.value; }); return; } fechaReporte.value = v.replace(/-/g, '/'); }
-});
+const fechaInput = computed(() => fechaReporte.value.replaceAll('/', '-'));
 
 let unsubscribeFn = null;
 const pendingSaves = new Set();
@@ -780,53 +802,29 @@ async function exportarXLSX() {
     </Transition>
     <main class="shift-workspace">
 
-      <!-- Header compacto -->
-      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div class="px-3 py-2 flex items-center gap-2">
-          <input ref="dateElement" type="date" :disabled="isSaving || isLoading" v-model="fechaInput" class="px-2 py-1.5 rounded-lg border border-gray-300 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500" />
-          <Cloud class="w-4 h-4 shrink-0 transition-colors" :class="isSaving ? 'text-amber-500 animate-pulse' : 'text-emerald-500'" />
-          <div class="flex-1" />
-          <!-- Badge de carpeta guardada o botón para elegir carpeta -->
-          <div v-if="savedDirName" class="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 max-w-[140px]">
-            <FolderOpen class="w-3.5 h-3.5 shrink-0" />
-            <span class="truncate">{{ savedDirName }}</span>
-            <button @click.stop="limpiarCarpeta" title="Quitar carpeta guardada" class="ml-0.5 text-gray-400 hover:text-red-500 shrink-0 transition-colors"><X class="w-3 h-3" /></button>
+
+      <header class="shift-report-header">
+        <div class="shift-report-controls">
+          <div class="shift-calendar" @keydown.esc="calendarOpen = false">
+            <button class="shift-button" :disabled="isSaving || isLoading" :aria-expanded="calendarOpen" aria-haspopup="dialog" @click="toggleCalendar"><CalendarDays :size="17" />{{ fechaReporte.split('/').reverse().join('/') }}</button>
+            <template v-if="calendarOpen">
+              <button class="shift-calendar-dismiss" aria-label="Cerrar calendario" @click="calendarOpen = false" tabindex="-1"></button>
+              <div class="shift-calendar-panel" role="dialog" aria-label="Elegir fecha del reporte">
+                <div class="shift-calendar-heading"><button class="shift-button" aria-label="Mes anterior" @click="moveCalendarMonth(-1)"><ChevronLeft :size="16" /></button><strong>{{ calendarLabel }}</strong><button class="shift-button" aria-label="Mes siguiente" @click="moveCalendarMonth(1)"><ChevronRight :size="16" /></button></div>
+                <div class="shift-calendar-days"><span v-for="day in ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do']" :key="day" class="shift-calendar-weekday">{{ day }}</span><button v-for="day in calendarDays" :key="day.date" :aria-label="day.date.split('-').reverse().join('/')" :aria-pressed="day.date === fechaInput" :class="{ 'is-outside': day.outside, 'is-selected': day.date === fechaInput, 'is-today': day.date === plantDate() }" @click="selectReportDate(day.date)">{{ day.day }}</button></div>
+                <div class="shift-calendar-shortcuts"><button class="shift-button" @click="selectReportDate(plantDate())">Hoy</button><button class="shift-button" @click="selectReportDate(addDays(plantDate(), -1))">Ayer</button><button class="shift-button" @click="calendarOpen = false">Cerrar</button></div>
+              </div>
+            </template>
           </div>
-          <button v-else-if="soportaFSA" @click="elegirCarpeta" :disabled="isLoading" title="Elegir carpeta de CSVs (se recordará)" class="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-gray-500 hover:bg-gray-50 active:scale-95 disabled:opacity-50 transition-all">
-            <FolderOpen class="w-3.5 h-3.5" /> Carpeta
-          </button>
-          <button @click="cargarCSV" :disabled="isLoading" class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 active:scale-95 disabled:opacity-50">
-            <Upload class="w-4 h-4" /> CSV
-          </button>
-        </div>
-
-        <div v-if="csvMeta" class="px-3 py-1.5 bg-blue-50/50 border-t border-blue-100 text-xs font-bold text-blue-700 flex flex-wrap gap-3">
-          <span>{{ csvMeta.generatedAt }}</span>
-          <span>{{ csvMeta.rangoDesde }} → {{ csvMeta.rangoHasta }}</span>
-        </div>
-
-        <!-- Stats -->
-        <div class="px-3 py-2 border-t border-gray-100">
-          <div class="grid grid-cols-4 gap-1.5">
-            <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-center">
-              <p class="text-lg font-black text-gray-800">{{ stats.total }}</p>
-              <p class="text-[10px] font-bold text-gray-400 uppercase">Telares</p>
-            </div>
-            <div class="border rounded-lg p-2 text-center" :class="stats.sinCSV ? 'bg-orange-50 border-orange-200' : 'bg-emerald-50 border-emerald-200'">
-              <p class="text-lg font-black" :class="stats.sinCSV ? 'text-orange-700' : 'text-emerald-700'">{{ stats.sinCSV }}</p>
-              <p class="text-[10px] font-bold uppercase" :class="stats.sinCSV ? 'text-orange-500' : 'text-emerald-500'">Sin CSV</p>
-            </div>
-            <div class="border rounded-lg p-2 text-center" :class="stats.sinRpm ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'">
-              <p class="text-lg font-black" :class="stats.sinRpm ? 'text-amber-700' : 'text-emerald-700'">{{ stats.sinRpm }}</p>
-              <p class="text-[10px] font-bold uppercase" :class="stats.sinRpm ? 'text-amber-500' : 'text-emerald-500'">Sin RPM</p>
-            </div>
-            <div class="bg-red-50 border border-red-200 rounded-lg p-2 text-center">
-              <p class="text-lg font-black text-red-700">{{ stats.rotTotal }}</p>
-              <p class="text-[10px] font-bold text-red-400 uppercase">Roturas</p>
-            </div>
+          <span class="shift-sync" :class="{ 'is-pending': dirtyCount || isSaving }" role="status" :title="isSaving ? 'Guardando cambios' : dirtyCount ? 'Cambios pendientes de guardar' : 'Sin cambios pendientes'"><Cloud :size="17" /><span>{{ isSaving ? 'Guardando…' : dirtyCount ? 'Pendiente' : 'Sin pendientes' }}</span></span>
+          <div class="shift-import-actions">
+            <div v-if="savedDirName" class="shift-folder"><button class="shift-button" :disabled="isLoading || isSaving" :title="'Carpeta: ' + savedDirName" @click="elegirCarpeta"><FolderOpen :size="16" /><span>{{ savedDirName }}</span></button><button class="shift-button" :disabled="isLoading || isSaving" aria-label="Quitar carpeta guardada" @click="limpiarCarpeta"><X :size="14" /></button></div>
+            <button v-else-if="soportaFSA" class="shift-button" :disabled="isLoading || isSaving" title="Elegir carpeta de CSVs" @click="elegirCarpeta"><FolderOpen :size="16" />Carpeta</button>
+            <button class="shift-button shift-button-primary" :disabled="isLoading || isSaving" @click="cargarCSV"><Upload :size="16" />{{ isLoading ? 'Cargando…' : 'Subir CSV' }}</button>
           </div>
         </div>
-      </div>
+        <div class="shift-summary" aria-label="Resumen de producción"><span><strong>{{ stats.total }}</strong> telares</span><span :class="{ 'summary-warning': stats.sinCSV }"><strong>{{ stats.sinCSV }}</strong> sin CSV</span><span :class="{ 'summary-warning': stats.sinRpm }"><strong>{{ stats.sinRpm }}</strong> sin RPM</span><span :class="{ 'summary-alert': stats.rotTotal }"><strong>{{ stats.rotTotal }}</strong> roturas</span><span v-if="csvMeta" class="shift-csv-meta" :title="csvMeta.generatedAt">CSV: {{ csvMeta.rangoDesde }} → {{ csvMeta.rangoHasta }}</span></div>
+      </header>
 
       <section ref="gridElement" class="shift-desktop">
         <header class="shift-grid-toolbar"><div><h1>Producción por turno</h1><p>Pts × 1.000 · tres dígitos para avanzar · flechas para navegar</p></div><div class="shift-grid-actions"><span aria-live="polite">{{ dirtyCount ? dirtyCount + ' registros pendientes' : 'Sin cambios pendientes' }}</span><button data-grid-save class="shift-button shift-button-primary" :disabled="!dirtyCount || isSaving" @click="guardarPlanilla()"><Save :size="16" />{{ isSaving ? 'Guardando…' : 'Guardar cambios' }}</button><button v-if="dirtyCount" class="shift-button" :disabled="isSaving" @click="descartarCambios">Descartar</button><button class="shift-button" :disabled="!!dirtyCount || isSaving" @click="exportarPRD"><Download :size="16" />TXT PRD</button><button class="shift-button" :disabled="!!dirtyCount || isSaving || isExporting" @click="exportarXLSX"><Download :size="16" />Excel</button></div></header>
@@ -950,6 +948,36 @@ async function exportarXLSX() {
 .shift-workspace { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; gap:12px; padding:12px 20px; overflow:auto; }
 .shift-workspace > :first-child { flex-shrink:0; }
 .shift-desktop { display:none; }
+.shift-report-header { position:relative; z-index:5; background:white; border:1px solid #dce3ec; border-radius:8px; }
+.shift-report-controls { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:10px 12px; }
+.shift-import-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.shift-sync { display:inline-flex; align-items:center; gap:6px; color:#64748b; font-size:12px; }
+.shift-sync.is-pending { color:#b45309; }
+.shift-folder { display:flex; align-items:center; gap:4px; }
+.shift-folder span { max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+.shift-summary { display:flex; align-items:center; flex-wrap:wrap; gap:6px 18px; padding:6px 12px; border-top:1px solid #edf1f6; font-size:12px; color:#64748b; font-variant-numeric:tabular-nums; }
+.shift-summary strong { color:#334155; font-weight:600; }
+.shift-summary .summary-warning,.shift-summary .summary-warning strong { color:#a16207; }
+.shift-summary .summary-alert,.shift-summary .summary-alert strong { color:#b91c1c; }
+.shift-csv-meta { margin-left:auto; font-size:11px; }
+.shift-calendar { position:relative; }
+.shift-calendar-dismiss { position:fixed; inset:0; z-index:10; cursor:default; }
+.shift-calendar-panel { position:absolute; z-index:11; top:calc(100% + 8px); left:0; width:288px; max-width:calc(100vw - 48px); padding:12px; border:1px solid #dce3ec; border-radius:10px; background:white; box-shadow:0 12px 32px #0f172a26; }
+.shift-calendar-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.shift-calendar-heading strong { font-size:13px; font-weight:600; text-transform:capitalize; }
+.shift-calendar-heading .shift-button { padding:6px; min-height:30px; }
+.shift-calendar-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; }
+.shift-calendar-weekday { text-align:center; color:#64748b; font-size:11px; padding:5px 0; }
+.shift-calendar-days button { height:30px; border-radius:5px; font-size:12px; cursor:pointer; color:#334155; }
+.shift-calendar-days button:hover { background:#eef2ff; }
+.shift-calendar-days button.is-outside { color:#94a3b8; }
+.shift-calendar-days button.is-today { box-shadow:inset 0 0 0 1px #a5b4fc; }
+.shift-calendar-days button.is-selected { background:#4f46e5; color:white; }
+.shift-calendar-days button:focus-visible { outline:2px solid #6366f1; outline-offset:1px; }
+.shift-calendar-shortcuts { display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid #edf1f6; }
+.shift-calendar-shortcuts .shift-button { flex:1; min-height:30px; font-size:12px; padding:5px; }
+@media (max-width:900px) { .shift-sync span { display:none; } .shift-report-controls { gap:6px; padding:8px; } .shift-summary { gap:4px 12px; } }
+@media (max-width:420px) { .shift-import-actions { gap:4px; } .shift-import-actions .shift-button { padding:7px; font-size:12px; } .shift-folder span { max-width:65px; } }
 .shift-button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 11px; border:1px solid #d8e0ea; border-radius:6px; background:white; font-size:13px; font-weight:550; cursor:pointer; white-space:nowrap; }
 .shift-button:hover { background:#f1f5f9; }
 .shift-button:disabled { opacity:.4; cursor:default; }

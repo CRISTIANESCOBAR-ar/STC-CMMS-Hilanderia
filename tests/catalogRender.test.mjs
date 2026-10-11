@@ -1068,4 +1068,8 @@ test('patrol sheet renders the route order, preserves failed decimal drafts and 
   await state.save(false); assert.equal(state.error,'Offline'); assert.equal(state.draft.b.roU,'10,5'); assert.equal(writes[0].data.b.roU,10.5); assert.equal(writes[0].data.b.roT,0); assert.equal(writes[0].complete,false);
   fail=false; await state.save(false); assert.equal(state.dirty,false); confirm=true; await state.save(true); assert.equal(writes.at(-1).complete,true); assert.equal(state.writable,false);
   state.presentation='full'; assert.equal(state.full,true); state.active=3; state.seed(); assert.equal(state.writable,false); state.openCell(3,state.rows[0]); await Vue.nextTick(); assert.deepEqual(errors,[]); app.unmount();
+  const emptyHost=host(),emptyApp=emptyHost.renderer.createApp(component,{ patrulla:null,canEdit:true }); emptyApp.config.errorHandler=error=>errors.push(error); emptyApp.mount(emptyHost.root);
+  const emptyState=emptyHost.root._vnode.component.setupState; await new Promise(resolve=>setImmediate(resolve)); emptyState.presentation='full'; await Vue.nextTick();
+  assert.equal(emptyState.patrol,null); assert.equal(emptyState.error,''); assert.equal(emptyState.rows.length,2); assert.equal(emptyState.writable,false);
+  const hasTable=node=>node.type==='table' || node.children.some(hasTable); assert.equal(hasTable(emptyHost.root),true); assert.deepEqual(errors,[]); emptyApp.unmount();
 });

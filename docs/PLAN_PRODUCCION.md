@@ -301,7 +301,7 @@ pruebas del servicio en entorno piloto.
 
 ### V3 — Reportar Falla en desktop
 
-- Formulario y tabla lado a lado desde 981 px; formulario de 320 px en PC de 1024 px. Entre 768 y 980 px el formulario permanece visible arriba y los eventos se apilan debajo, con scroll de página; no se oculta la carga mediante pestañas. Mobile conserva su formulario y barra de acciones.
+- Formulario y tabla lado a lado desde 981 px; formulario de 320 px en PC de 1024 px. Entre 768 y 980 px el formulario conserva 320 px de ancho a la izquierda; los eventos se muestran como tarjetas a la derecha, con scroll independiente. Ambos paneles permanecen visibles, sin pestañas ni expansión del formulario. Mobile conserva su formulario y barra de acciones.
 - En desktop las acciones de carga están dentro del formulario. Categoría con texto, botones y fuentes uniformes, tooltips Tippy claros; detalle de evento con descripción completa, foto, foco de teclado y cierre con Escape.
 - Consulta por sector autorizado, turno actual por defecto, Hoy, últimos 7 días, pendientes anteriores o rango personalizado de hasta 31 días. El calendario respeta la fecha de planta y el turno C conserva el día de inicio.
 - Páginas de 50 mediante cursor; primera página en tiempo real, páginas adicionales bajo demanda. Cambios en la primera página reinician las adicionales para no conservar filas obsoletas ni cursors inconsistentes.

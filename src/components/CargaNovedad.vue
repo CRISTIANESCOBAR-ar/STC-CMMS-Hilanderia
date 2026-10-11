@@ -1119,11 +1119,6 @@ const enviarNotaTurno = async () => {
 @media(min-width:768px) and (max-width:980px) {
   .fault-page { padding:10px; gap:10px; }
   .fault-page-heading h1 { font-size:18px; }
-  .fault-page { overflow:auto; }
-  .fault-workspace { display:flex; flex-direction:column; flex:none; gap:12px; }
-  .fault-form-panel { flex:none; overflow:visible; }
-  .fault-events-panel { flex:none; height:clamp(360px,65vh,560px); }
-  .fault-observations-input { flex:none; height:140px; }
-  .fault-form-panel { width:min(680px,100%); align-self:center; }
+  .fault-workspace { grid-template-columns:320px minmax(0,1fr); gap:10px; }
 }
 </style>

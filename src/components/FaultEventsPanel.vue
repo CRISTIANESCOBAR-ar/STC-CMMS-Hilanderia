@@ -99,6 +99,15 @@ onUnmounted(() => { generation++; revision++; unsubscribe?.(); clearInterval(bou
           <tr v-if="!visible.length"><td colspan="7" class="events-empty">{{ loading ? 'Cargando eventos…' : error ? 'La lista no está disponible.' : events.length ? 'Sin coincidencias en los eventos cargados. Cargá más o ajustá los filtros.' : 'No hay eventos para este período.' }}</td></tr>
         </tbody>
       </table>
+      <div class="event-cards" aria-label="Eventos de fallas por orden de ingreso">
+        <article v-for="event in visible" :key="event.id" class="event-card" :class="{ 'is-critical': event.critico }">
+          <header><div><strong>Máquina {{ event.numeroMaquina }}</strong><small>{{ event.tipoMaquina }} · {{ event.sector }}</small></div><time>{{ formatDate(event.createdAt) }}</time></header>
+          <div class="event-card-badges"><span class="event-category" :class="{ electric: event.tipoProblema === 'Eléctrico' }">{{ event.tipoProblema || 'Sin categoría' }}</span><span class="event-state" :class="event.estado?.replace(' ', '-')">{{ stateLabel(event.estado) }}</span><span v-if="event.critico" class="event-critical-label">Crítico</span></div>
+          <h3>{{ event.motivo }}</h3><p class="event-card-description">{{ event.observaciones }}</p>
+          <footer><span>{{ event.creadoPorNombre || 'Sin identificar' }}</span><button class="event-button" :aria-label="'Ver falla de máquina ' + event.numeroMaquina" v-tippy="'Ver descripción completa y foto'" @click="selected = event"><Eye :size="16" />Detalle</button></footer>
+        </article>
+        <p v-if="!visible.length" class="events-empty">{{ loading ? 'Cargando eventos…' : error ? 'La lista no está disponible.' : events.length ? 'Sin coincidencias en los eventos cargados. Cargá más o ajustá los filtros.' : 'No hay eventos para este período.' }}</p>
+      </div>
     </div>
     <footer class="events-footer"><span>{{ visible.length }} visibles / {{ events.length }} cargados · {{ category === 'other' ? 'otras categorías y búsqueda sobre filas cargadas' : 'búsqueda sobre filas cargadas' }}</span><button v-if="hasMore" class="event-button" :disabled="loadingMore" @click="more"><ChevronDown :size="16" />{{ loadingMore ? 'Cargando…' : 'Cargar más' }}</button></footer>
     <Teleport to="body"><div v-if="selected" class="event-modal-overlay" @click.self="selected = null" @keydown.esc="selected = null"><section ref="modal" class="event-modal" @keydown="modalKeydown" role="dialog" aria-modal="true" aria-label="Detalle de falla" tabindex="-1"><header><div><h2>Falla · Máquina {{ selected.numeroMaquina }}</h2><p>{{ formatDate(selected.createdAt) }} · {{ selected.tipoProblema }} · {{ stateLabel(selected.estado) }}</p></div><button class="event-button" aria-label="Cerrar detalle" v-tippy="'Cerrar detalle'" @click="selected = null"><X :size="18" /></button></header><div class="event-modal-body"><p v-if="selected.critico" class="event-critical-label">Falla crítica</p><h3>{{ selected.motivo }}</h3><p class="event-full-description">{{ selected.observaciones }}</p><dl><dt>Reportado por</dt><dd>{{ selected.creadoPorNombre }}</dd><dt>Sector</dt><dd>{{ selected.sector }}</dd><dt>Punto de control</dt><dd>{{ [selected.seccion, selected.grupo, selected.denominacion].filter(Boolean).join(' · ') || 'No informado' }}</dd></dl><img v-if="selected.fotoUrl" :src="selected.fotoUrl" alt="Foto adjunta al reporte de falla" loading="lazy" /></div><footer><button class="event-button" @click="selected = null">Cerrar</button></footer></section></div></Teleport>
@@ -131,6 +140,24 @@ onUnmounted(() => { generation++; revision++; unsubscribe?.(); clearInterval(bou
 .event-critical td:first-child { border-left:3px solid #dc2626; } .event-critical-label,.events-table small.event-critical-label { color:#b91c1c; font-weight:600; }
 .events-footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; font-size:11px; color:#64748b; border-top:1px solid #e2e8f0; }
 .events-empty { text-align:center; padding:32px 12px !important; color:#64748b !important; }
+.event-cards { display:none; }
+.event-card { padding:12px; border:1px solid #dce3ec; border-radius:7px; background:white; font-size:12px; color:#334155; }
+.event-card.is-critical { border-left:3px solid #dc2626; }
+.event-card header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.event-card strong,.event-card h3 { font-weight:600; }
+.event-card small { display:block; margin-top:3px; font-size:10px; color:#64748b; }
+.event-card time { white-space:nowrap; font-size:11px; color:#64748b; font-variant-numeric:tabular-nums; }
+.event-card-badges { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:9px 0; }
+.event-card-description { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; margin-top:4px; }
+.event-card footer { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+.event-card footer > span { min-width:0; color:#64748b; font-size:11px; overflow-wrap:anywhere; }
+@media(min-width:768px) and (max-width:980px) {
+  .events-table { display:none; }
+  .event-cards { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; padding:10px; background:#f8fafc; }
+  .events-heading { padding:10px; }
+  .events-heading h2 { font-size:15px; }
+  .events-filters { padding:0 10px 10px; gap:6px; }
+}
 .events-error { padding:10px 14px; color:#b91c1c; font-size:12px; }
 .event-modal-overlay { position:fixed; inset:0; z-index:110; background:#0f172a66; display:flex; align-items:center; justify-content:center; padding:20px; }
 .event-modal { display:flex; flex-direction:column; width:min(680px,100%); max-height:90dvh; border-radius:10px; background:white; box-shadow:0 20px 60px #0f172a33; overflow:hidden; }

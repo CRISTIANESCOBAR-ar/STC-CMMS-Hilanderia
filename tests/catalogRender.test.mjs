@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
 import * as Vue from 'vue';
 import * as icons from 'lucide-vue-next';
+import { catalogColumnLayout } from '../src/utils/catalogColumnLayout.js';
 import { createLatestLoad } from '../src/utils/latestLoad.js';
 
 function evaluate(code, dependencies) {
@@ -107,7 +108,7 @@ test('machine view renders table, cards and empty filters without depending on d
       '../services/authService': { authService: {}, userRole: Vue.ref('admin') },
       '../services/catalogoService': { catalogoService: { obtenerTodo: async () => [] } },
       '../services/maquinaService': { maquinaService: {} }, '../utils/imageCompressor': {},
-      '../data/catalogo_full_r60.json': [], sweetalert2: { fire: async () => ({}) },
+      '../utils/catalogColumnLayout': { catalogColumnLayout }, '../data/catalogo_full_r60.json': [], sweetalert2: { fire: async () => ({}) },
       exceljs: {}, 'file-saver': {}, 'tippy.js': () => ({}),
     };
     dependencies['../composables/useMaquinasList'] = evaluate(machineSource, dependencies);

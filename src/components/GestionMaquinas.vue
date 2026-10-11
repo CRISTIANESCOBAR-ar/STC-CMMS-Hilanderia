@@ -16,6 +16,7 @@ import 'tippy.js/themes/light-border.css';
 import { DEFAULT_SECTOR, SECTOR_OPTIONS } from '../constants/organization';
 import { maquinaService } from '../services/maquinaService';
 import { useMaquinasList } from '../composables/useMaquinasList';
+import { catalogColumnLayout } from '../utils/catalogColumnLayout';
 import catalogDataR60 from '../data/catalogo_full_r60.json';
 
 const {
@@ -45,6 +46,22 @@ const catalogoGroupFilter = ref('');
 const catalogoModelo = ref('R-60');
 const catalogoModelosDisponibles = ref(['R-60']);
 const catalogoCargando = ref(false);
+const catalogTextMeasure = ref(null);
+const catalogColumns = computed(() => catalogColumnLayout(catalogoData.value, {
+  ...(catalogTextMeasure.value ? { measureText: catalogTextMeasure.value } : {}),
+  actions: userRole.value === 'admin' || userRole.value === 'jefe_sector',
+}));
+onMounted(() => {
+  if (typeof document === 'undefined') return;
+  const measureFont = () => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) return;
+    context.font = '13px Inter, ui-sans-serif, system-ui, sans-serif';
+    catalogTextMeasure.value = text => context.measureText(text).width;
+  };
+  measureFont();
+  document.fonts?.ready.then(() => { if (showCatalogModal.value || catalogoData.value.length) measureFont(); });
+});
 const editingCatalogRowId = ref(null);
 const editingCatalogRow = ref({});
 
@@ -954,8 +971,8 @@ const exportCatalogToExcel = async () => {
                 </div>
               </div>
               <div class="catalog-data"><div class="catalog-table-scroll" tabindex="0" aria-label="Datos del catálogo; desplazamiento dentro del modal">
-                <table class="catalog-table"><caption class="sr-only">Piezas y artículos del catálogo {{ catalogoModelo }}</caption>
-                  <colgroup><col class="catalog-col-section" /><col class="catalog-col-group" /><col class="catalog-col-subgroup" /><col /><col class="catalog-col-code" /><col class="catalog-col-code" /><col v-if="userRole === 'admin' || userRole === 'jefe_sector'" class="catalog-col-actions" /></colgroup>
+                <table class="catalog-table" :style="{ minWidth: catalogColumns.minWidth + 'px' }"><caption class="sr-only">Piezas y artículos del catálogo {{ catalogoModelo }}</caption>
+                  <colgroup><col v-for="column in catalogColumns.columns" :key="column.key" :style="{ width: column.width }" /><col v-if="userRole === 'admin' || userRole === 'jefe_sector'" style="width:104px" /></colgroup>
                   <thead class="sticky top-0 z-20 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 tracking-widest shadow-sm">
                     <tr>
                       <th class="px-3 py-3 bg-gray-50 w-20">Sección</th>
@@ -1154,14 +1171,9 @@ const exportCatalogToExcel = async () => {
 .catalog-table td { padding:8px 12px; height:44px; font-size:13px; font-weight:400; color:#475569; border-bottom:1px solid #edf1f6; overflow-wrap:anywhere; }
 .catalog-table tbody tr:nth-child(even) { background:#fbfcfe; }
 .catalog-table tbody tr:hover { background:#f0f4ff; }
-.catalog-col-section { width:22%; }
-.catalog-col-group { width:72px; }
-.catalog-col-subgroup { width:96px; }
-.catalog-col-code { width:140px; }
-.catalog-col-actions { width:104px; }
-.catalog-table td:nth-child(1),.catalog-table td:nth-child(4) { white-space:normal; overflow-wrap:break-word; word-break:normal; }
+.catalog-table td:nth-child(1),.catalog-table td:nth-child(2),.catalog-table td:nth-child(3),.catalog-table td:nth-child(4) { white-space:normal; overflow-wrap:break-word; word-break:normal; }
 .catalog-table td:nth-child(4) { color:#334155; }
-.catalog-table td:nth-child(2),.catalog-table td:nth-child(3),.catalog-table td:nth-child(5),.catalog-table td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
+.catalog-table td:nth-child(5),.catalog-table td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
 .catalog-table input { width:100%; min-width:0; }
 .catalog-table td:nth-child(4) input { min-width:0; }
 .catalog-table input { font-size:13px; padding:6px 8px; }

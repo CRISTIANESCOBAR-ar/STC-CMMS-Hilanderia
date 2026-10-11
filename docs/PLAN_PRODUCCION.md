@@ -259,3 +259,10 @@ pruebas del servicio en entorno piloto.
 - Sección ocupa 22%; Grupo/Sub-G y Catálogo/Artículo tienen anchos propios. Sección y Denominación parten por palabras, códigos permanecen en una línea.
 - Tabla de al menos 980 px, con desplazamiento horizontal dentro del modal en pantallas reducidas; edición respeta los anchos de celda.
 - 40 pruebas correctas; ajuste visual pendiente de revisión en navegador del usuario.
+
+### V1 — Anchos basados en datos reales
+
+- Consulta de solo lectura a Firestore: 1.674 registros de 12 modelos. Máximos por columna/modelo en [CATALOGO_COLUMNAS.md](CATALOGO_COLUMNAS.md).
+- Distribución calculada con el ancho del texto de todos los registros cargados del modelo; cache de mediciones y actualización al completar la carga de fuentes.
+- Los filtros no alteran los anchos; códigos completos, descripciones limitadas para permitir varias líneas, espacio sobrante proporcional y acciones de 104 px.
+- 42 pruebas correctas y build correcto. Pendiente validación visual por el usuario; sin escrituras en Firestore.

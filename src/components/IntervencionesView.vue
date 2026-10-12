@@ -6,6 +6,7 @@ import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
 import IntervencionDetalle from './IntervencionDetalle.vue';
 import AttentionRehearsal from './AttentionRehearsal.vue';
+import MobileMechanicWork from './MobileMechanicWork.vue';
 import { mobileWorkAction } from '../utils/mobileWorkAction';
 import { attentionLabel,attentionQueueMatches } from '../utils/attentionQueue';
 import { getSectorScope } from '../utils/sectorScope';
@@ -40,6 +41,7 @@ const filtroAsignacion = ref(userRole.value==='mecanico' ? 'team':'');
 const errorCarga = ref(false);
 const detalleId = ref(null);
 const ensayo = ref(false);
+const mobileItems=computed(()=>[...intervenciones.value].sort((a,b)=>calcPrioridad(a).score-calcPrioridad(b).score));
 const mobileAction=item=>mobileWorkAction(item,currentUid(),canAtender(item) || canTomarItem(item));
 function mobileOpen(item) { const action=mobileAction(item); if(previewSector.value!==null || action.kind==='detail') abrirDetalle(item); else if(action.kind==='claim') onAtender(item); else onTomar(item); }
 const activatingAlerts=ref(false),alertsEnabled=ref(false);
@@ -325,7 +327,8 @@ const onTomarGrupo = async (grupo) => {
 </script>
 
 <template>
-  <div class="interventions-page min-h-screen bg-gray-50 pb-8" :inert="detalleId !== null || ensayo">
+  <div class="interventions-page min-h-screen bg-gray-50 pb-8" :inert="detalleId !== null || ensayo" :class="{ 'mechanic-layout':userRole==='mecanico' }">
+    <MobileMechanicWork v-if="userRole==='mecanico'" :items="mobileItems" :profile="userProfile" :uid="currentUid()" :preview="previewSector!==null" :loading="loading" :error="errorCarga" :busy="actualizando" :can-take="item=>canAtender(item) || canTomarItem(item)" :alerts="alertsEnabled" :alerts-busy="activatingAlerts" @detail="abrirDetalle" @take="onTomar" @claim="onAtender" @practice="ensayo=true" @retry="cargarIntervenciones()" @alerts="activateAlerts" @off="finishDuty" />
     <header class="management-header"><div><h1>Intervenciones</h1><p>Gestión de solicitudes · Prioridad más alta primero</p></div><button v-if="canDespacharIntervencion(userRole)" class="management-button primary" @click="router.push('/llamar')" v-tippy="'Registrar una nueva solicitud de intervención'"><Plus :size="16" />Nueva solicitud</button></header>
 
     <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -452,6 +455,9 @@ const onTomarGrupo = async (grupo) => {
 </template>
 
 <style scoped>
+@media(max-width:767px){.mechanic-layout > :not(.mechanic-mobile){display:none!important}}
+@media(min-width:768px) and (max-width:980px){.management-table-scroll{display:block;overflow:auto;flex:1;min-height:0}.management-table{width:100%;min-width:760px;border-collapse:collapse;background:white;font-size:12px}.management-table th,.management-table td{padding:10px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.management-table th{background:#f8fafc}.management-table small{display:block;color:#64748b;margin-top:4px}}
+
 .mobile-work-list{padding:12px;display:grid;gap:12px;padding-bottom:24px}.mobile-work-guide{font-size:14px;color:#475569;margin:0}.mobile-preview-note{padding:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;font-size:14px;line-height:1.5}.mobile-preview-note button{color:#4338ca;text-decoration:underline;min-height:44px;font-weight:600}.mobile-work-card{padding:16px;background:white;border:1px solid #e2e8f0;border-radius:8px;min-width:0}.mobile-work-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}.mobile-work-heading strong{font-size:18px}.mobile-work-heading span{font-size:12px;background:#eef2ff;color:#4338ca;padding:4px 7px;border-radius:4px}.mobile-work-meta,.mobile-work-hint{font-size:13px;color:#64748b;margin:8px 0}.mobile-work-card h2{font-size:16px;font-weight:650;margin:12px 0 6px}.mobile-work-description{font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.mobile-work-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.mobile-work-actions button{min-height:44px;font-size:14px;flex:1}.mobile-work-actions button.primary{flex:2}
 @media(min-width:768px){.mobile-work-list{display:none}}
 @media(max-width:767px){.specialty-board,.presentation-switch{display:none}.work-inboxes{flex-wrap:nowrap;overflow-x:auto}.work-inboxes button{white-space:nowrap;min-height:44px}}

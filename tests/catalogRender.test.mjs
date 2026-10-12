@@ -64,6 +64,25 @@ function attentionComponent(name,dependencies) {
   assert.deepEqual(template.errors,[]);
   const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies); return component;
 }
+
+test('mechanic mobile queues isolate available jobs, ownership and specialty and preview never claims real work',async()=>{
+  const component=attentionComponent('MobileMechanicWork',{ vue:Vue,'../utils/attentionQueue':attentionQueue,'../utils/mobileWorkAction':{ mobileWorkAction },'../../functions/attentionPolicy.js':attentionPolicy,'../utils/faultEvents':{ eventView } });
+  const emitted=[];
+  const props=Vue.reactive({ items:[
+    { id:'free',tipoIntervencion:'MECANICO',estado:'PENDIENTE',numeroMaquina:35014 },
+    { id:'mine',tipoIntervencion:'MECANICO',estado:'EN_PROCESO',asignadoA:'tech',numeroMaquina:35002 },
+    { id:'other',tipoIntervencion:'MECANICO',estado:'EN_PROCESO',asignadoA:'other',numeroMaquina:35003 },
+    { id:'electrical',tipoIntervencion:'ELECTRICO',estado:'PENDIENTE',numeroMaquina:35004 },
+  ],profile:{ role:'mecanico',sectoresAsignados:['TEJEDURIA'] },uid:'tech',canTake:()=>true,preview:false,onTake:item=>emitted.push(['take',item.id]),onDetail:item=>emitted.push(['detail',item.id]) });
+  const { renderer,root }=host(); const app=renderer.createApp({ render:()=>Vue.h(component,props) });const errors=[];app.config.errorHandler=error=>errors.push(error);const vm=app.mount(root);await Vue.nextTick();
+  const state=vm.$.subTree.component.setupState;
+  assert.deepEqual(state.visible.map(i=>i.id),['free']);assert.equal(state.count('mine'),1);assert.equal(state.count('team'),3);
+  state.open(props.items[0]);assert.deepEqual(emitted,[['take','free']]);
+  props.preview=true;await Vue.nextTick();state.open(props.items[0]);assert.deepEqual(emitted.at(-1),['detail','free']);
+  state.queue='mine';await Vue.nextTick();assert.deepEqual(state.visible.map(i=>i.id),['mine']);assert.equal(state.action(props.items[1]).label,'Registrar corrección');
+  state.search='14';await Vue.nextTick();assert.equal(state.visible.length,0);state.queue='available';await Vue.nextTick();assert.deepEqual(state.visible.map(i=>i.id),['free']);
+  assert.deepEqual(errors,[]);app.unmount();
+});
 test('grouped navigation renders both layouts and respects cancelled navigation, keyboard and permission changes',async()=>{
   const component=attentionComponent('PlantNavigation',{ vue:Vue,'vue-router':{ isNavigationFailure:result=>Boolean(result?.type) },'lucide-vue-next':icons,'../utils/navigation':navigation,'../utils/tooltipDirective':{ vTippy } });
   const props=Vue.reactive({ model:navigation.buildNavigation('admin',()=>true),path:'/usuarios',layout:'rail',contextKey:'admin:one' });
@@ -227,7 +246,7 @@ test('intervention management filters grouped requests and only takes permitted 
     '../utils/interventionAccess': { canExecuteIntervention }, '../utils/faultEvents': { eventView },
     '../utils/mobileWorkAction':{ mobileWorkAction }, '../utils/attentionQueue': { attentionLabel,attentionQueueMatches }, '../utils/sectorScope': { getSectorScope:profile=>profile.sectoresAsignados },
     '../../functions/attentionPolicy.js':attentionPolicy,'../services/attentionService':{ transitionAttention:async()=>({ revision:2 }) },
-    './AttentionRehearsal.vue': { render:()=>Vue.h('div') },
+    './AttentionRehearsal.vue': { render:()=>Vue.h('div') }, './MobileMechanicWork.vue': { render:()=>Vue.h('section',{class:'mechanic-mobile'}) },
     '../utils/tooltipDirective': { vTippy },
     '../constants/organization': { DEFAULT_SECTOR:'TEJEDURIA', normalizeSectorValue:v => v,
       sanitizeSectorList:v => v, canDespacharIntervencion: () => true },

@@ -69,6 +69,8 @@ const vNavTippy = {
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { useRouter, isNavigationFailure } from 'vue-router';
 import AccountPanel from './components/AccountPanel.vue';
+import PlantNavigation from './components/PlantNavigation.vue';
+import { buildNavigation } from './utils/navigation';
 import { buildPreviewProfile } from './utils/previewProfile';
 import { authService, userRole, userProfile, previewSector } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge, BookMarked } from 'lucide-vue-next';
@@ -306,6 +308,8 @@ const tabActions = computed(() => {
 });
 
 const currentPath = computed(() => router.currentRoute.value.path);
+const navigationModel=computed(()=>buildNavigation(userRole.value,slug=>canAccessView(userRole.value,slug)));
+const navigationContext=computed(()=>[user.value?.uid,userRole.value,previewSector.value || userProfile.value?.sectorDefault].join(':'));
 
 const showTabBar = computed(() => {
   const p = currentPath.value;
@@ -331,199 +335,16 @@ const navigateTab = (action) => {
   <div v-else :inert="showAccount || undefined" :class="{ 'machine-workspace-shell': ['/', '/llamar', '/intervenciones', '/historico', '/sintomas', '/rondas', '/operarios', '/paros-anudado', '/usuarios', '/patrulla', '/catalogo', '/jefe', '/maquinas', '/shiftreport'].includes(currentPath) }" class="h-screen flex flex-row bg-gray-50 overflow-hidden font-sans w-full">
     
     <!-- SIDEBAR DESKTOP (App Shell) -->
-    <aside v-if="user" class="desktop-navigation hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-4 shadow-sm select-none z-50">
+    <aside v-if="user" class="desktop-navigation hidden lg:flex flex-none w-[72px] flex-col items-center bg-white border-r border-gray-200 py-3 shadow-sm select-none z-50">
       
       <!-- Logo Superior -->
-      <div class="w-12 h-12 flex items-center justify-center mb-4 border border-gray-100 rounded-xl shadow-sm overflow-hidden shrink-0">
+      <div class="w-12 h-12 flex items-center justify-center mb-3 border border-gray-100 rounded-xl shadow-sm overflow-hidden shrink-0">
         <img src="/LogoSantana.jpg" class="h-8 w-auto object-contain" alt="Logo" />
       </div>
 
       <div class="w-8 h-px bg-gray-200 mb-3 shrink-0"></div>
 
-      <!-- Iconos de Navegación -->
-      <nav class="flex flex-col items-center gap-2 w-full px-2 overflow-y-auto min-h-0 flex-1 hide-scrollbar">
-        
-        <router-link
-          v-if="canAccessView(userRole, 'shiftreport')"
-          to="/shiftreport"
-          v-nav-tippy="{ slug: 'shiftreport', title: 'Shift Report' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/shiftreport' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <FileText class="w-5 h-5" />
-        </router-link>
-        
-        <router-link
-          v-if="canAccessView(userRole, 'carga_novedad')"
-          to="/"
-          v-nav-tippy="{ slug: 'carga_novedad', title: 'Reportar Falla' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Wrench class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'jefe')"
-          to="/jefe"
-          v-nav-tippy="{ slug: 'jefe', title: 'Panel de Control' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/jefe' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <ShieldCheck class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'llamar')"
-          to="/llamar"
-          v-nav-tippy="{ slug: 'llamar', title: 'Solicitar Intervención' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/llamar' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <BellRing class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'patrulla')"
-          to="/patrulla"
-          v-nav-tippy="{ slug: 'patrulla', title: 'Patrulla de Calidad' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/patrulla' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <ScanSearch class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'patrulla_seguimiento')"
-          to="/patrulla-seguimiento"
-          v-nav-tippy="{ slug: 'patrulla_seguimiento', title: 'Patrulla (Vista)' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/patrulla-seguimiento' ? 'bg-cyan-100 text-cyan-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Eye class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'eficiencia')"
-          to="/eficiencia"
-          v-nav-tippy="{ slug: 'eficiencia', title: 'Registro de Eficiencia' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/eficiencia' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Gauge class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'intervenciones')"
-          to="/intervenciones"
-          v-nav-tippy="{ slug: 'intervenciones', title: 'Intervenciones' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/intervenciones' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <ClipboardList class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'historico')"
-          to="/historico"
-          v-nav-tippy="{ slug: 'historico', title: 'Historial de Novedades' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/historico' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <History class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'maquinas')"
-          to="/maquinas"
-          v-nav-tippy="{ slug: 'maquinas', title: 'Gestión de Máquinas' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/maquinas' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Settings2 class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'usuarios')"
-          to="/usuarios"
-          v-nav-tippy="{ slug: 'usuarios', title: 'Gestión de Usuarios' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/usuarios' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Users class="w-5 h-5" />
-        </router-link>
-        
-        <router-link
-          v-if="canAccessView(userRole, 'traducciones')"
-          to="/traducciones"
-          v-nav-tippy="{ slug: 'traducciones', title: 'Traducciones' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/traducciones' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Languages class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'codigos')"
-          to="/codigos"
-          v-nav-tippy="{ slug: 'codigos', title: 'Códigos y Falla' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/codigos' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <ListFilter class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'catalogo')"
-          to="/catalogo"
-          v-nav-tippy="{ slug: 'catalogo', title: 'Catálogo Máquinas' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/catalogo' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <BookMarked class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'sintomas')"
-          to="/sintomas"
-          v-nav-tippy="{ slug: 'sintomas', title: 'Síntomas' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/sintomas' ? 'bg-teal-100 text-teal-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Stethoscope class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'rondas')"
-          to="/rondas"
-          v-nav-tippy="{ slug: 'rondas', title: 'Rutas de Ronda' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/rondas' ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Route class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'operarios')"
-          to="/operarios"
-          v-nav-tippy="{ slug: 'operarios', title: 'Operarios Tejeduría' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/operarios' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Users class="w-5 h-5" />
-        </router-link>
-
-        <router-link
-          v-if="canAccessView(userRole, 'paros-anudado')"
-          to="/paros-anudado"
-          v-nav-tippy="{ slug: 'paros-anudado', title: 'Paros / Anudados' }"
-          class="w-full flex items-center justify-center h-12 rounded-xl transition-all"
-          :class="$route.path === '/paros-anudado' ? 'bg-orange-100 text-orange-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'"
-        >
-          <Scissors class="w-5 h-5" />
-        </router-link>
-      </nav>
-
+      <PlantNavigation :model="navigationModel" :path="currentPath" :context-key="navigationContext" :suspended="showAccount" layout="rail" />
       <div class="w-8 h-px bg-gray-200 mt-2 mb-3 shrink-0"></div>
 
       <!-- User & Logout -->
@@ -611,61 +432,7 @@ const navigateTab = (action) => {
             class="absolute top-[54px] left-0 right-0 bg-white border-b border-gray-100 shadow-2xl overflow-y-auto max-h-[calc(100vh-54px)] z-[60]"
           >
             <div class="px-3 py-4 space-y-1.5" :class="showTabBar ? 'pb-24' : 'pb-6'">
-              <router-link v-if="canAccessView(userRole, 'shiftreport')" to="/shiftreport" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-cyan-50 text-cyan-700">
-                <FileText class="w-5 h-5 mr-3 opacity-70" /> Shift Report
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'carga_novedad')" to="/" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-blue-50 text-blue-700">
-                <Wrench class="w-5 h-5 mr-3 opacity-70" /> Reportar Falla
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'jefe')" to="/jefe" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-blue-50 text-blue-700">
-                <ShieldCheck class="w-5 h-5 mr-3 opacity-70" /> Panel de Control
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'llamar')" to="/llamar" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-orange-50 text-orange-700">
-                <BellRing class="w-5 h-5 mr-3 opacity-70" /> Solicitar Intervención
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'patrulla')" to="/patrulla" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-cyan-50 text-cyan-700">
-                <ScanSearch class="w-5 h-5 mr-3 opacity-70" /> Patrulla de Calidad
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'patrulla_seguimiento')" to="/patrulla-seguimiento" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-cyan-50 text-cyan-700">
-                <Eye class="w-5 h-5 mr-3 opacity-70" /> Patrulla (Vista)
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'eficiencia')" to="/eficiencia" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-violet-50 text-violet-700">
-                <Gauge class="w-5 h-5 mr-3 opacity-70" /> Registro de Eficiencia
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'intervenciones')" to="/intervenciones" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-orange-50 text-orange-700">
-                <ClipboardList class="w-5 h-5 mr-3 opacity-70" /> Intervenciones
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'historico')" to="/historico" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-blue-50 text-blue-700">
-                <History class="w-5 h-5 mr-3 opacity-70" /> Historial de Novedades
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'maquinas')" to="/maquinas" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-indigo-50 text-indigo-700">
-                <Settings2 class="w-5 h-5 mr-3 opacity-70" /> Gestión de Máquinas
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'usuarios')" to="/usuarios" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-amber-50 text-amber-700">
-                <Users class="w-5 h-5 mr-3 opacity-70" /> Gestión de Usuarios
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'traducciones')" to="/traducciones" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-violet-50 text-violet-700">
-                <Languages class="w-5 h-5 mr-3 opacity-70" /> Traducciones de catálogo
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'codigos')" to="/codigos" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-indigo-50 text-indigo-700">
-                <ListFilter class="w-5 h-5 mr-3 opacity-70" /> Códigos y Tipos de Falla
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'catalogo')" to="/catalogo" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-indigo-50 text-indigo-700">
-                <BookMarked class="w-5 h-5 mr-3 opacity-70" /> Catálogo de Máquinas
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'sintomas')" to="/sintomas" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-teal-50 text-teal-700">
-                <Stethoscope class="w-5 h-5 mr-3 opacity-70" /> Síntomas de Tejeduría
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'rondas')" to="/rondas" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-violet-50 text-violet-700">
-                <Route class="w-5 h-5 mr-3 opacity-70" /> Rutas de Ronda
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'operarios')" to="/operarios" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-indigo-50 text-indigo-700">
-                <Users class="w-5 h-5 mr-3 opacity-70" /> Operarios Tejeduría
-              </router-link>
-              <router-link v-if="canAccessView(userRole, 'paros-anudado')" to="/paros-anudado" @click="closeMenu" class="flex items-center px-4 py-3 rounded-xl text-[15px] font-bold transition-all hover:bg-gray-50" active-class="bg-orange-50 text-orange-700">
-                <Scissors class="w-5 h-5 mr-3 opacity-70" /> Paros / Anudados
-              </router-link>
-
+              <PlantNavigation :model="navigationModel" :path="currentPath" :context-key="navigationContext" layout="mobile" @navigate="closeMenu" />
               <div class="h-px bg-gray-100 my-2 mx-2"></div>
               
               <div class="px-2 py-2 flex flex-col space-y-1">

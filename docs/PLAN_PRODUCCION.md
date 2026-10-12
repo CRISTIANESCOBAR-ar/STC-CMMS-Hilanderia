@@ -52,6 +52,13 @@ No prometer ausencia absoluta de caídas: preparar prevención, detección y rec
 
 ## Registro de entregas
 
+### V18 — Navegación agrupada por uso habitual
+
+- Sidebar de administrador reduce 18 vistas a cinco accesos directos y tres grupos: Producción, Consultas y Administración. Auxiliar mantiene Puntos por turno, Operarios y Seguimiento de patrulla directos; supervisores priorizan también Eficiencia. Los permisos individuales y de rol existentes filtran cada entrada antes de agrupar; no se modifican privilegios ni registros.
+- Componente compartido desktop/mobile. Desktop abre un submenú lateral con nombres completos, altura limitada al viewport y desplazamiento propio. Mobile usa grupos desplegables dentro del menú. Indicación de grupo/vista activa incluye rutas de detalle y subrondas; perfil y vista previa conservan su acceso unificado.
+- Tippy claro compartido, Escape, flechas/Home/End, cierre al clicar o enfocar fuera, cambio de contexto/ruta y cambio de resolución. La navegación respeta las cancelaciones por borradores y bloquea intentos simultáneos mientras espera confirmación de salida. Listeners liberados al desmontar.
+- Validación: 99 pruebas de aplicación/componentes y compilación; comprobación específica tras ajustes finales. Revisión visual pendiente: el navegador de revisión no pudo conectar con el servidor local. Publicar Hosting main para validar en los puestos de planta; sin cambios de reglas ni API. Reversión con git revert y nuevo despliegue de Hosting.
+
 ### A1 — Preparación del circuito de atención para el piloto
 
 Guía y matriz actualizada: [PILOTO_ATENCION.md](PILOTO_ATENCION.md). Preparados servidor transaccional con historial, habilitación cerrada por lista de usuarios/sectores, especialidades complementarias, bandejas y ensayo con datos ficticios. Incorporación explícita de tareas pendientes; sin migración de perfiles ni registros actuales.

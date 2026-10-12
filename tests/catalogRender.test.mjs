@@ -12,6 +12,7 @@ import { canExecuteIntervention } from '../src/utils/interventionAccess.js';
 import { attentionLabel,attentionQueueMatches } from '../src/utils/attentionQueue.js';
 import * as attentionPolicy from '../functions/attentionPolicy.js';
 import * as attentionQueue from '../src/utils/attentionQueue.js';
+import * as navigation from '../src/utils/navigation.js';
 import { formatSummary } from '../src/utils/formatSummary.js';
 import { plantDate, addDays, PLANT_TIME_ZONE } from '../src/utils/plantTime.js';
 
@@ -61,6 +62,24 @@ function attentionComponent(name,dependencies) {
   assert.deepEqual(template.errors,[]);
   const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies); return component;
 }
+test('grouped navigation renders both layouts and respects cancelled navigation, keyboard and permission changes',async()=>{
+  const component=attentionComponent('PlantNavigation',{ vue:Vue,'vue-router':{ isNavigationFailure:result=>Boolean(result?.type) },'lucide-vue-next':icons,'../utils/navigation':navigation,'../utils/tooltipDirective':{ vTippy } });
+  const props=Vue.reactive({ model:navigation.buildNavigation('admin',()=>true),path:'/usuarios',layout:'rail',contextKey:'admin:one' });
+  const { renderer,root }=host(),errors=[],emitted=[],app=renderer.createApp({ setup:()=>()=>Vue.h(component,{ ...props,onNavigate:()=>emitted.push('navigate') }) });
+  app.component('RouterLink',{ props:['to','custom'],setup:(p,{slots})=>()=>slots.default({ href:p.to,navigate:async()=>undefined }) });
+  app.config.errorHandler=error=>errors.push(error); app.mount(root); const state=root._vnode.component.subTree.component.setupState;
+  const trigger={ isConnected:true,focus(){},getBoundingClientRect:()=>({ right:72,top:440 }) };
+  await state.toggle(props.model.groups.at(-1),{ currentTarget:trigger }); await Vue.nextTick(); assert.equal(state.open,'administration'); assert.equal(state.groupActive(props.model.groups.at(-1)),true);
+  await state.follow({ button:0 },async()=>({ type:4 })); assert.equal(state.open,'administration'); assert.equal(emitted.length,0);
+  let finish; const pending=state.follow({ button:0 },()=>new Promise(resolve=>finish=resolve)); state.outside({ target:{} }); assert.equal(state.open,'administration');
+  await state.follow({ button:0,preventDefault(){} },()=>assert.fail('Navigation already pending')); finish({ type:4 }); await pending; assert.equal(state.open,'administration');
+  await state.follow({ button:0,ctrlKey:true },async()=>assert.fail('Modified click must use native browser behavior')); assert.equal(state.open,'administration');
+  await state.follow({ button:0 },async()=>undefined); assert.equal(state.open,''); assert.equal(emitted.length,1);
+  await state.toggle(props.model.groups[0],{ currentTarget:trigger }); state.keys({ key:'Escape',preventDefault(){},stopPropagation(){} }); assert.equal(state.open,'');
+  props.layout='mobile'; await Vue.nextTick(); await state.toggle(props.model.groups[0],{ currentTarget:trigger },true); await Vue.nextTick(); assert.equal(state.open,'production');
+  props.contextKey='auxiliar:two'; props.model=navigation.buildNavigation('auxiliar',slug=>['shiftreport','operarios','patrulla_seguimiento'].includes(slug)); await Vue.nextTick(); assert.equal(state.open,''); assert.equal(state.group,undefined);
+  assert.deepEqual(errors,[]); app.unmount();
+});
 test('attention panel preserves drafts and retries the same operation after uncertain confirmation and rejects stale edits',async()=>{
   const data=new Map(),previousStorage=globalThis.localStorage;
   globalThis.localStorage={ getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value),removeItem:key=>data.delete(key) };

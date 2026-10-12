@@ -82,6 +82,8 @@ export const authService = {
   },
 
   async cerrarSesion() {
+    const uid=auth.currentUser?.uid;
+    if(uid) { try { await withTimeout(import('./notificationService').then(({ notificationService })=>notificationService.desregistrarDispositivo(uid)),2500); } catch { /* Local logout must remain available even without network. */ } }
     await signOut(auth);
     refreshSession(null);
     await waitForSession();

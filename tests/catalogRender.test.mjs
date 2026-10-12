@@ -13,6 +13,7 @@ import { attentionLabel,attentionQueueMatches } from '../src/utils/attentionQueu
 import * as attentionPolicy from '../functions/attentionPolicy.js';
 import * as attentionQueue from '../src/utils/attentionQueue.js';
 import * as navigation from '../src/utils/navigation.js';
+import * as reportAttention from '../functions/reportAttention.js';
 import { formatSummary } from '../src/utils/formatSummary.js';
 import { plantDate, addDays, PLANT_TIME_ZONE } from '../src/utils/plantTime.js';
 
@@ -219,10 +220,12 @@ test('intervention management filters grouped requests and only takes permitted 
   const dependencies = {
     vue: Vue, 'lucide-vue-next': icons, 'vue-router': { useRouter: () => ({ push() {} }) },
     'firebase/auth': { getAuth: () => ({ currentUser: { uid:'inspector', displayName:'Inspector' } }) },
-    '../services/authService': { userRole:Vue.ref('inspector'), userProfile:Vue.ref({ role:'inspector',sectoresAsignados:['TEJEDURIA'] }) },
+    '../services/authService': { userRole:Vue.ref('inspector'), userProfile:Vue.ref({ role:'inspector',sectoresAsignados:['TEJEDURIA'] }),previewSector:Vue.ref(null) },
+    '../services/notificationService':{ notificationService:{ solicitarPermisosYRegistrarToken:async()=>null } },
     '../services/profileService': { getEffectivePermisosForUser: () => ({}) },
     '../utils/interventionAccess': { canExecuteIntervention }, '../utils/faultEvents': { eventView },
     '../utils/attentionQueue': { attentionLabel,attentionQueueMatches }, '../utils/sectorScope': { getSectorScope:profile=>profile.sectoresAsignados },
+    '../../functions/attentionPolicy.js':attentionPolicy,'../services/attentionService':{ transitionAttention:async()=>({ revision:2 }) },
     './AttentionRehearsal.vue': { render:()=>Vue.h('div') },
     '../utils/tooltipDirective': { vTippy },
     '../constants/organization': { DEFAULT_SECTOR:'TEJEDURIA', normalizeSectorValue:v => v,
@@ -667,6 +670,7 @@ test('desktop report keeps failed drafts, prevents duplicate sends and refreshes
   const dependencies = {
     vue:Vue, 'lucide-vue-next':icons, 'vue-router':{ useRouter:() => ({}), onBeforeRouteLeave() {} },
     '../services/accessScope':{ sectorConstraints:() => [] },
+    '../../functions/attentionPolicy.js':attentionPolicy,'../../functions/reportAttention.js':reportAttention,'../services/attentionService':{ loadAttentionContext:async()=>({ enabled:false }) },
     'firebase/firestore':{ collection() {}, query() {}, where() {}, orderBy() {}, limit() {}, serverTimestamp() {},
       getDocs:async () => ({ forEach(callback) { callback({ id:'m1', data:() => machine }); } }) },
     '../firebase/config':{}, 'firebase/auth':{ getAuth:() => ({ currentUser:{ uid:'user' } }) },

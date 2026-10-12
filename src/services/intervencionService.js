@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, onSnapshot, updateDoc, doc, serverTimestamp, query, where, orderBy, writeBatch,documentId } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
@@ -79,8 +79,10 @@ export const intervencionService = {
    * Suscripción realtime a una intervención específica.
    */
   suscribirPorId(id, callback, onError) {
-    return onSnapshot(doc(db, COLLECTION_NAME, id), (snap) => {
-      callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    const scopedQuery=query(collection(db,COLLECTION_NAME),...sectorConstraints(),where(documentId(),'==',id));
+    return onSnapshot(scopedQuery, (snap) => {
+      const record=snap.docs[0];
+      callback(record ? { id: record.id, ...record.data() } : null);
     }, onError);
   },
 

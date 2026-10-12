@@ -13,11 +13,12 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Mensaje recibido en segundo plano ', payload);
-  
-  const notificationTitle = payload.notification.title;
+  // Firebase displays notification payloads itself. Showing them here again
+  // duplicates the same alert and loses the work link supplied by the server.
+  if (payload.notification) return;
+  const notificationTitle = payload.data?.title || 'Aviso de planta';
   const notificationOptions = {
-    body: payload.notification.body,
+    body: payload.data?.body || 'Abrí la aplicación para consultar los detalles.',
     icon: '/icons/icon-192x192.png'
   };
 

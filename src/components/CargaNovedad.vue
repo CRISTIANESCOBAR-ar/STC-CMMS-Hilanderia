@@ -6,6 +6,9 @@ import { collection, addDoc, getDocs, query, where, orderBy, limit, serverTimest
 import { db } from '../firebase/config';
 import { getAuth } from 'firebase/auth';
 import { mantenimientoService } from '../services/mantenimientoService';
+import { loadAttentionContext } from '../services/attentionService';
+import { attentionCan } from '../../functions/attentionPolicy.js';
+import { automaticReportEnabled } from '../../functions/reportAttention.js';
 import { catalogoService } from '../services/catalogoService';
 import { userProfile, userRole } from '../services/authService';
 import { DEFAULT_SECTOR, normalizeSectorValue, sanitizeSectorList } from '../constants/organization';
@@ -39,6 +42,9 @@ const tipoSeleccionado = ref('');
 const gpSeleccionado = ref('');
 const maquinaSeleccionadaId = ref('');
 const tipoProblema = ref('Mecánico'); // Mecánico or Eléctrico
+const mecanicoMencionadoUid=ref('');
+const reportAttention=ref({ enabled:false });
+let attentionLookup=0;
 
 // Catálogo de Puestos de Control (Cascada)
 const catalogoCompleto = ref([]);
@@ -221,6 +227,16 @@ const detallesMaquina = computed(() => {
   if (!maquinaSeleccionadaId.value) return null;
   return maquinasPorSector.value.find(m => m.id === maquinaSeleccionadaId.value);
 });
+const reportWorkEnabled=computed(()=>automaticReportEnabled(reportAttention.value.pilot,reportAttention.value.uid,detallesMaquina.value?.sector,new Date()));
+const mentionedCandidates=computed(()=>(reportAttention.value.people || []).filter(person=>attentionCan(person,reportAttention.value.organization,{ sector:detallesMaquina.value?.sector,tipoIntervencion:tipoProblema.value==='Mecánico' ? 'MECANICO':'ELECTRICO' },'execute')));
+watch(()=>detallesMaquina.value?.sector,async sector=>{
+  const version=++attentionLookup; mecanicoMencionadoUid.value=''; reportAttention.value={ enabled:false };
+  if(!sector) return;
+  try { const context=await loadAttentionContext(sector); if(version===attentionLookup) reportAttention.value=context; }
+  catch { /* Reporting remains available when pilot configuration cannot be read. */ }
+});
+watch(tipoProblema,()=>{ mecanicoMencionadoUid.value=''; });
+onUnmounted(()=>{ attentionLookup++; });
 
 // Carga motivos desde Firestore (con cache) y fallback a motivos.js
 const cargarMotivos = async (tipo, categoria) => {
@@ -395,6 +411,7 @@ const saveNovedadState = () => {
       maquinaSeleccionadaId: maquinaSeleccionadaId.value,
       tipoProblema: tipoProblema.value,
       isCritico: isCritico.value,
+      mecanicoMencionadoUid:mecanicoMencionadoUid.value,
       observaciones: observaciones.value,
       ts: Date.now(),
     }));
@@ -415,6 +432,7 @@ const restoreNovedadState = async () => {
     if (s.tipoProblema) tipoProblema.value = s.tipoProblema;
     if (s.isCritico) isCritico.value = s.isCritico;
     if (s.observaciones) observaciones.value = s.observaciones;
+    if (s.mecanicoMencionadoUid) mecanicoMencionadoUid.value=s.mecanicoMencionadoUid;
     sessionStorage.removeItem('cmms_novedad_draft');
     // Restaurar imagen desde IndexedDB
     const savedImg = await loadImageFromDB(NOVEDAD_IMG_KEY);
@@ -489,6 +507,7 @@ const onSubmit = async () => {
       observaciones: observaciones.value,
       tipoProblema: tipoProblema.value,
       motivo: motivoLlamado.value,
+      ...(reportWorkEnabled.value && mentionedCandidates.value.some(person=>person.uid===mecanicoMencionadoUid.value) ? { mecanicoMencionadoUid:mecanicoMencionadoUid.value }:{}),
       // Datos del catálogo si existen
       seccion: seccionSeleccionada.value || null,
       grupo: grupoSeleccionado.value || null,
@@ -515,6 +534,7 @@ const onSubmit = async () => {
     isCritico.value = false;
     motivoLlamado.value = 'VERIFICACIÓN';
     observaciones.value = '';
+    mecanicoMencionadoUid.value='';
     imagenFile.value = null;
     imagenPreview.value = null;
     clearImageFromDB(NOVEDAD_IMG_KEY);
@@ -809,6 +829,7 @@ const enviarNotaTurno = async () => {
         </div>
 
         <div class="fault-observations px-4 pt-4 pb-3 border-b border-gray-100">
+          <div v-if="reportWorkEnabled" class="mb-4"><label for="report-mention" class="block text-sm font-semibold text-gray-600 mb-2">Dirigir aviso a (opcional)</label><select id="report-mention" v-model="mecanicoMencionadoUid" class="w-full border border-gray-300 rounded-md p-2 text-sm"><option value="">Equipo disponible</option><option v-for="person in mentionedCandidates" :key="person.uid" :value="person.uid">{{ person.displayName || person.nombre || person.email }}</option></select><p class="text-xs text-gray-500 mt-2">Mencionar a alguien no reserva el trabajo. Otro técnico habilitado puede confirmar que va a atender.</p></div>
           <div class="flex items-center gap-2 mb-3">
             <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-black flex items-center justify-center shrink-0">4</span>
             <label class="text-xs font-extrabold text-gray-500 tracking-widest">OBSERVACIONES</label>

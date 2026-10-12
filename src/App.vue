@@ -71,6 +71,7 @@ import { useRouter, isNavigationFailure } from 'vue-router';
 import AccountPanel from './components/AccountPanel.vue';
 import PlantNavigation from './components/PlantNavigation.vue';
 import { buildNavigation } from './utils/navigation';
+import { notificationService } from './services/notificationService';
 import { buildPreviewProfile } from './utils/previewProfile';
 import { authService, userRole, userProfile, previewSector } from './services/authService';
 import { Menu, X, LogOut, User, Wrench, ShieldCheck, History, Settings2, Users, Languages, BellRing, ClipboardList, ListFilter, Stethoscope, Eye, EyeOff, ScanSearch, AlertTriangle, ScanLine, ClipboardCheck, Route, FileText, Scissors, Gauge, BookMarked } from 'lucide-vue-next';
@@ -89,6 +90,15 @@ const isMenuOpen = ref(false);
 const hasUpdate = ref(false);
 let updateCheckInterval = null;
 let unsubscribeAuth = null;
+let unsubscribeMessages=null;
+watch(()=>user.value?.uid,uid=>{
+  unsubscribeMessages?.(); unsubscribeMessages=null;
+  if(uid) unsubscribeMessages=notificationService.escucharMensajesEnPrimerPlano(payload=>{
+    if(user.value?.uid!==uid || Swal.isVisible()) return;
+    Swal.fire({ toast:true,position:'top-end',icon:'info',titleText:String(payload.notification?.title || 'Aviso de planta'),text:String(payload.notification?.body || 'Consultá tus trabajos.'),showConfirmButton:false,timer:6000 });
+  });
+});
+onUnmounted(()=>unsubscribeMessages?.());
 
 // Preview changes only the in-memory UI identity; Firebase authentication remains unchanged.
 const realAdminRole=ref(null),realProfile=ref(null),showAccount=ref(false),previewBusy=ref(false);

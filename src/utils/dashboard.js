@@ -6,9 +6,9 @@ export function dashboardItem(record,kind) {
   const category=record.tipoProblema || ({ MECANICO:'Mecánico',ELECTRICO:'Eléctrico',CALIDAD:'Calidad' }[record.tipoIntervencion]) || record.tipoIntervencion || 'Otra';
   return { ...record,key:`${kind}:${record.id}`,kind,number,shortNumber:/^\d+$/.test(number) ? String(Number(number.slice(-2))):number || '—',category,
     description:request ? [record.sintomaNombre || record.sintoma || record.motivoDescripcion,record.observaciones].filter(Boolean).join(' · ') || 'Sin descripción':record.observaciones || record.motivo || 'Sin descripción',
-    priority:request && record.estadoMaquina==='PARADA' ? 0:record.critico===true ? 1:request && record.estadoMaquina==='CON_PROBLEMA' ? 2:3,
+    priority:request && ['URGENTE','ALTA','NORMAL'].includes(record.prioridadAtencion) ? { URGENTE:0,ALTA:1,NORMAL:3 }[record.prioridadAtencion]:request && record.estadoMaquina==='PARADA' ? 0:record.critico===true ? 1:request && record.estadoMaquina==='CON_PROBLEMA' ? 2:3,
     status:({ pendiente:'Pendiente','en proceso':'En proceso',PENDIENTE:'Pendiente',EN_PROCESO:'En proceso' }[record.estado]) || record.estado,
-    assigned:request ? (record.asignadoA ? record.asignadoNombre || 'Asignado sin nombre':'Sin asignar'):'Sin responsable vinculado',
+    assigned:request ? (record.asignadoA ? record.asignadoNombre || 'Asignado sin nombre':'Disponible para el equipo'):record.intervencionId ? record.atendidoPorNombre || 'Disponible para el equipo':'Sin responsable vinculado',
     created:dashboardTime(record.createdAt),started:dashboardTime(record.fechaInicio) };
 }
 export function dashboardFilter(items,{ kind='',category='',quick='',search='' }={}) {

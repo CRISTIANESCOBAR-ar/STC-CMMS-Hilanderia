@@ -5,6 +5,8 @@ export function attentionQueueMatches(item,filter,uid) {
   switch(filter) {
     case 'mine': return !!uid && item.asignadoA===uid && open;
     case 'free': return !item.asignadoA && open;
+    case 'available': return open && !item.asignadoA && (item.atencionVersion ? item.atencionEstado==='REPORTADA':item.estado==='PENDIENTE');
+    case 'team': return open;
     case 'accept': return item.atencionEstado==='ASIGNADA';
     case 'waiting': return item.atencionEstado==='EN_ESPERA';
     case 'review': return item.atencionEstado==='COMPLETADA';

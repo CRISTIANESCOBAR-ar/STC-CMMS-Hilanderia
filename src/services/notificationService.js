@@ -1,16 +1,20 @@
-import { messaging, db } from '../firebase/config';
-import { getToken, onMessage } from 'firebase/messaging';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { messaging, messagingReady, db } from '../firebase/config';
+import { getToken, onMessage,deleteToken } from 'firebase/messaging';
+import { doc, setDoc, serverTimestamp,deleteDoc,updateDoc } from 'firebase/firestore';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 export const notificationService = {
+  async finalizarTurno(userId) { await updateDoc(doc(db,'fcm_tokens',userId),{ turnoActivo:false,updatedAt:serverTimestamp() }); },
+  async desregistrarDispositivo(userId) {
+    await Promise.allSettled([messaging ? deleteToken(messaging):Promise.resolve(),deleteDoc(doc(db,'fcm_tokens',userId))]);
+  },
   /**
    * Solicita permisos de notificación y registra el token en Firestore
    * @param {string} userId - ID del usuario (Jefe)
    */
   async solicitarPermisosYRegistrarToken(userId) {
-    if (!messaging) return;
+    if (!await messagingReady) return;
 
     try {
       if (typeof Notification === 'undefined') {
@@ -49,7 +53,8 @@ export const notificationService = {
             token: currentToken,
             userId: userId,
             updatedAt: serverTimestamp(),
-            platform: 'web'
+            platform: 'web',
+            turnoActivo:true
           });
           
           return currentToken;
@@ -67,12 +72,9 @@ export const notificationService = {
   /**
    * Escucha mensajes cuando la app está en primer plano
    */
-  escucharMensajesEnPrimerPlano() {
-    if (!messaging) return;
-    
-    return onMessage(messaging, (payload) => {
-      console.log('Mensaje recibido en primer plano:', payload);
-      // Aquí se podría mostrar un toast o alerta personalizada en la UI
-    });
+  escucharMensajesEnPrimerPlano(receive) {
+    let cancelled=false,stop;
+    messagingReady.then(instance=>{ if(instance && !cancelled) stop=onMessage(instance,payload=>receive?.(payload)); });
+    return ()=>{ cancelled=true; stop?.(); };
   }
 };

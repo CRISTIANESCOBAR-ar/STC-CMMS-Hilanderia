@@ -8,6 +8,10 @@ import IntervencionDetalle from './IntervencionDetalle.vue';
 import AttentionRehearsal from './AttentionRehearsal.vue';
 import { attentionLabel,attentionQueueMatches } from '../utils/attentionQueue';
 import { getSectorScope } from '../utils/sectorScope';
+import { attentionSpecialties } from '../../functions/attentionPolicy.js';
+import { transitionAttention } from '../services/attentionService';
+import { notificationService } from '../services/notificationService';
+import { previewSector } from '../services/authService';
 import { userProfile, userRole } from '../services/authService';
 import { getEffectivePermisosForUser } from '../services/profileService';
 import { canExecuteIntervention } from '../utils/interventionAccess';
@@ -24,17 +28,38 @@ const router = useRouter();
 // ── Estado ─────────────────────────────────────────────────────────────────────
 const intervenciones = ref([]);
 const loading        = ref(true);
-const filtroEstado   = ref(userRole.value === 'inspector' ? 'PENDIENTE' : 'EN_PROCESO');
+const filtroEstado   = ref(userRole.value === 'mecanico' ? 'TODO':userRole.value === 'inspector' ? 'PENDIENTE' : 'EN_PROCESO');
 const actualizando   = ref(null);          // id o 'batch-xxx'
 const expandedId     = ref(null);          // intervención expandida
 const collapsedMaq   = ref(new Set());     // maquinaIds colapsados (grupos)
 const busqueda = ref('');
 const filtroTipo = ref('');
 const filtroSector = ref('');
-const filtroAsignacion = ref('');
+const filtroAsignacion = ref(userRole.value==='mecanico' ? 'team':'');
 const errorCarga = ref(false);
 const detalleId = ref(null);
 const ensayo = ref(false);
+const activatingAlerts=ref(false),alertsEnabled=ref(false);
+
+async function activateAlerts() {
+  if(activatingAlerts.value || previewSector.value!==null) return;
+  const owner=getAuth().currentUser?.uid; if(!owner) return;
+  activatingAlerts.value=true;
+  try {
+    const token=await notificationService.solicitarPermisosYRegistrarToken(owner);
+    if(getAuth().currentUser?.uid!==owner) return;
+    alertsEnabled.value=!!token;
+    if(!token) Swal.fire({ icon:'info',title:'Avisos no activados',text:'Revisá los permisos de notificación y la compatibilidad de este navegador.' });
+  } finally { activatingAlerts.value=false; }
+}
+
+async function finishDuty() {
+  const owner=getAuth().currentUser?.uid; if(!owner || activatingAlerts.value) return;
+  activatingAlerts.value=true;
+  try { await notificationService.finalizarTurno(owner); if(getAuth().currentUser?.uid===owner) alertsEnabled.value=false; }
+  catch(error) { Swal.fire({ icon:'error',title:'No se pudo finalizar el turno',text:error.message }); }
+  finally { activatingAlerts.value=false; }
+}
 let detalleTrigger;
 const abrirDetalle = item => { detalleTrigger = globalThis.document?.activeElement; detalleId.value = item.id; };
 const cerrarDetalle = async () => { detalleId.value = null; await nextTick(); if (detalleTrigger?.isConnected) detalleTrigger.focus(); };
@@ -103,6 +128,7 @@ const intervencionesFiltered = computed(() => {
   return list.filter(item => (presentacion.value === 'specialty' || !filtroTipo.value || item.tipoIntervencion === filtroTipo.value)
     && (!filtroSector.value || item.sector === filtroSector.value)
     && attentionQueueMatches(item,filtroAsignacion.value,currentUid())
+    && (!(userRole.value==='mecanico' && ['team','available'].includes(filtroAsignacion.value)) || attentionSpecialties(userProfile.value).includes(item.tipoIntervencion))
     && (!term || [item.numeroMaquina, nombreMaquina(item), item.sintomaNombre, item.observaciones, item.asignadoNombre, item.creadoPorNombre, item.sector]
       .join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(term)))
     .sort((a, b) => calcPrioridad(a).score - calcPrioridad(b).score);
@@ -114,7 +140,9 @@ const fechaCompleta = ts => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleSt
 
 // ── Prioridad ──────────────────────────────────────────────────────────────────
 const calcPrioridad = (item) => {
+  if(item.atencionEstado==='COMPLETADA') return { level:'P2',score:-20 };
   if (item.estado === 'COMPLETADO') return { level: 'P4', score: 9999 };
+  if(item.prioridadAtencion) return { URGENTE:{ level:'P1',score:-100 },ALTA:{ level:'P2',score:-50 },NORMAL:{ level:'P4',score:200 } }[item.prioridadAtencion] || { level:'P4',score:200 };
   const base = { PARADA: 0, CON_PROBLEMA: 100, EN_MARCHA: 200 };
   let score = base[item.estadoMaquina] ?? 200;
   if (item.critico) score -= 50;
@@ -228,6 +256,19 @@ const canTomarItem = (item) => {
   return canExecuteIntervention(userRole.value,
     getEffectivePermisosForUser(userRole.value, userProfile.value?.permisosPersonalizados), item);
 };
+const canAtender=item=>item.atencionVersion===1 && item.atencionEstado==='REPORTADA' && !item.asignadoA && canExecuteIntervention(userRole.value,getEffectivePermisosForUser(userRole.value,userProfile.value?.permisosPersonalizados),item) && (userRole.value==='admin' || attentionSpecialties(userProfile.value).includes(item.tipoIntervencion));
+async function onAtender(item) {
+  if(actualizando.value || !canAtender(item)) return;
+  const owner=currentUid(),version=subscriptionVersion;
+  actualizando.value=item.id;
+  try {
+    await transitionAttention({ interventionId:item.id,operationId:globalThis.crypto.randomUUID(),expectedRevision:item.atencionRevision,action:'tomar' });
+    if(currentUid()!==owner || subscriptionVersion!==version) return;
+    elegirBandeja('mine');
+    Swal.fire({ icon:'success',title:'Confirmaste que vas a atender',text:'Al llegar a la máquina, abrí Detalle e iniciá el trabajo.',timer:2200,showConfirmButton:false,toast:true,position:'top-end' });
+  } catch(error) { if(currentUid()===owner && subscriptionVersion===version) Swal.fire({ icon:'error',title:'No se pudo confirmar la toma',text:error.message }); }
+  finally { actualizando.value=null; }
+}
 
 // ── Acciones individuales ──────────────────────────────────────────────────────
 const onTomar = async (item) => {
@@ -320,11 +361,13 @@ const onTomarGrupo = async (grupo) => {
     </div>
     </div>
     <div class="management-filters">
+      <button class="management-button" :disabled="activatingAlerts || previewSector!==null" @click="activateAlerts" v-tippy="'Declarar que estás de turno y habilitar avisos hasta las 06, 14 o 22; el envío se activa con el piloto'">{{ activatingAlerts ? 'Activando…':alertsEnabled ? 'Renovar turno y avisos':'Estoy de turno · Avisos' }}</button><button v-if="alertsEnabled" class="management-button" :disabled="activatingAlerts" @click="finishDuty">Fuera de turno</button>
+      <div class="work-inboxes" role="group" aria-label="Bandejas de trabajo"><button class="management-button" :aria-pressed="filtroAsignacion==='team'" @click="elegirBandeja('team')">Avisos del equipo</button><button class="management-button" :aria-pressed="filtroAsignacion==='mine'" @click="elegirBandeja('mine')">Mis trabajos</button></div>
       <button v-if="userRole==='admin'" class="management-button" @click="ensayo=true" v-tippy="'Probar asignación, aceptación, espera y relevo con datos ficticios'">Ensayar atención</button>
       <label class="management-search">Buscar<input v-model="busqueda" type="search" placeholder="Máquina, síntoma o persona…" /></label>
       <label v-if="presentacion === 'table'">Categoría<select v-model="filtroTipo"><option value="">Todas</option><option v-for="(config, key) in tipoConfig" :key="key" :value="key">{{ config.label }}</option></select></label>
       <label v-if="sectoresUsuario.length > 1">Sector<select v-model="filtroSector"><option value="">Todos los permitidos</option><option v-for="sector in sectoresUsuario" :key="sector" :value="sector">{{ sector }}</option></select></label>
-      <label>Bandeja<select :value="filtroAsignacion" @change="elegirBandeja($event.target.value)"><option value="">Todas</option><option value="mine">Mi trabajo abierto</option><option value="free">Sin asignar</option><option value="accept">Sin aceptar · piloto</option><option value="waiting">En espera · piloto</option><option value="review">Por validar · piloto</option></select></label>
+      <label>Bandeja<select :value="filtroAsignacion" @change="elegirBandeja($event.target.value)"><option value="">Todas</option><option value="mine">Mi trabajo abierto</option><option value="team">Avisos del equipo</option><option value="available">Disponibles para atender</option><option value="free">Sin asignar</option><option value="accept">Sin aceptar · piloto</option><option value="waiting">En espera · piloto</option><option value="review">Por validar · piloto</option></select></label>
       <button class="management-button" @click="limpiarFiltros" v-tippy="'Limpiar búsqueda, categoría, sector y asignación'">Limpiar</button>
     </div>
 
@@ -365,7 +408,7 @@ const onTomarGrupo = async (grupo) => {
                 <tr v-for="item in group.items" :key="item.id" :class="{ 'specialty-stopped': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
                   <td><strong>{{ numeroCorto(item) }}</strong><small v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</small></td>
                   <td><span class="specialty-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span><small v-if="item.critico" class="text-red-600">Crítica</small></td>
-                  <td><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ attentionLabel(item) }}</span><small>{{ item.asignadoNombre || 'Sin asignar' }}</small></td>
+                  <td><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ attentionLabel(item) }}</span><small>{{ item.asignadoNombre || 'Disponible para el equipo' }}</small><small v-if="item.mencionadoNombre">Dirigido a: {{ item.mencionadoNombre }}</small></td>
                   <td><button class="management-button specialty-detail-button" :aria-label="'Detalle de máquina ' + numeroCorto(item)" @click="abrirDetalle(item)" v-tippy="'Abrir detalle y acciones'"><ChevronRight :size="16" /></button></td>
                 </tr>
               </tbody></table>
@@ -383,7 +426,7 @@ const onTomarGrupo = async (grupo) => {
           <td class="request-description"><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><p>{{ item.observaciones }}</p><small v-if="item.fotoUrl">Foto adjunta</small></td>
           <td>{{ item.asignadoNombre || 'Sin asignar' }}<small v-if="item.proximaAccion">{{ item.proximaAccion }}</small><small>Solicita: {{ item.creadoPorNombre || 'Sin identificar' }}</small></td>
           <td><span v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</span></td>
-          <td><div class="management-row-actions"><button class="management-button" @click="abrirDetalle(item)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
+          <td><div class="management-row-actions"><button class="management-button" @click="abrirDetalle(item)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="canAtender(item)" class="management-button primary" :disabled="!!actualizando" @click.stop="onAtender(item)">{{ actualizando===item.id ? 'Confirmando…':'Voy a atender' }}</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
         </tr>
       </tbody></table></div>
     <div v-if="presentacion === 'table'" class="management-cards max-w-lg mx-auto px-3 pt-3 space-y-3">
@@ -468,7 +511,7 @@ const onTomarGrupo = async (grupo) => {
                     <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="abrirDetalle(item)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
                       <ChevronRight class="w-3 h-3" />
                     </button>
-                    <button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="!!actualizando"
+                    <button v-if="canAtender(item)" class="management-button primary" :disabled="!!actualizando" @click.stop="onAtender(item)">{{ actualizando===item.id ? 'Confirmando…':'Voy a atender' }}</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="!!actualizando"
                       class="px-2 py-0.5 bg-orange-500 text-white rounded-lg text-[10px] font-black active:scale-95 transition disabled:opacity-50">
                       Tomar
                     </button>
@@ -583,6 +626,7 @@ const onTomarGrupo = async (grupo) => {
           </div>
 
           <!-- Footer -->
+          <div v-if="canAtender(g.items[0])" class="px-3.5 pt-3"><button class="management-button primary mobile-attend" :disabled="!!actualizando" @click.stop="onAtender(g.items[0])">{{ actualizando===g.items[0].id ? 'Confirmando…':'Voy a atender' }}</button><p v-if="g.items[0].mencionadoNombre" class="text-xs text-gray-500 mt-2">Aviso dirigido a {{ g.items[0].mencionadoNombre }} · Disponible para el equipo</p></div>
           <div class="px-3.5 py-2.5 flex items-center gap-2 border-t border-gray-50 mt-2">
             <Clock class="w-3.5 h-3.5 text-gray-300 shrink-0" />
             <span class="text-xs text-gray-400">{{ timeAgo(g.items[0].createdAt) }}</span>
@@ -619,6 +663,7 @@ const onTomarGrupo = async (grupo) => {
 </template>
 
 <style scoped>
+.work-inboxes{display:flex;gap:6px;flex-wrap:wrap}.work-inboxes button[aria-pressed=true]{background:#eef2ff;color:#4338ca;border-color:#c7d2fe}.mobile-attend{width:100%;min-height:44px!important;font-size:14px!important}
 .management-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; padding:6px 12px; background:white; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
 .management-tabs { min-width:0; }
 .management-tabs > button { min-height:32px; border-radius:4px; font-weight:600; }

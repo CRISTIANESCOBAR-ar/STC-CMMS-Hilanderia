@@ -7,7 +7,7 @@ import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
 import AttentionPanel from './AttentionPanel.vue';
-import { userProfile, userRole } from '../services/authService';
+import { userProfile, userRole, previewSector } from '../services/authService';
 import { getEffectivePermisosForUser } from '../services/profileService';
 import { canExecuteIntervention } from '../utils/interventionAccess';
 import { catalogoService }     from '../services/catalogoService';
@@ -301,7 +301,7 @@ const esElMecanico = computed(() => {
 });
 
 const puedeEditar = computed(() =>
-  !intervencion.value?.atencionVersion && intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value && puedeEjecutar.value
+  previewSector.value===null && !intervencion.value?.atencionVersion && intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value && puedeEjecutar.value
 );
 
 const puedeEjecutar = computed(() => canExecuteIntervention(userRole.value,
@@ -380,7 +380,7 @@ const completar = async () => {
             <h4>Síntoma</h4><p class="detail-symptom">{{ intervencion.sintomaNombre || intervencion.motivoDescripcion || 'Sin síntoma registrado' }}</p><h4>Observaciones</h4><p class="detail-observations">{{ intervencion.observaciones || 'Sin observaciones' }}</p>
             <button v-if="intervencion.fotoUrl" class="detail-photo" @click="fotoAmpliada = true" v-tippy="'Ampliar foto adjunta'" aria-label="Ampliar foto adjunta"><OperationalImage :src="intervencion.fotoUrl" /></button>
           </section>
-          <section class="detail-work"><h3>Diagnóstico y resolución</h3><p v-if="intervencion.atencionVersion" class="detail-symptom">{{ intervencion.observaciones || intervencion.sintomaNombre }}</p><AttentionPanel v-if="intervencion.atencionVersion || showAttention" :key="intervencion.id" :item="intervencion" @busy="attentionBusy=$event" @dirty="attentionDirty=$event" /><p class="detail-readonly" v-if="!puedeEditar && !intervencion.atencionVersion">{{ intervencion.estado === 'COMPLETADO' ? 'Intervención completada. Datos de consulta.' : puedeTomarIntervencion ? 'Tomá la intervención para registrar el trabajo realizado.' : 'Consulta de la intervención. La edición corresponde al usuario asignado con permiso de ejecución.' }}</p>
+          <section class="detail-work"><h3>Diagnóstico y resolución</h3><p v-if="previewSector!==null" class="detail-readonly">Vista previa de rol: los trabajos reales son de consulta. Volvé a Intervenciones y elegí Ensayar atención para tomar, corregir y completar una tarea ficticia.</p><p v-if="intervencion.atencionVersion" class="detail-symptom">{{ intervencion.observaciones || intervencion.sintomaNombre }}</p><AttentionPanel v-if="intervencion.atencionVersion || showAttention" :key="intervencion.id" :item="intervencion" @busy="attentionBusy=$event" @dirty="attentionDirty=$event" /><p class="detail-readonly" v-if="!puedeEditar && !intervencion.atencionVersion">{{ intervencion.estado === 'COMPLETADO' ? 'Intervención completada. Datos de consulta.' : puedeTomarIntervencion ? 'Tomá la intervención para registrar el trabajo realizado.' : 'Consulta de la intervención. La edición corresponde al usuario asignado con permiso de ejecución.' }}</p>
             <p v-if="catalogoError" class="detail-readonly">No se pudo cargar el catálogo. <button class="detail-button" @click="cargarCatalogo()">Reintentar catálogo</button></p><fieldset :disabled="!puedeEditar || guardando || tomando">
               <label for="iv-cause">Causa raíz<textarea id="iv-cause" v-model="diagnostico.causaRaiz" rows="3" placeholder="¿Qué causó el problema?" /></label>
               <label for="iv-action">Acción tomada<textarea id="iv-action" v-model="diagnostico.accionTomada" rows="3" placeholder="¿Qué se hizo para resolverlo?" /></label>

@@ -6,6 +6,7 @@ import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
 import IntervencionDetalle from './IntervencionDetalle.vue';
 import AttentionRehearsal from './AttentionRehearsal.vue';
+import { mobileWorkAction } from '../utils/mobileWorkAction';
 import { attentionLabel,attentionQueueMatches } from '../utils/attentionQueue';
 import { getSectorScope } from '../utils/sectorScope';
 import { attentionSpecialties } from '../../functions/attentionPolicy.js';
@@ -39,6 +40,8 @@ const filtroAsignacion = ref(userRole.value==='mecanico' ? 'team':'');
 const errorCarga = ref(false);
 const detalleId = ref(null);
 const ensayo = ref(false);
+const mobileAction=item=>mobileWorkAction(item,currentUid(),canAtender(item) || canTomarItem(item));
+function mobileOpen(item) { const action=mobileAction(item); if(previewSector.value!==null || action.kind==='detail') abrirDetalle(item); else if(action.kind==='claim') onAtender(item); else onTomar(item); }
 const activatingAlerts=ref(false),alertsEnabled=ref(false);
 
 async function activateAlerts() {
@@ -272,7 +275,7 @@ async function onAtender(item) {
 
 // ── Acciones individuales ──────────────────────────────────────────────────────
 const onTomar = async (item) => {
-  if (actualizando.value || item.estado !== 'PENDIENTE' || !canTomarItem(item)) return;
+  if (previewSector.value!==null || actualizando.value || item.estado !== 'PENDIENTE' || !canTomarItem(item)) return;
   const user = getAuth().currentUser;
   actualizando.value = item.id;
   try {
@@ -289,7 +292,7 @@ const onTomar = async (item) => {
 
 // ── Acciones batch por grupo (Fase C) ──────────────────────────────────────────
 const onTomarGrupo = async (grupo) => {
-  if (actualizando.value) return;
+  if (previewSector.value!==null || actualizando.value) return;
   const user = getAuth().currentUser;
   const pendientes = grupo.items.filter(i => i.estado === 'PENDIENTE' && canTomarItem(i));
   if (!pendientes.length) return;
@@ -363,7 +366,7 @@ const onTomarGrupo = async (grupo) => {
     <div class="management-filters">
       <button class="management-button" :disabled="activatingAlerts || previewSector!==null" @click="activateAlerts" v-tippy="'Declarar que estás de turno y habilitar avisos hasta las 06, 14 o 22; el envío se activa con el piloto'">{{ activatingAlerts ? 'Activando…':alertsEnabled ? 'Renovar turno y avisos':'Estoy de turno · Avisos' }}</button><button v-if="alertsEnabled" class="management-button" :disabled="activatingAlerts" @click="finishDuty">Fuera de turno</button>
       <div class="work-inboxes" role="group" aria-label="Bandejas de trabajo"><button class="management-button" :aria-pressed="filtroAsignacion==='team'" @click="elegirBandeja('team')">Avisos del equipo</button><button class="management-button" :aria-pressed="filtroAsignacion==='mine'" @click="elegirBandeja('mine')">Mis trabajos</button></div>
-      <button v-if="userRole==='admin'" class="management-button" @click="ensayo=true" v-tippy="'Probar asignación, aceptación, espera y relevo con datos ficticios'">Ensayar atención</button>
+      <button v-if="userRole==='admin' || previewSector!==null" class="management-button" @click="ensayo=true" v-tippy="'Probar asignación, aceptación, espera y relevo con datos ficticios'">Ensayar atención</button>
       <label class="management-search">Buscar<input v-model="busqueda" type="search" placeholder="Máquina, síntoma o persona…" /></label>
       <label v-if="presentacion === 'table'">Categoría<select v-model="filtroTipo"><option value="">Todas</option><option v-for="(config, key) in tipoConfig" :key="key" :value="key">{{ config.label }}</option></select></label>
       <label v-if="sectoresUsuario.length > 1">Sector<select v-model="filtroSector"><option value="">Todos los permitidos</option><option v-for="sector in sectoresUsuario" :key="sector" :value="sector">{{ sector }}</option></select></label>
@@ -429,240 +432,30 @@ const onTomarGrupo = async (grupo) => {
           <td><div class="management-row-actions"><button class="management-button" @click="abrirDetalle(item)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="canAtender(item)" class="management-button primary" :disabled="!!actualizando" @click.stop="onAtender(item)">{{ actualizando===item.id ? 'Confirmando…':'Voy a atender' }}</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
         </tr>
       </tbody></table></div>
-    <div v-if="presentacion === 'table'" class="management-cards max-w-lg mx-auto px-3 pt-3 space-y-3">
-      <div v-for="g in grupos" :key="g.key">
-
-        <!-- ═══ GRUPO CON MÚLTIPLES ═══ -->
-        <div v-if="g.items.length > 1"
-          class="rounded-2xl border overflow-hidden shadow-sm"
-          :class="[
-            g.bestPrio.level === 'P1' ? 'border-red-400 shadow-red-200 animate-pulse-subtle' : g.bestPrio.level === 'P2' ? 'border-orange-300' : 'border-gray-200',
-            prioConfig[g.bestPrio.level]?.ring || ''
-          ]"
-        >
-          <!-- Header del grupo -->
-          <button
-            @click="toggleMaqGroup(g.key)"
-            class="w-full bg-gray-50 px-3.5 py-2.5 flex items-center gap-2 text-left active:bg-gray-100 transition-colors"
-          >
-            <span
-              class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0"
-              :class="prioConfig[g.bestPrio.level]?.bg"
-            >
-              <component v-if="prioConfig[g.bestPrio.level]?.ic" :is="prioConfig[g.bestPrio.level].ic" class="w-3 h-3" />
-              {{ prioConfig[g.bestPrio.level]?.label }}
-            </span>
-
-            <p class="font-black text-gray-900 text-base leading-tight">{{ g.nombre }}</p>
-            <span v-if="g.modelo" class="text-[10px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">{{ g.modelo }}</span>
-
-            <div class="ml-auto flex items-center gap-1.5">
-              <span class="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-[10px] font-black">
-                <Layers class="w-3 h-3" />
-                {{ g.items.length }}
-              </span>
-              <ChevronDown v-if="collapsedMaq.has(g.key)" class="w-4 h-4 text-gray-400" />
-              <ChevronUp v-else class="w-4 h-4 text-gray-400" />
-            </div>
-          </button>
-
-          <!-- Sub-cards -->
-          <div v-if="!collapsedMaq.has(g.key)" class="divide-y divide-gray-100">
-            <div
-              v-for="item in g.items"
-              :key="item.id"
-              class="bg-white transition-all"
-              :class="item.estado === 'COMPLETADO' ? 'opacity-60' : ''"
-            >
-              <div class="px-3.5 py-2.5">
-                <!-- Row badges -->
-                <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                  <span
-                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
-                    :class="tipoConfig[item.tipoIntervencion]?.bg || 'bg-gray-100 text-gray-600'"
-                  >
-                    <component :is="item.tipoIntervencion === 'MECANICO' ? Wrench : item.tipoIntervencion === 'CALIDAD' ? Stethoscope : Zap" class="w-3 h-3" />
-                    {{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }}
-                  </span>
-                  <span v-if="item.estadoMaquina"
-                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-gray-100"
-                    :class="estadoMaqConfig[item.estadoMaquina]?.color"
-                  >
-                    <component :is="estadoMaqConfig[item.estadoMaquina]?.ic" class="w-3 h-3" />
-                    {{ estadoMaqConfig[item.estadoMaquina]?.label }}
-                  </span>
-                  <span class="ml-auto inline-flex px-2 py-0.5 rounded-full text-[10px] font-black"
-                    :class="estadoConfig[item.estado]?.bg || 'bg-gray-100 text-gray-600'"
-                  >{{ attentionLabel(item) }}</span>
-                </div>
-
-                <!-- Síntoma + obs -->
-                <p v-if="item.sintomaNombre" class="text-sm font-semibold text-gray-700 leading-snug">{{ item.sintomaNombre }}</p>
-                <p v-if="item.observaciones" class="text-xs text-gray-400 italic line-clamp-1">"{{ item.observaciones }}"</p>
-
-                <!-- Mini footer individual -->
-                <div class="flex items-center gap-2 mt-1.5 text-[11px] text-gray-400">
-                  <Clock class="w-3 h-3" />
-                  <span>{{ timeAgo(item.createdAt) }}</span>
-                  <span v-if="item.asignadoNombre" class="text-emerald-600 font-bold flex items-center gap-0.5">
-                    <User class="w-3 h-3" /> {{ item.asignadoNombre }}
-                  </span>
-                  <div class="ml-auto flex items-center gap-1">
-                    <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="abrirDetalle(item)" class="p-1 rounded bg-gray-100 text-gray-400 hover:bg-gray-200">
-                      <ChevronRight class="w-3 h-3" />
-                    </button>
-                    <button v-if="canAtender(item)" class="management-button primary" :disabled="!!actualizando" @click.stop="onAtender(item)">{{ actualizando===item.id ? 'Confirmando…':'Voy a atender' }}</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" @click.stop="onTomar(item)" :disabled="!!actualizando"
-                      class="px-2 py-0.5 bg-orange-500 text-white rounded-lg text-[10px] font-black active:scale-95 transition disabled:opacity-50">
-                      Tomar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Acciones batch del grupo -->
-          <div v-if="!collapsedMaq.has(g.key)" class="bg-gray-50 px-3.5 py-2 flex items-center gap-2 border-t border-gray-200">
-            <span class="text-[10px] font-bold text-gray-400 flex items-center gap-1">
-              <Layers class="w-3 h-3" /> {{ g.items.length }} intervenciones
-            </span>
-            <div class="ml-auto flex items-center gap-1.5">
-              <button
-                v-if="g.items.some(i => i.estado === 'PENDIENTE' && canTomarItem(i))"
-                @click.stop="onTomarGrupo(g)"
-                :disabled="!!actualizando"
-                class="flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white rounded-lg text-[10px] font-black active:scale-95 transition disabled:opacity-50"
-              >
-                <span v-if="actualizando === `batch-${g.key}`" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full inline-block"></span>
-                <ChevronRight v-else class="w-3 h-3" />
-                Tomar {{ g.items.filter(i => i.estado === 'PENDIENTE' && canTomarItem(i)).length }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- ═══ TARJETA SIMPLE (1 intervención) ═══ -->
-        <div v-else
-          class="bg-white rounded-2xl border overflow-hidden shadow-sm transition-all"
-          :class="[
-            g.bestPrio.level === 'P1' ? 'border-red-400 shadow-red-200 animate-pulse-subtle' : g.items[0].estadoMaquina === 'PARADA' ? 'border-red-300 shadow-red-100' : g.items[0].critico ? 'border-red-200 shadow-red-50' : 'border-gray-100',
-            g.items[0].estado === 'COMPLETADO' ? 'opacity-70' : '',
-            prioConfig[g.bestPrio.level]?.ring || ''
-          ]"
-        >
-          <div class="h-1.5" :class="tipoConfig[g.items[0].tipoIntervencion]?.bar || 'bg-gray-300'"></div>
-
-          <div class="p-3.5 pb-0">
-            <!-- Badges -->
-            <div class="flex items-center gap-1.5 mb-2 flex-wrap">
-              <span v-if="g.items[0].estado !== 'COMPLETADO'"
-                class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-black"
-                :class="prioConfig[g.bestPrio.level]?.bg"
-              >
-                <component v-if="prioConfig[g.bestPrio.level]?.ic" :is="prioConfig[g.bestPrio.level].ic" class="w-3 h-3" />
-                {{ prioConfig[g.bestPrio.level]?.label }}
-              </span>
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
-                :class="tipoConfig[g.items[0].tipoIntervencion]?.bg || 'bg-gray-100 text-gray-600'"
-              >
-                <component :is="g.items[0].tipoIntervencion === 'MECANICO' ? Wrench : g.items[0].tipoIntervencion === 'CALIDAD' ? Stethoscope : Zap" class="w-3 h-3" />
-                {{ tipoConfig[g.items[0].tipoIntervencion]?.label || g.items[0].tipoIntervencion }}
-              </span>
-              <span v-if="g.items[0].estadoMaquina"
-                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-gray-100"
-                :class="estadoMaqConfig[g.items[0].estadoMaquina]?.color"
-              >
-                <component :is="estadoMaqConfig[g.items[0].estadoMaquina]?.ic" class="w-3 h-3" />
-                {{ estadoMaqConfig[g.items[0].estadoMaquina]?.label }}
-              </span>
-              <span class="ml-auto inline-flex px-2 py-0.5 rounded-full text-[10px] font-black"
-                :class="estadoConfig[g.items[0].estado]?.bg || 'bg-gray-100 text-gray-600'"
-              >{{ estadoConfig[g.items[0].estado]?.label || g.items[0].estado }}</span>
-            </div>
-
-            <!-- Máquina -->
-            <div class="flex items-baseline gap-2 mb-0.5">
-              <p class="font-black text-gray-900 text-lg leading-tight">{{ g.nombre }}</p>
-              <span v-if="g.modelo" class="text-[11px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{{ g.modelo }}</span>
-              <span v-if="g.lado && g.lado !== 'U'" class="text-[11px] text-gray-400 font-semibold">L{{ g.lado }}</span>
-            </div>
-            <div class="flex items-center gap-2 text-[10px] text-gray-400 font-bold tracking-wide mb-2">
-              <span>{{ g.sector }}</span>
-              <span v-if="g.grupo" class="text-gray-300">·</span>
-              <span v-if="g.grupo">GP {{ g.grupo }}</span>
-              <span v-if="g.gm" class="text-gray-300">·</span>
-              <span v-if="g.gm">GM {{ g.gm }}</span>
-            </div>
-
-            <!-- Síntoma + obs -->
-            <p v-if="g.items[0].sintomaNombre" class="text-sm font-semibold text-gray-700 leading-snug mb-0.5">{{ g.items[0].sintomaNombre }}</p>
-            <p v-if="g.items[0].observaciones" class="text-sm text-gray-500 italic leading-snug line-clamp-2">"{{ g.items[0].observaciones }}"</p>
-
-            <!-- Foto -->
-            <div v-if="g.items[0].fotoUrl" class="mt-2 rounded-xl overflow-hidden border border-gray-200 h-24 bg-gray-900">
-              <OperationalImage :src="g.items[0].fotoUrl" class="w-full h-full object-cover" />
-            </div>
-          </div>
-
-          <!-- Expandible -->
-          <div v-if="expandedId === g.items[0].id" class="px-3.5 pt-2 pb-1 space-y-2 border-t border-gray-100 mt-2 bg-gray-50/60">
-            <div v-if="g.items[0].diagnostico?.piezaNombre" class="flex items-start gap-2">
-              <Package class="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
-              <div class="text-xs">
-                <span class="font-black text-gray-600">Pieza:</span>
-                <span class="text-gray-500 ml-1">{{ g.items[0].diagnostico.piezaNombre }}</span>
-              </div>
-            </div>
-            <div v-if="g.items[0].diagnostico?.causaRaiz" class="flex items-start gap-2">
-              <Stethoscope class="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
-              <div class="text-xs">
-                <span class="font-black text-gray-600">Causa raíz:</span>
-                <span class="text-gray-500 ml-1">{{ g.items[0].diagnostico.causaRaiz }}</span>
-              </div>
-            </div>
-            <div v-if="!g.items[0].diagnostico?.piezaNombre && !g.items[0].diagnostico?.causaRaiz" class="text-[10px] text-gray-400 italic py-1">
-              Sin diagnóstico completado
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div v-if="canAtender(g.items[0])" class="px-3.5 pt-3"><button class="management-button primary mobile-attend" :disabled="!!actualizando" @click.stop="onAtender(g.items[0])">{{ actualizando===g.items[0].id ? 'Confirmando…':'Voy a atender' }}</button><p v-if="g.items[0].mencionadoNombre" class="text-xs text-gray-500 mt-2">Aviso dirigido a {{ g.items[0].mencionadoNombre }} · Disponible para el equipo</p></div>
-          <div class="px-3.5 py-2.5 flex items-center gap-2 border-t border-gray-50 mt-2">
-            <Clock class="w-3.5 h-3.5 text-gray-300 shrink-0" />
-            <span class="text-xs text-gray-400">{{ timeAgo(g.items[0].createdAt) }}</span>
-            <span v-if="g.items[0].asignadoNombre" class="text-xs text-emerald-600 font-bold flex items-center gap-1 ml-1">
-              <User class="w-3 h-3" /> {{ g.items[0].asignadoNombre }}
-            </span>
-            <span v-else-if="g.items[0].creadoPorNombre" class="text-xs text-gray-400 ml-1">{{ g.items[0].creadoPorNombre }}</span>
-
-            <div class="ml-auto flex items-center gap-1.5">
-              <button aria-label="Mostrar diagnóstico" v-tippy="'Mostrar u ocultar diagnóstico'" @click.stop="toggleExpand(g.items[0].id)" class="p-1.5 rounded-lg bg-gray-100 text-gray-400 hover:bg-gray-200 transition-all">
-                <ChevronDown v-if="expandedId !== g.items[0].id" class="w-3.5 h-3.5" />
-                <ChevronUp v-else class="w-3.5 h-3.5" />
-              </button>
-              <button aria-label="Ver detalle" v-tippy="'Ver detalle de intervención'" @click.stop="abrirDetalle(g.items[0])" class="p-1.5 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
-                <ChevronRight class="w-3.5 h-3.5" />
-              </button>
-              <button v-if="g.items[0].estado === 'PENDIENTE' && canTomarItem(g.items[0])" @click.stop="onTomar(g.items[0])" :disabled="!!actualizando"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-xl text-[11px] font-black active:scale-95 transition disabled:opacity-50 shadow-sm shadow-orange-500/20">
-                <span v-if="actualizando === g.items[0].id" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full inline-block"></span>
-                <ChevronRight v-else class="w-3.5 h-3.5" />
-                Tomar
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
+    <section class="mobile-work-list" aria-label="Trabajos y acciones">
+      <p class="mobile-work-guide">Tomá el trabajo, registrá la corrección y completalo desde el detalle.</p>
+      <div v-if="previewSector!==null" class="mobile-preview-note">Vista previa: la identidad sigue siendo tu cuenta. Para probar la atención completa sin cambiar trabajos reales, <button @click="ensayo=true">ensayá como mecánico</button>.</div>
+      <article v-for="item in intervencionesFiltered" :key="item.id" class="mobile-work-card">
+        <div class="mobile-work-heading"><strong>Máquina {{ numeroCorto(item) }}</strong><span>{{ attentionLabel(item) }}</span></div>
+        <p class="mobile-work-meta">{{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }} · {{ item.sector }} · {{ timeAgo(item.createdAt) }}</p>
+        <h2>{{ item.sintomaNombre || 'Problema reportado' }}</h2>
+        <p class="mobile-work-description">{{ item.observaciones }}</p>
+        <p v-if="mobileAction(item).hint" class="mobile-work-hint">{{ mobileAction(item).hint }}</p>
+        <div class="mobile-work-actions"><button class="management-button primary" :disabled="!!actualizando" @click="mobileOpen(item)">{{ actualizando===item.id ? 'Confirmando…' : previewSector!==null && mobileAction(item).kind!=='detail' ? 'Ver cómo atender' : mobileAction(item).label }}</button><button v-if="mobileAction(item).kind!=='detail'" class="management-button" @click="abrirDetalle(item)">Ver detalle</button></div>
+      </article>
+    </section>
     <footer class="management-footer">{{ intervencionesFiltered.length }} solicitudes · {{ grupos.length }} máquinas · Cerradas: últimas 24 horas</footer>
     </div>
   </div>
   <IntervencionDetalle v-if="detalleId" :key="detalleId" :id="detalleId" @close="cerrarDetalle" />
-  <AttentionRehearsal v-if="ensayo" @close="ensayo=false" />
+  <AttentionRehearsal v-if="ensayo" :initial-actor-id="userRole==='mecanico' ? 'demo-mechanic' : 'demo-coordinator'" @close="ensayo=false" />
 </template>
 
 <style scoped>
+.mobile-work-list{padding:12px;display:grid;gap:12px;padding-bottom:24px}.mobile-work-guide{font-size:14px;color:#475569;margin:0}.mobile-preview-note{padding:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;font-size:14px;line-height:1.5}.mobile-preview-note button{color:#4338ca;text-decoration:underline;min-height:44px;font-weight:600}.mobile-work-card{padding:16px;background:white;border:1px solid #e2e8f0;border-radius:8px;min-width:0}.mobile-work-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}.mobile-work-heading strong{font-size:18px}.mobile-work-heading span{font-size:12px;background:#eef2ff;color:#4338ca;padding:4px 7px;border-radius:4px}.mobile-work-meta,.mobile-work-hint{font-size:13px;color:#64748b;margin:8px 0}.mobile-work-card h2{font-size:16px;font-weight:650;margin:12px 0 6px}.mobile-work-description{font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.mobile-work-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.mobile-work-actions button{min-height:44px;font-size:14px;flex:1}.mobile-work-actions button.primary{flex:2}
+@media(min-width:768px){.mobile-work-list{display:none}}
+@media(max-width:767px){.specialty-board,.presentation-switch{display:none}.work-inboxes{flex-wrap:nowrap;overflow-x:auto}.work-inboxes button{white-space:nowrap;min-height:44px}}
+
 .work-inboxes{display:flex;gap:6px;flex-wrap:wrap}.work-inboxes button[aria-pressed=true]{background:#eef2ff;color:#4338ca;border-color:#c7d2fe}.mobile-attend{width:100%;min-height:44px!important;font-size:14px!important}
 .management-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; padding:6px 12px; background:white; border-bottom:1px solid #e2e8f0; flex-shrink:0; }
 .management-tabs { min-width:0; }

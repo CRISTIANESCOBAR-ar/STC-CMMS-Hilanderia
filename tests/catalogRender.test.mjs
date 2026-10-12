@@ -1,3 +1,4 @@
+import { mobileWorkAction } from '../src/utils/mobileWorkAction.js';
 import { vTippy } from '../src/utils/tooltipDirective.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -224,7 +225,7 @@ test('intervention management filters grouped requests and only takes permitted 
     '../services/notificationService':{ notificationService:{ solicitarPermisosYRegistrarToken:async()=>null } },
     '../services/profileService': { getEffectivePermisosForUser: () => ({}) },
     '../utils/interventionAccess': { canExecuteIntervention }, '../utils/faultEvents': { eventView },
-    '../utils/attentionQueue': { attentionLabel,attentionQueueMatches }, '../utils/sectorScope': { getSectorScope:profile=>profile.sectoresAsignados },
+    '../utils/mobileWorkAction':{ mobileWorkAction }, '../utils/attentionQueue': { attentionLabel,attentionQueueMatches }, '../utils/sectorScope': { getSectorScope:profile=>profile.sectoresAsignados },
     '../../functions/attentionPolicy.js':attentionPolicy,'../services/attentionService':{ transitionAttention:async()=>({ revision:2 }) },
     './AttentionRehearsal.vue': { render:()=>Vue.h('div') },
     '../utils/tooltipDirective': { vTippy },
@@ -317,7 +318,7 @@ test('intervention detail modal preserves dirty diagnosis on snapshots and failu
     'vue-router': { useRoute: () => ({ params:{ id:'direct-id' } }), useRouter: () => ({ push() {} }), onBeforeRouteLeave() {} },
     'firebase/auth': { getAuth: () => ({ currentUser:{ uid:'tech', displayName:'Técnico' } }) },
     'firebase/firestore': { getDoc:async () => ({ exists:() => false }), doc() {} }, '../firebase/config':{ db:{} },
-    '../services/authService':{ userRole:Vue.ref('admin'), userProfile:Vue.ref({}) },
+    '../services/authService':{ userRole:Vue.ref('admin'), userProfile:Vue.ref({}),previewSector:Vue.ref(null) },
     '../services/profileService':{ getEffectivePermisosForUser: () => ({}) },
     '../utils/interventionAccess':{ canExecuteIntervention },
     '../utils/faultEvents':{ eventView, machineStateLabel:value => value }, '../utils/tooltipDirective':{ vTippy },

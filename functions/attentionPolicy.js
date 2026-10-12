@@ -1,6 +1,6 @@
 // Shared by the server and the isolated rehearsal. Never trust a browser profile.
 export const ATTENTION_STATES = { REPORTADA:'Reportada', ASIGNADA:'Asignada', ACEPTADA:'Aceptada', EN_TRABAJO:'En trabajo', EN_ESPERA:'En espera', COMPLETADA:'Completada', CERRADA:'Cerrada' };
-export const ATTENTION_ACTIONS = { preparar:'Incorporar al piloto', asignar:'Asignar / entregar turno', aceptar:'Aceptar tarea', iniciar:'Iniciar trabajo', esperar:'Informar espera', reanudar:'Reanudar', diagnostico:'Guardar diagnóstico', completar:'Completar trabajo', cerrar:'Validar cierre', reabrir:'Reabrir' };
+export const ATTENTION_ACTIONS = { preparar:'Incorporar al piloto', tomar:'Voy a atender', asignar:'Asignar / entregar turno', aceptar:'Aceptar tarea asignada', priorizar:'Cambiar prioridad', iniciar:'Iniciar trabajo', esperar:'Informar espera', reanudar:'Reanudar', diagnostico:'Guardar diagnóstico', completar:'Completar trabajo', cerrar:'Validar cierre', reabrir:'Reabrir' };
 const MEMBERS = ['admin','mecanico','tejedor','inspector','auxiliar','supervisor','supervisor_mecanico','supervisor_electrico','jefe_sector','jefe_electricos','jefe_produccion','gerente_produccion'];
 const COORDINATORS = ['admin','supervisor','supervisor_mecanico','supervisor_electrico','jefe_sector','jefe_electricos','jefe_produccion','gerente_produccion'];
 const EXECUTORS = ['admin','mecanico','supervisor_mecanico','supervisor_electrico','jefe_sector','jefe_electricos','jefe_produccion','gerente_produccion'];
@@ -32,6 +32,10 @@ export function attentionCan(profile,organization,record,operation) {
   if (profile.role!=='admin' && !attentionSpecialties(profile).includes(record.tipoIntervencion)) return false;
   return operation==='coordinate' ? permission(profile,organization,'coordinarAtencion',COORDINATORS)
     : permission(profile,organization,'cerrarOrden',EXECUTORS) || profile.role==='inspector' && record.tipoIntervencion==='CALIDAD';
+}
+export function attentionCanReport(profile,organization,sector) {
+  const scope=attentionScope(profile);
+  return (scope===null || scope.includes(sector)) && permission(profile,organization,'crearFalla',[...EXECUTORS,'tejedor','inspector','supervisor']);
 }
 export function attentionPilotEnabled(config,uid,sector) {
   return config?.enabled===true && config?.version===1 && Array.isArray(config.userIds) && config.userIds.includes(uid)
@@ -74,6 +78,15 @@ export function planAttention({ record,actor,actorUid,organization={},command,ta
       patch.esperaMotivo=null; patch.revisarAt=null;
       required(note); // Includes an explicit explanation of a transfer between shifts.
       break;
+    case 'tomar':
+      if (!execute) denied(); if(state!=='REPORTADA' || record.asignadoA) fail();
+      patch.atencionEstado='ACEPTADA'; patch.asignadoA=actorUid;
+      patch.asignadoNombre=actor.displayName || actor.nombre || actor.email || actorUid;
+      patch.fechaAsignacion=timestamp; patch.aceptadaAt=timestamp; break;
+    case 'priorizar':
+      if (!coordinate) denied(); if(['CERRADA','COMPLETADA'].includes(state)) fail();
+      if (!['URGENTE','ALTA','NORMAL'].includes(command.priority)) throw attentionError('invalid-argument','Prioridad inválida.');
+      patch.prioridadAtencion=command.priority; required(note); break;
     case 'aceptar':
       if (!execute || !mine) denied(); if(state!=='ASIGNADA') fail();
       patch.atencionEstado='ACEPTADA'; patch.aceptadaAt=timestamp; break;

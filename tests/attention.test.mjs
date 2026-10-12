@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planAttention,attentionCan,attentionPilotEnabled,attentionScope,attentionSpecialties } from '../functions/attentionPolicy.js';
 import { validateAttentionCommand } from '../functions/attentionWorkflow.js';
+import { automaticReportEnabled,workFromReport } from '../functions/reportAttention.js';
 import { attentionQueueMatches,readAttentionDraft,writeAttentionDraft } from '../src/utils/attentionQueue.js';
 const chief={ role:'jefe_produccion',sectoresAsignados:['TEJEDURIA'],displayName:'Coordinador' };
 const tech={ role:'mecanico',sectoresAsignados:['TEJEDURIA'],displayName:'Técnico' };
@@ -91,4 +92,27 @@ test('drafts are account-bound, preserve revision mismatch, expire and handle un
   assert.equal(readAttentionDraft(storage,'a','one',2,1001).stale,true);
   assert.equal(readAttentionDraft(storage,'a','one',1,8*86400000),null);
   assert.equal(writeAttentionDraft({ setItem(){throw new Error('quota');} },'a','one',1,{}),false);
+});
+
+test('an eligible teammate may take a mentioned notice without reserving it or starting work',()=>{
+  const record={ ...base,atencionVersion:1,atencionEstado:'REPORTADA',atencionRevision:1,mencionadoUid:'someone-else' };
+  const taken=act(record,'tomar',{},tech,'tech'); assert.equal(taken.patch.asignadoA,'tech'); assert.equal(taken.patch.atencionEstado,'ACEPTADA'); assert.equal(taken.patch.fechaInicio,undefined);
+  assert.throws(()=>act({ ...record,...taken.patch },'tomar',{},tech,'another'),/cambió/);
+  assert.throws(()=>act({ ...record,atencionEstado:'ASIGNADA',asignadoA:'other' },'tomar',{},tech,'tech'),/cambió/);
+});
+test('automatic reports require a cutoff and never backfill old reports; copied hints never assign work',()=>{
+  const config={ enabled:true,version:1,automaticReports:true,reportsFrom:new Date(2000),userIds:['reporter'],sectors:['TEJEDURIA'] };
+  assert.equal(automaticReportEnabled(config,'reporter','TEJEDURIA',new Date(3000)),true);
+  assert.equal(automaticReportEnabled(config,'reporter','TEJEDURIA',new Date(1000)),false);
+  assert.equal(automaticReportEnabled({ ...config,reportsFrom:undefined },'reporter','TEJEDURIA',new Date(3000)),false);
+  assert.equal(automaticReportEnabled({ ...config,automaticReports:false },'reporter','TEJEDURIA',new Date(3000)),false);
+  const source={ ...base,tipoProblema:'Mecánico',observaciones:'Colita tejida en telar 14',fotoUrl:'novedades/TEJEDURIA/reporter/private.jpg',createdAt:new Date(3000) };
+  const copied=workFromReport(source,'report','server',{ uid:'tech',name:'Técnico' });
+  assert.equal(copied.asignadoA,null); assert.equal(copied.mencionadoUid,'tech'); assert.equal(copied.tipoIntervencion,'MECANICO'); assert.equal(copied.fotoUrl,source.fotoUrl); assert.equal(copied.observaciones,source.observaciones); assert.equal(copied.reporteOrigenId,'report');
+});
+test('only coordination can set priority, with an explicit reason',()=>{
+  const record={ ...base,atencionVersion:1,atencionEstado:'REPORTADA' };
+  assert.throws(()=>act(record,'priorizar',{ priority:'URGENTE',note:'Riesgo' },tech,'tech'),/permiso/);
+  assert.throws(()=>act(record,'priorizar',{ priority:'URGENTE' }),/motivo/);
+  assert.equal(act(record,'priorizar',{ priority:'URGENTE',note:'Impacto en producción' }).patch.prioridadAtencion,'URGENTE');
 });

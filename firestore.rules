@@ -211,18 +211,21 @@ service cloud.firestore {
 
     match /novedades/{docId} {
       allow read: if scoped(resource.data);
-      allow create: if validCreation() && canReport() && request.resource.data.estado == 'pendiente';
+      allow create: if validCreation() && canReport() && request.resource.data.estado == 'pendiente'
+        && !request.resource.data.keys().hasAny(['intervencionId','atencionEstado','atendidoPorUid','atendidoPorNombre']);
       allow update: if scoped(resource.data) && stableIdentity()
         && hasView('jefe', ['jefe_sector', 'jefe_electricos', 'jefe_produccion', 'gerente_produccion'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'feedbackJefe', 'updatedAt'])
         && request.resource.data.estado in ['pendiente', 'en proceso', 'resuelto']
+        && (resource.data.get('intervencionId', null) == null || request.resource.data.estado == resource.data.estado)
         && request.resource.data.updatedAt == request.time;
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && resource.data.get('intervencionId', null) == null;
     }
 
     match /intervenciones/{docId} {
       allow read: if scoped(resource.data);
       allow create: if validCreation() && canDispatch()
+        && !docId.matches('reporte_.*')
         && !request.resource.data.keys().hasAny(['atencionVersion', 'atencionEstado', 'atencionRevision', 'atencionUpdatedAt', 'reporteOrigenId'])
         && request.resource.data.estado == 'PENDIENTE'
         && request.resource.data.asignadoA == null
@@ -317,7 +320,8 @@ service cloud.firestore {
 
     match /fcm_tokens/{userId} {
       allow read: if isMember() && (uid() == userId || isStaff());
-      allow create, update: if isMember() && uid() == userId;
+      allow create, update: if isMember() && uid() == userId
+        && (request.resource.data.get('turnoActivo', false) != true || request.resource.data.updatedAt == request.time);
       allow delete: if isSignedIn() && (uid() == userId || isAdmin());
     }
 

@@ -11,6 +11,7 @@ import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 import { getFirestore as getAdminFirestore,FieldValue } from 'firebase-admin/firestore';
 import { executeAttention } from '../../functions/attentionWorkflow.js';
+import { createAttentionFromReport } from '../../functions/reportAttention.js';
 import { activeInterventionQueries } from '../../src/services/interventionLiveQueue.js';
 import { revokeDownloadToken } from '../../functions/operationalImages.js';
 
@@ -597,4 +598,32 @@ test('live intervention queries keep old critical validations and exclude histor
   const pages=await Promise.all(queries.map(query=>assertSucceeds(getDocs(query))));
   assert.deepEqual(pages[0].docs.map(doc=>doc.id).sort(),['legacy-open','old-validation']);
   assert.deepEqual(pages[1].docs.map(doc=>doc.id),['recent-closed']);
+});
+
+test('reported work is automatic, atomic and unique; mention does not reserve; taking and closing synchronize the report',async()=>{
+  await approve('flow-reporter','tejedor','TEJEDURIA'); await approve('flow-tech','mecanico','TEJEDURIA'); await approve('flow-relief','mecanico','TEJEDURIA'); await approve('flow-chief','jefe_produccion','TEJEDURIA'); await approve('flow-wrong','mecanico','HILANDERIA');
+  const server=getAdminFirestore(serverApp),stamp=()=>FieldValue.serverTimestamp(),auth=uid=>({ uid,token:{ firebase:{ sign_in_provider:'google.com' } } });
+  await server.doc('config/attentionPilot').set({ enabled:true,version:1,automaticReports:true,reportsFrom:new Date(Date.now()-1000),userIds:['flow-reporter','flow-tech','flow-relief','flow-chief','flow-wrong'],sectors:['TEJEDURIA'] });
+  const ref=server.doc('novedades/flow-report');
+  await ref.set({ sector:'TEJEDURIA',estado:'pendiente',tipoProblema:'Mecánico',tipoMaquina:'TELAR',numeroMaquina:35014,observaciones:'Colita tejida en telar 14',creadoPorUid:'flow-reporter',createdAt:stamp(),mecanicoMencionadoUid:'flow-tech',critico:true });
+  const creates=await Promise.all([createAttentionFromReport(server,'flow-report',stamp()),createAttentionFromReport(server,'flow-report',stamp())]);
+  assert.equal(creates.filter(result=>result.replayed===false).length,1); assert.equal(creates[0].interventionId,creates[1].interventionId);
+  const workId=creates[0].interventionId,workRef=server.doc(`intervenciones/${workId}`),work=(await workRef.get()).data(); assert.equal(work.mencionadoUid,'flow-tech'); assert.equal(work.asignadoA,null); assert.equal((await ref.get()).data().intervencionId,workId);
+  const take=uid=>executeAttention(server,auth(uid),{ interventionId:workId,operationId:`take-${uid}`,expectedRevision:1,action:'tomar' },stamp());
+  await assert.rejects(take('flow-wrong'),/alcance/);
+  const race=await Promise.allSettled([take('flow-tech'),take('flow-relief')]); assert.equal(race.filter(result=>result.status==='fulfilled').length,1);
+  const taken=(await workRef.get()).data(),owner=taken.asignadoA; assert.equal(taken.atencionEstado,'ACEPTADA'); assert.equal(taken.fechaInicio,null); assert.equal((await ref.get()).data().atendidoPorUid,owner);
+  const command=(action,revision,extra={})=>executeAttention(server,auth(owner),{ interventionId:workId,operationId:`flow-${action}`,expectedRevision:revision,action,...extra },stamp());
+  await command('iniciar',2); await command('completar',3,{ diagnostic:{ accionTomada:'Corregido y probado',tiempoReal:'10' } });
+  assert.equal((await ref.get()).data().estado,'en proceso'); assert.equal((await workRef.get()).data().atencionEstado,'COMPLETADA');
+  await executeAttention(server,auth('flow-chief'),{ interventionId:workId,operationId:'flow-close',expectedRevision:4,action:'cerrar',note:'Funcionamiento verificado' },stamp());
+  assert.equal((await ref.get()).data().estado,'resuelto'); assert.equal((await workRef.get()).data().atencionEstado,'CERRADA');
+  const client=identity('flow-chief').firestore(); await assertFails(updateDoc(doc(client,'novedades/flow-report'),{ estado:'en proceso',updatedAt:serverTimestamp() }));
+  await assertFails(setDoc(doc(client,'intervenciones/reporte_reserved'),{ sector:'TEJEDURIA',estado:'PENDIENTE',asignadoA:null,fechaInicio:null,fechaFin:null,creadoPorUid:'flow-chief',createdAt:serverTimestamp() }));
+  const device=doc(identity('flow-tech').firestore(),'fcm_tokens/flow-tech');
+  await assertSucceeds(setDoc(device,{ token:'fictitious-device-token',userId:'flow-tech',platform:'web',turnoActivo:true,updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(device,{ updatedAt:Timestamp.fromMillis(Date.now()+86400000) }));
+  assert.equal((await workRef.collection('eventos_atencion').get()).size,5);
+  await server.doc('novedades/old-flow').set({ sector:'TEJEDURIA',estado:'pendiente',tipoProblema:'Mecánico',creadoPorUid:'flow-reporter',createdAt:new Date(1000) });
+  assert.equal((await createAttentionFromReport(server,'old-flow',stamp())).skipped,'disabled');
 });

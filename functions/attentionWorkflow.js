@@ -1,7 +1,7 @@
 import { attentionError,attentionPilotEnabled,attentionCan,planAttention } from './attentionPolicy.js';
 const safeId=value=>typeof value==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 export function validateAttentionCommand(value) {
-  const allowed=['interventionId','operationId','expectedRevision','action','targetUid','sourceId','note','nextAction','reason','reviewAt','diagnostic'];
+  const allowed=['interventionId','operationId','expectedRevision','action','targetUid','sourceId','note','nextAction','reason','reviewAt','diagnostic','priority'];
   if (!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).some(key=>!allowed.includes(key)) || !safeId(value.interventionId) || !safeId(value.operationId) || !Number.isInteger(value.expectedRevision) || value.expectedRevision<0 || ['targetUid','sourceId'].some(key=>value[key]!==undefined && !safeId(value[key]))) throw attentionError('invalid-argument','Solicitud de atención inválida.');
   return value;
 }
@@ -24,7 +24,19 @@ export async function executeAttention(db,auth,input,timestamp,now=Date.now()) {
     if (command.targetUid) { const snap=await tx.get(db.doc(`usuarios/${command.targetUid}`)); target=snap.exists ? snap.data():{}; if(!attentionPilotEnabled(config,command.targetUid,record.sector)) throw attentionError('invalid-argument','El responsable debe pertenecer al piloto.'); }
     if (command.sourceId) { const snap=await tx.get(db.doc(`novedades/${command.sourceId}`)); source=snap.exists ? snap.data():null; }
     const { patch,event }=planAttention({ record,actor,actorUid:auth.uid,organization,command:{ ...command,now },target,targetUid:command.targetUid,source,timestamp });
-    tx.update(reference,patch); tx.create(eventRef,{ ...event,fingerprint });
+    let reportRef;
+    const sourceId=record.reporteOrigenId || patch.reporteOrigenId;
+    if(sourceId) {
+      if(!safeId(sourceId)) throw attentionError('failed-precondition','Vínculo de reporte inválido.');
+      reportRef=db.doc(`novedades/${sourceId}`);
+      const report=await tx.get(reportRef);
+      if(!report.exists || (command.action==='preparar' ? report.data().intervencionId && report.data().intervencionId!==command.interventionId:report.data().intervencionId!==command.interventionId) || report.data().sector!==record.sector) throw attentionError('failed-precondition','El vínculo con el reporte cambió.');
+    }
+    tx.update(reference,patch); tx.create(eventRef,{ ...event,priority:patch.prioridadAtencion || null,fingerprint });
+    if(reportRef) {
+      const phase=patch.atencionEstado || record.atencionEstado;
+      tx.update(reportRef,{ intervencionId:command.interventionId,estado:phase==='CERRADA' ? 'resuelto':phase==='REPORTADA' || phase==='ASIGNADA' ? 'pendiente':'en proceso',atencionEstado:phase,atendidoPorUid:patch.asignadoA || record.asignadoA || null,atendidoPorNombre:patch.asignadoNombre || record.asignadoNombre || null,updatedAt:timestamp });
+    }
     return { revision:patch.atencionRevision,replayed:false };
   });
 }

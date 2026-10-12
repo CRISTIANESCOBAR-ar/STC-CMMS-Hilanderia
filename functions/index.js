@@ -7,9 +7,26 @@ import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { validUploadPath, revokeDownloadToken } from './operationalImages.js';
 import { ALLOWED_ROLES, validateGeminiRequest, nextQuota } from './geminiPolicy.js';
 import { executeAttention } from './attentionWorkflow.js';
+import { createAttentionFromReport } from './reportAttention.js';
+import { onDocumentCreated,onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
+import { deliverAttentionNotification } from './attentionNotifications.js';
 
 initializeApp();
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
+
+export const notifyAttention = onDocumentWritten({ document:'intervenciones/{workId}',region:'us-central1',retry:true,maxInstances:5 },async event=>{
+  return deliverAttentionNotification(getFirestore(),{ id:event.params.workId,before:event.data?.before.data(),after:event.data?.after.data(),eventId:event.id },message=>getMessaging().sendEachForMulticast(message),FieldValue.serverTimestamp());
+});
+
+export const createReportedWork = onDocumentCreated({ document:'novedades/{reportId}',region:'us-central1',retry:true,maxInstances:5 },async event=>{
+  try { return await createAttentionFromReport(getFirestore(),event.params.reportId,FieldValue.serverTimestamp()); }
+  catch(error) {
+    console.error('report-attention-failed',{ code:error.code || 'unknown',reportId:event.params.reportId });
+    if(['failed-precondition','permission-denied','invalid-argument'].includes(error.code)) return { skipped:'invalid-source' };
+    throw error;
+  }
+});
 
 // Disabled without an explicit config/attentionPilot allowlist. Deploy separately.
 export const transitionAttention = onCall({ region:'us-central1',timeoutSeconds:30,maxInstances:5 },async request=>{

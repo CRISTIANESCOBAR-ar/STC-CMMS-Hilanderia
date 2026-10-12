@@ -1,14 +1,26 @@
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { getStorage } from 'firebase-admin/storage';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { validUploadPath, revokeDownloadToken } from './operationalImages.js';
 import { ALLOWED_ROLES, validateGeminiRequest, nextQuota } from './geminiPolicy.js';
+import { executeAttention } from './attentionWorkflow.js';
 
 initializeApp();
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
+
+// Disabled without an explicit config/attentionPilot allowlist. Deploy separately.
+export const transitionAttention = onCall({ region:'us-central1',timeoutSeconds:30,maxInstances:5 },async request=>{
+  try { return await executeAttention(getFirestore(),request.auth,request.data,FieldValue.serverTimestamp()); }
+  catch(error) {
+    const supported=['unauthenticated','permission-denied','not-found','invalid-argument','failed-precondition','aborted','already-exists'];
+    if (supported.includes(error.code)) throw new HttpsError(error.code,error.message);
+    console.error('attention-transition-failed',{ code:error.code || 'unknown' });
+    throw new HttpsError('unavailable','No se pudo confirmar el cambio. Conservá el borrador y reintentá.');
+  }
+});
 
 export const finalizeOperationalUpload = onCall({ region: 'us-central1', timeoutSeconds: 60, maxInstances: 10 }, async request => {
   if (!request.auth || request.auth.token.firebase?.sign_in_provider === 'anonymous') {

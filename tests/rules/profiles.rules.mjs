@@ -9,6 +9,9 @@ import { doc, setDoc, getDoc, getDocs, query, where, collection, updateDoc, dele
 import { ref, uploadBytes, getMetadata, getDownloadURL, getBytes } from 'firebase/storage';
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from 'firebase-admin/app';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
+import { getFirestore as getAdminFirestore,FieldValue } from 'firebase-admin/firestore';
+import { executeAttention } from '../../functions/attentionWorkflow.js';
+import { activeInterventionQueries } from '../../src/services/interventionLiveQueue.js';
 import { revokeDownloadToken } from '../../functions/operationalImages.js';
 
 // Deliberately refuse execution without emulators; never test against live Firebase.
@@ -531,4 +534,67 @@ test('plant dashboard uses complete scoped counts, includes legacy queue records
   await assertSucceeds(service.manageDashboardFault(record,'en proceso','Verificar repuesto')); const saved=(await getDoc(doc(chiefDb,'novedades/dashboard-fault'))).data(); assert.equal(saved.estado,'en proceso'); assert.equal(saved.feedbackJefe,'Verificar repuesto');
   await assert.rejects(service.manageDashboardFault(record,'resuelto',''),/Otro usuario/);
   const mechanic=createService(identity('dashboard-mechanic').firestore()); await assertFails(mechanic.manageDashboardFault({ ...record,estado:'en proceso',feedbackJefe:'Verificar repuesto' },'resuelto',''));
+});
+
+test('attention pilot is gated, atomic, idempotent and rejects client bypass and conflicting handovers', async () => {
+  await approve('attention-chief','jefe_produccion','TEJEDURIA'); await approve('attention-tech','mecanico','TEJEDURIA'); await approve('attention-hil','mecanico','HILANDERIA'); await approve('attention-admin','admin');
+  const server=getAdminFirestore(serverApp),reference=server.doc('intervenciones/attention-one');
+  await reference.set({ sector:'TEJEDURIA',tipoIntervencion:'MECANICO',tipoMaquina:'TELAR',numeroMaquina:35001,estado:'PENDIENTE',asignadoA:null,fechaInicio:null,fechaFin:null });
+  const auth=uid=>({ uid,token:{ firebase:{ sign_in_provider:'google.com' } } });
+  const prepare={ interventionId:'attention-one',operationId:'prepare-one',expectedRevision:0,action:'preparar' };
+  await assert.rejects(executeAttention(server,auth('attention-chief'),prepare,FieldValue.serverTimestamp()),/habilitado/);
+  await server.doc('config/attentionPilot').set({ enabled:true,version:1,userIds:['attention-chief','attention-tech','attention-hil','attention-admin'],sectors:['TEJEDURIA'] });
+  await assert.rejects(executeAttention(server,auth('attention-hil'),prepare,FieldValue.serverTimestamp()),/alcance/);
+  await executeAttention(server,auth('attention-chief'),prepare,FieldValue.serverTimestamp());
+  assert.equal((await executeAttention(server,auth('attention-chief'),prepare,FieldValue.serverTimestamp())).replayed,true);
+  await assert.rejects(executeAttention(server,auth('attention-chief'),{ ...prepare,note:'Distinta' },FieldValue.serverTimestamp()),/reutilizado/);
+  const assignment={ interventionId:'attention-one',operationId:'assignment',expectedRevision:1,action:'asignar',targetUid:'attention-tech',nextAction:'Revisar fuga',note:'Entrega de turno' };
+  const race=await Promise.allSettled([executeAttention(server,auth('attention-chief'),assignment,FieldValue.serverTimestamp()),executeAttention(server,auth('attention-chief'),{ ...assignment,operationId:'assignment-two',note:'Otro relevo' },FieldValue.serverTimestamp())]);
+  assert.equal(race.filter(result=>result.status==='fulfilled').length,1); assert.equal(race.find(result=>result.status==='rejected').reason.code,'aborted');
+  const saved=(await reference.get()).data(); assert.equal(saved.estado,'PENDIENTE'); assert.equal(saved.fechaInicio,null); assert.equal(saved.atencionRevision,2);
+  const techDb=identity('attention-tech').firestore(),chiefDb=identity('attention-chief').firestore();
+  await assertSucceeds(getDocs(collection(chiefDb,'intervenciones/attention-one/eventos_atencion')));
+  await assertFails(getDocs(collection(identity('attention-hil').firestore(),'intervenciones/attention-one/eventos_atencion')));
+  await assertFails(setDoc(doc(chiefDb,'intervenciones/attention-one/eventos_atencion/forged'),{ action:'cerrar' }));
+  await assertFails(updateDoc(doc(techDb,'intervenciones/attention-one'),{ estado:'EN_PROCESO',fechaInicio:serverTimestamp(),fechaAsignacion:serverTimestamp(),asignadoA:'attention-tech',asignadoNombre:'Técnico' }));
+  await assertFails(deleteDoc(doc(identity('attention-admin').firestore(),'intervenciones/attention-one')));
+  await assertFails(setDoc(doc(chiefDb,'intervenciones/forged-managed'),{ sector:'TEJEDURIA',estado:'PENDIENTE',asignadoA:null,fechaInicio:null,fechaFin:null,createdAt:serverTimestamp(),creadoPorUid:'attention-chief',atencionVersion:1 }));
+  await executeAttention(server,auth('attention-tech'),{ interventionId:'attention-one',operationId:'accept',expectedRevision:2,action:'aceptar' },FieldValue.serverTimestamp());
+  assert.equal((await reference.get()).data().atencionEstado,'ACEPTADA');
+  await server.doc('config/attentionPilot').update({ enabled:false });
+  await assert.rejects(executeAttention(server,auth('attention-tech'),{ interventionId:'attention-one',operationId:'start',expectedRevision:3,action:'iniciar' },FieldValue.serverTimestamp()),/habilitado/);
+  assert.equal((await reference.collection('eventos_atencion').get()).size,3);
+});
+
+test('thirty mixed-role emulator sessions confirm attention actions without losing independent tasks', async () => {
+  const server=getAdminFirestore(serverApp),users=Array.from({ length:30 },(_,index)=>`attention-load-${index}`),batch=server.batch();
+  batch.set(server.doc('config/attentionPilot'),{ enabled:true,version:1,userIds:users,sectors:['TEJEDURIA'] });
+  for(let index=0;index<30;index++) {
+    const role=index%3===0 ? 'jefe_produccion':index%3===1 ? 'mecanico':'inspector',uid=users[index];
+    batch.set(server.doc(`usuarios/${uid}`),{ role,sectoresAsignados:['TEJEDURIA'] });
+    batch.set(server.doc(`intervenciones/attention-load-${index}`),{ sector:'TEJEDURIA',tipoIntervencion:role==='inspector' ? 'CALIDAD':'MECANICO',estado:'PENDIENTE',atencionVersion:1,atencionEstado:role==='jefe_produccion' ? 'REPORTADA':'ASIGNADA',atencionRevision:0,asignadoA:role==='jefe_produccion' ? null:uid });
+  }
+  await batch.commit();
+  const results=await Promise.all(users.map(async(uid,index)=>{
+    await assertSucceeds(getDoc(doc(identity(uid).firestore(),`intervenciones/attention-load-${index}`)));
+    const command={ interventionId:`attention-load-${index}`,operationId:`load-op-${index}`,expectedRevision:0,action:index%3===0 ? 'asignar':'aceptar',...(index%3===0 ? { targetUid:users[index+1],nextAction:'Inspeccionar',note:'Asignación de ensayo' }:{}) };
+    return executeAttention(server,{ uid,token:{ firebase:{ sign_in_provider:'google.com' } } },command,FieldValue.serverTimestamp());
+  }));
+  assert.equal(results.length,30); assert.ok(results.every(result=>result.revision===1));
+  for(let index=0;index<30;index++) assert.equal((await server.doc(`intervenciones/attention-load-${index}`).collection('eventos_atencion').get()).size,1);
+});
+
+test('live intervention queries keep old critical validations and exclude historical closures server-side',async()=>{
+  await approve('queue-chief','jefe_produccion','TEJEDURIA');
+  await environment.withSecurityRulesDisabled(async context=>{
+    const db=context.firestore(),old=Timestamp.fromMillis(Date.now()-3*86400000);
+    await setDoc(doc(db,'intervenciones/old-validation'),{ sector:'TEJEDURIA',estado:'COMPLETADO',atencionEstado:'COMPLETADA',fechaFin:old });
+    await setDoc(doc(db,'intervenciones/old-closed'),{ sector:'TEJEDURIA',estado:'COMPLETADO',atencionEstado:'CERRADA',fechaFin:old });
+    await setDoc(doc(db,'intervenciones/recent-closed'),{ sector:'TEJEDURIA',estado:'COMPLETADO',fechaFin:serverTimestamp() });
+    await setDoc(doc(db,'intervenciones/legacy-open'),{ sector:'TEJEDURIA',estado:'PENDIENTE' });
+  });
+  const queries=activeInterventionQueries(identity('queue-chief').firestore(),['TEJEDURIA']);
+  const pages=await Promise.all(queries.map(query=>assertSucceeds(getDocs(query))));
+  assert.deepEqual(pages[0].docs.map(doc=>doc.id).sort(),['legacy-open','old-validation']);
+  assert.deepEqual(pages[1].docs.map(doc=>doc.id),['recent-closed']);
 });

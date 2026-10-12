@@ -223,10 +223,12 @@ service cloud.firestore {
     match /intervenciones/{docId} {
       allow read: if scoped(resource.data);
       allow create: if validCreation() && canDispatch()
+        && !request.resource.data.keys().hasAny(['atencionVersion', 'atencionEstado', 'atencionRevision', 'atencionUpdatedAt', 'reporteOrigenId'])
         && request.resource.data.estado == 'PENDIENTE'
         && request.resource.data.asignadoA == null
         && request.resource.data.fechaInicio == null && request.resource.data.fechaFin == null;
       allow update: if scoped(resource.data) && stableIdentity() && canExecute(resource.data)
+        && !resource.data.keys().hasAny(['atencionVersion'])
         && (
           (resource.data.estado == 'PENDIENTE'
             && request.resource.data.estado == 'EN_PROCESO' && request.resource.data.asignadoA == uid()
@@ -245,7 +247,11 @@ service cloud.firestore {
                 && request.resource.data.fechaFin == request.time
                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'fechaFin']))))
         );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && !resource.data.keys().hasAny(['atencionVersion']);
+      match /eventos_atencion/{eventId} {
+        allow read: if scoped(get(/databases/$(database)/documents/intervenciones/$(docId)).data);
+        allow write: if false;
+      }
     }
 
     match /patrullas/{docId} {

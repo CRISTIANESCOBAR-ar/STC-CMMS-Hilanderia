@@ -52,6 +52,12 @@ No prometer ausencia absoluta de caídas: preparar prevención, detección y rec
 
 ## Registro de entregas
 
+### A1 — Preparación del circuito de atención para el piloto
+
+Guía y matriz actualizada: [PILOTO_ATENCION.md](PILOTO_ATENCION.md). Preparados servidor transaccional con historial, habilitación cerrada por lista de usuarios/sectores, especialidades complementarias, bandejas y ensayo con datos ficticios. Incorporación explícita de tareas pendientes; sin migración de perfiles ni registros actuales.
+
+Consultas de intervenciones dejan de descargar todo el histórico; conservan validaciones críticas antiguas. Preparadas auditoría de solo lectura y generación de plan de respaldo/restauración. Treinta sesiones de roles mixtos verificadas en emuladores; no equivalen a rendimiento en planta. R3/R4/E1 avanzan parcialmente: el flujo anterior y otros módulos mantienen pendientes propios. O1/G1 requieren restauración, monitoreo remoto, cuentas reales y aprobación de campo. El piloto real permanece deshabilitado; reglas y Function nuevas se despliegan como bloque separado al activarlo.
+
 Consultar hashes con `git log --oneline` en la rama. Procedimiento:
 [DESPLIEGUE_REVERSIBLE.md](DESPLIEGUE_REVERSIBLE.md).
 

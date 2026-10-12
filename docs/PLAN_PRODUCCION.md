@@ -52,6 +52,15 @@ No prometer ausencia absoluta de caídas: preparar prevención, detección y rec
 
 ## Registro de entregas
 
+### A2 — Reporte directo, toma móvil y avisos de turno
+
+- Trabajo automático por reporte nuevo de participantes del piloto, con datos/foto y vínculo recíproco, sin delegación obligatoria. Identificador reservado y transacción evitan duplicados. Mención sin reserva; toma libre para técnico habilitado, inicio separado, prioridad y asignación por coordinación, cierre sincronizado con el reporte.
+- Avisos del equipo y Mis trabajos, toma visible en tarjetas y acciones prioritarias en detalle móvil. Ensayo ficticio reproduce telar 14 y otro técnico puede tomar el aviso mencionado. Vista previa bloquea escrituras del nuevo circuito y no hereda especialidades del administrador.
+- FCM preparado y controlado por `pushEnabled`, dispositivos y declaración de turno con vencimiento. Un solo listener foreground global y sin doble notificación en background. Navegadores sin soporte push conservan la aplicación. Retiro de registro al cerrar sesión con espera acotada. Sin envíos reales durante pruebas.
+- Prioridades de coordinación incluidas en filas/consultas del panel; métricas cuentan registros de las dos fuentes, no incidentes únicos. Dos índices agregados sin borrar existentes, y 28 consultas reales verificadas en solo lectura. Auditoría agrega reportes elegibles sin trabajo; respaldo, alertas remotas y pruebas físicas continúan pendientes.
+- Detalle consulta por ID y alcance para evitar devolver registros de otro sector desde caché. Reglas bloquean cliente en vínculos, estados derivados, identificadores reservados y fechas futuras de declaración de turno.
+- Guía actualizada en PILOTO_ATENCION.md. Hosting de ensayo se publica por separado; Functions/reglas nuevas y activación quedan pendientes de validación del flujo. Sin migración ni cambios de registros operativos de producción.
+
 ### V18 — Navegación agrupada por uso habitual
 
 - Sidebar de administrador reduce 18 vistas a cinco accesos directos y tres grupos: Producción, Consultas y Administración. Auxiliar mantiene Puntos por turno, Operarios y Seguimiento de patrulla directos; supervisores priorizan también Eficiencia. Los permisos individuales y de rol existentes filtran cada entrada antes de agrupar; no se modifican privilegios ni registros.

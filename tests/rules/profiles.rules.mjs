@@ -507,3 +507,28 @@ test('patrol sheet transactions save round six and evaluation atomically with in
   const readonly=makeService(identity('sheet-aux').firestore()); await assertFails(readonly.savePatrolSheet('sheet-record','ronda_6',saved.rondas.ronda_6,{},false,{},true));
   await assertSucceeds(service.savePatrolSheet('sheet-record','ronda_1',saved.rondas.ronda_1,{},false,{},true)); assert.equal((await getDoc(reference)).data().rondas.ronda_7.completada,false);
 });
+
+test('plant dashboard uses complete scoped counts, includes legacy queue records and enforces chief feedback transactions', async () => {
+  await approve('dashboard-chief','jefe_sector','TEJEDURIA'); await approve('dashboard-mechanic','mecanico','TEJEDURIA');
+  await environment.withSecurityRulesDisabled(async context=>{
+    const database=context.firestore();
+    await setDoc(doc(database,'novedades/dashboard-fault'),{ sector:'TEJEDURIA',estado:'pendiente',critico:true,feedbackJefe:'',createdAt:serverTimestamp() });
+    await setDoc(doc(database,'novedades/dashboard-legacy'),{ sector:'TEJEDURIA',estado:'en proceso',critico:false,feedbackJefe:'' });
+    await setDoc(doc(database,'novedades/dashboard-other'),{ sector:'HILANDERIA',estado:'pendiente',critico:true,createdAt:serverTimestamp() });
+    await setDoc(doc(database,'intervenciones/dashboard-request'),{ sector:'TEJEDURIA',estado:'PENDIENTE',critico:true,estadoMaquina:'PARADA',asignadoA:null,createdAt:serverTimestamp() });
+    await setDoc(doc(database,'intervenciones/dashboard-process'),{ sector:'TEJEDURIA',estado:'EN_PROCESO',critico:false,estadoMaquina:'CON_PROBLEMA',asignadoA:'technician',createdAt:serverTimestamp() });
+  });
+  const firestore=await import('firebase/firestore');
+  const { plantInstant,addDays }=await import('../../src/utils/plantTime.js');
+  const raw=(await readFile(new URL('../../src/services/dashboardService.js',import.meta.url),'utf8')).replace(/^import.*;\r?\n/gm,'').replace(/export (async function|function|const)/g,'$1')+'\nreturn { dashboardQueueQuery,dashboardCounts,manageDashboardFault,DASHBOARD_STREAMS };';
+  const profile={ value:{ role:'jefe_sector',sectoresAsignados:['TEJEDURIA'] } };
+  const createService=database=>new Function('collection','query','where','or','and','orderBy','documentId','limit','startAfter','onSnapshot','getDocs','getCountFromServer','doc','runTransaction','serverTimestamp','db','userProfile','canAccessViewForUser','getSectorScope','plantInstant','addDays',raw)(firestore.collection,firestore.query,firestore.where,firestore.or,firestore.and,firestore.orderBy,firestore.documentId,firestore.limit,firestore.startAfter,firestore.onSnapshot,firestore.getDocs,firestore.getCountFromServer,firestore.doc,firestore.runTransaction,firestore.serverTimestamp,database,profile,role=>['jefe_sector','admin'].includes(role),profile=>profile.role==='admin' ? null:profile.sectoresAsignados,plantInstant,addDays);
+  const chiefDb=identity('dashboard-chief').firestore(),service=createService(chiefDb);
+  const counts=await assertSucceeds(service.dashboardCounts(['TEJEDURIA'])); assert.equal(counts.faultPending,1); assert.equal(counts.faultProcess,1); assert.equal(counts.requestPending,1); assert.equal(counts.requestProcess,1); assert.equal(counts.priority,2); assert.equal(counts.unassigned,1);
+  const legacyQuery=service.dashboardQueueQuery(['TEJEDURIA'],service.DASHBOARD_STREAMS.find(stream=>stream.key==='fault-all'),50); const legacy=await assertSucceeds(getDocs(legacyQuery)); assert.ok(legacy.docs.some(doc=>doc.id==='dashboard-legacy'));
+  await assertFails(getDocs(service.dashboardQueueQuery(null,service.DASHBOARD_STREAMS[0],50)));
+  const record={ id:'dashboard-fault',sector:'TEJEDURIA',estado:'pendiente',feedbackJefe:'' };
+  await assertSucceeds(service.manageDashboardFault(record,'en proceso','Verificar repuesto')); const saved=(await getDoc(doc(chiefDb,'novedades/dashboard-fault'))).data(); assert.equal(saved.estado,'en proceso'); assert.equal(saved.feedbackJefe,'Verificar repuesto');
+  await assert.rejects(service.manageDashboardFault(record,'resuelto',''),/Otro usuario/);
+  const mechanic=createService(identity('dashboard-mechanic').firestore()); await assertFails(mechanic.manageDashboardFault({ ...record,estado:'en proceso',feedbackJefe:'Verificar repuesto' },'resuelto',''));
+});

@@ -429,6 +429,16 @@ pruebas del servicio en entorno piloto.
 - Validación: 78 pruebas unitarias/componentes y 55 en emuladores (133 total), más verificación específica tras ajuste de confirmaciones y compilación. Orden de ruta, decimal/vacío/cero, borrador fallido, parcial/completada, conflictos, evaluación y rechazo de escritura de auxiliares. No se modificaron datos de producción ni reglas. Pendiente aprobación visual y ensayo con inspectores en planta.
 - Reversión mediante git revert del commit de este bloque y despliegue de Hosting main. Los documentos guardados mantienen formato compatible con los componentes móviles existentes.
 
+### V17 — Panel operativo de planta (/jefe)
+
+- Tabla de atención priorizada con fallas e intervenciones como registros distintos, filtros por origen/categoría, búsqueda, responsables y antigüedad. Layout de ancho y alto disponibles, encabezado fijo y controles compactos.
+- Totales completos por alcance autorizado, independientes del filtro local y de las filas cargadas. Siete consultas en vivo acotadas inicialmente a 50 registros cada una; incluyen registros antiguos sin fecha y permiten ampliar la carga. Errores, datos locales pendientes de confirmación y reintentos explícitos.
+- Detalle de falla en modal con instrucciones y gestión transaccional: evita sobrescribir cambios concurrentes, conserva borrador ante fallo y bloquea envíos repetidos. Intervenciones reutilizan su modal de detalle. Permisos y sector se verifican también en las pruebas de reglas.
+- Paros/anudados del día operativo seleccionado, con detalle y distinción entre registros sin finalizar y disponibilidad física de máquinas. Tendencias de 7/30 días bajo demanda, reincidencias y mediana del tiempo entre creación y cierre con cantidad de muestras; no se presenta como tiempo efectivo de reparación.
+- Resúmenes IA y habilitación de notificaciones solo por acción del usuario. Cambio de sector/sesión descarta respuestas antiguas. Suscripciones y temporizadores se liberan al salir.
+- Índices necesarios agregados sin eliminar los existentes. Sin migraciones, cambios de reglas ni escrituras de registros de producción durante las pruebas. Verificadas 25 consultas reales de solo lectura, todos los índices listos; 81 pruebas de aplicación y 56 de permisos en emuladores, más compilación de producción.
+- Pendiente validación visual en planta y ensayo de concurrencia con 10–30 usuarios antes de considerar cumplida la preparación completa de producción. Reversión mediante git revert del commit de este bloque y despliegue de Hosting main; los índices adicionales pueden permanecer.
+
 ### V16 — Coherencia visual del explorador de catálogo (/catalogo)
 
 - Se conserva navegación Tipo → Modelo y agrupación sección/subgrupo, con Catálogo/Motivos/Máquinas. Alto relativo al área de trabajo, no pantalla completa anidada. Desde 768 px mantiene el marco desktop; en PC de hasta 1100 px Tipo/Modelo pasan a selectores superiores, liberando el panel de contenido. En pantallas amplias conserva columnas laterales.

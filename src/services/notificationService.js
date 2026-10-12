@@ -70,7 +70,7 @@ export const notificationService = {
   escucharMensajesEnPrimerPlano() {
     if (!messaging) return;
     
-    onMessage(messaging, (payload) => {
+    return onMessage(messaging, (payload) => {
       console.log('Mensaje recibido en primer plano:', payload);
       // Aquí se podría mostrar un toast o alerta personalizada en la UI
     });

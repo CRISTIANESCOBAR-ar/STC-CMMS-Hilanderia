@@ -1,681 +1,125 @@
 <script setup>
-import { showOperationalImage } from '../services/operationalImageService';
-import { sectorConstraints } from '../services/accessScope';
-
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref,computed,watch,onMounted,onUnmounted,nextTick } from 'vue';
+import { useRouter,onBeforeRouteLeave } from 'vue-router';
+import { userProfile,userRole,sessionUser } from '../services/authService';
+import { auth } from '../firebase/config';
+import { getSectorScope } from '../utils/sectorScope';
+import { canAccessViewForUser } from '../services/profileService';
+import { DASHBOARD_STREAMS,subscribeDashboard,dashboardCounts,manageDashboardFault,loadDashboardPeriod } from '../services/dashboardService';
+import { dashboardItem,dashboardFilter,dashboardTime,dashboardTrends } from '../utils/dashboard';
+import { suscribirParos } from '../services/paroTelarService';
 import { aiService } from '../services/aiService';
-import { formatSummary as formatMarkdown } from '../utils/formatSummary';
 import { notificationService } from '../services/notificationService';
-import { userProfile, userRole, previewSector } from '../services/authService';
-import { db, auth } from '../firebase/config';
-import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { Clock, AlertTriangle, CheckCircle, Image as ImageIcon, CheckSquare, Wrench, Zap, Filter, Sparkles, Copy, ChevronUp, ChevronDown, TrendingUp, RefreshCw, Calendar } from 'lucide-vue-next';
+import { showOperationalImage } from '../services/operationalImageService';
+import { plantDate,shiftSlot,addDays,PLANT_TIME_ZONE } from '../utils/plantTime';
+import { formatSummary } from '../utils/formatSummary';
+import { vTippy } from '../utils/tooltipDirective';
+import PlantDatePicker from './PlantDatePicker.vue';
+import OperationalImage from './OperationalImage.vue';
+import IntervencionDetalle from './IntervencionDetalle.vue';
+import { RefreshCw,Eye,X,Save,Sparkles,Copy,Bell,ArrowUpRight,AlertTriangle } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
-import { DEFAULT_SECTOR, SECTOR_OPTIONS, normalizeSectorValue, sanitizeSectorList, isJefeRole, ROLE_SECTOR_DEFAULT, TURNOS } from '../constants/organization';
-import { Building2 } from 'lucide-vue-next';
-
-// Hora del build incrustada por Vite (definida en `vite.config.js` como __BUILD_TIME__)
-const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
-
-const novedades = ref([]);
-const filtroTipo = ref('Todos'); // 'Todos', 'Mecánico', 'Eléctrico'
-const filtroSector = ref('Todos');
-let unsubscribe = null;
-const modalAprobacion = ref(false);
-const novedadActual = ref(null);
-const feedback = ref('');
-const isLoading = ref(true);
-const errorCarga = ref(false);
-
-// Usa userRole (cambia en Vista Previa) en lugar de perfil.role
-const sectoresVisibles = computed(() => {
-  const perfil = userProfile.value;
-  if (!perfil) return [DEFAULT_SECTOR];
-  const activeRole = userRole.value || perfil.role;
-
-  // Solo admin activo (no en preview) tiene acceso global
-  if (activeRole === 'admin' && perfil.alcance === 'global') return null;
-
-  // En Vista Previa como otro rol, usar sector seleccionado en la barra
-  if (perfil.role === 'admin' && activeRole !== 'admin') {
-    return previewSector.value ? [previewSector.value] : SECTOR_OPTIONS;
-  }
-
-  if (isJefeRole(activeRole)) {
-    const sectoresJefe = perfil.jefeDeSectores?.length ? perfil.jefeDeSectores : perfil.sectoresAsignados;
-    return sanitizeSectorList(sectoresJefe, perfil.sectorDefault);
-  }
-
-  return sanitizeSectorList(perfil.sectoresAsignados, perfil.sectorDefault);
+import 'tippy.js/dist/tippy.css';
+import 'tippy.js/themes/light-border.css';
+const router=useRouter(),sector=ref(''),tab=ref('attention'),quick=ref(''),kind=ref(''),category=ref(''),search=ref(''),page=ref(1),windowSize=ref(50);
+const streams=ref({}),counts=ref(null),countError=ref(''),scopeError=ref(''),countLoading=ref(false),countUpdated=ref(null),clock=ref(Date.now());
+const allowed=computed(()=>{ try { return getSectorScope(userProfile.value) || ['HILANDERIA','TEJEDURIA']; } catch { return []; } });
+const sectors=computed(()=>{ if(sector.value) return allowed.value.includes(sector.value) ? [sector.value]:[]; try { return getSectorScope(userProfile.value)===null ? null:allowed.value; } catch { return []; } });
+const capturedScope=()=>sectors.value===null ? null:[...sectors.value];
+const scopeLabel=computed(()=>sector.value || `Sectores autorizados: ${allowed.value.join(', ')}`);
+const cachedSources=computed(()=>Object.values(streams.value).some(source=>source.waitingServer));
+const sourceErrors=computed(()=>Object.values(streams.value).filter(source=>source.error).map(source=>source.error));
+const loading=computed(()=>Object.values(streams.value).some(source=>source.loading));
+const queue=computed(()=>{
+  const map=new Map(); for(const definition of DASHBOARD_STREAMS) for(const record of streams.value[definition.key]?.records || []) { const item=dashboardItem(record,definition.kind),existing=map.get(item.key); if(!existing || (dashboardTime(item.updatedAt) || item.created || 0)>=(dashboardTime(existing.updatedAt) || existing.created || 0)) map.set(item.key,item); }
+  return [...map.values()];
 });
-
-// Opciones de sector para el dropdown
-const opcionesSectorFiltro = computed(() => {
-  if (!sectoresVisibles.value) return SECTOR_OPTIONS;
-  return sectoresVisibles.value;
-});
-
-const mostrarFiltroSector = computed(() => {
-  return opcionesSectorFiltro.value.length > 1;
-});
-
-const iaSummary = ref('');
-const iaSummaryRaw = ref('');
-const isIaLoading = ref(true);
-const iaError = ref(false);
-const iaFromCache = ref(false);
-const iaCollapsed = ref(false);
-
-// --- Resumen Ejecutivo Semanal ---
-const execSummary = ref('');
-const execSummaryRaw = ref('');
-const isExecLoading = ref(false);
-const execError = ref(false);
-const execFromCache = ref(false);
-const execCollapsed = ref(false);
-const execPeriodo = ref(7);
-const execModo = ref('preset');  // 'preset' | 'custom'
-const execFechaDesde = ref('');
-const execFechaHasta = ref('');
-const execTurno = ref('');  // '' = todos, 'A', 'B', 'C'
-
-let authUnsubscribe = null;
-let timeoutId = null;
-
-const cargarDatos = async () => {
-  isLoading.value = true;
-  errorCarga.value = false;
-
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  if (timeoutId) {
-    clearTimeout(timeoutId);
-  }
-  // No need for unsubscribe here as getDocs is a one-time fetch
-
-  timeoutId = setTimeout(() => {
-    if (isLoading.value && novedades.value.length === 0) {
-      errorCarga.value = true;
-      isLoading.value = false;
-    }
-  }, 10000);
-
+const visible=computed(()=>dashboardFilter(queue.value,{ kind:kind.value,category:category.value,quick:quick.value,search:search.value }));
+const pageCount=computed(()=>Math.max(1,Math.ceil(visible.value.length/50)));
+const pageItems=computed(()=>visible.value.slice((page.value-1)*50,page.value*50));
+const moreAvailable=computed(()=>Object.values(streams.value).some(source=>source.hasMore));
+const totalActive=computed(()=>counts.value ? counts.value.faultPending+counts.value.faultProcess+counts.value.requestPending+counts.value.requestProcess:null);
+const metrics=computed(()=>[{ key:'critical',label:'Atención prioritaria',value:counts.value?.priority,tip:'Fallas/solicitudes marcadas críticas y solicitudes con máquina informada parada. Cuenta registros de ambos orígenes.' },{ key:'pending',label:'Fallas pendientes',value:counts.value?.faultPending,tip:'Todos los reportes pendientes del sector, incluidos los anteriores al turno.' },{ key:'unassigned',label:'Solicitudes sin asignar',value:counts.value?.unassigned,tip:'Solicitudes abiertas sin asignación registrada.' },{ key:'process',label:'Intervenciones en proceso',value:counts.value?.requestProcess,tip:'Solicitudes en proceso del sector, tengan o no responsable registrado.' }]);
+const countJobs=new Map(),countDeadlines=new Set();
+const sessionUid=()=>sessionUser?.value?.uid || auth.currentUser?.uid || null;
+function countedScope(captured,force=false) { const key=JSON.stringify([sessionUid(),captured]); let job=countJobs.get(key); if(!job || force) { job=dashboardCounts(captured).finally(()=>{ if(countJobs.get(key)===job) countJobs.delete(key); }); countJobs.set(key,job); } return job; }
+let revision=0,stops=[],timers=[],countTimer,poll,notificationStop,previousFocus,countRequest=0;
+function message(error) { return error?.code==='failed-precondition' ? 'Los índices de consulta se están preparando. Reintentá en unos minutos.':error?.message || 'No se pudo consultar esta fuente.'; }
+function clearStreams() { stops.forEach(stop=>stop()); stops=[]; timers.forEach(timer=>clearTimeout(timer)); timers=[]; clearTimeout(countTimer); }
+async function refreshCounts(token=revision,force=false) {
+  if(sectors.value!==null && !sectors.value.length) return;
+  const request=++countRequest; countLoading.value=true; let deadline;
   try {
-    const q = query(
-      collection(db, 'novedades'), ...sectorConstraints(),
-      where('estado', 'in', ['pendiente', 'en proceso'])
-    );
-    const snapshot = await getDocs(q);
-    clearTimeout(timeoutId);
-
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    // Ordenar por fecha descendente
-    const ordenadas = data.sort((a, b) => {
-      const getTime = (val) => {
-        if (!val) return 0;
-        if (typeof val.toMillis === 'function') return val.toMillis();
-        return new Date(val).getTime() || 0;
-      };
-      return getTime(b.createdAt) - getTime(a.createdAt);
-    });
-
-    if (sectoresVisibles.value === null) {
-      novedades.value = ordenadas;
-    } else {
-      novedades.value = ordenadas.filter((n) => sectoresVisibles.value.includes(normalizeSectorValue(n.sector || DEFAULT_SECTOR)));
-    }
-
-    isLoading.value = false;
-    errorCarga.value = false;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    console.error("Error cargando novedades:", err);
-    if (novedades.value.length === 0) {
-      errorCarga.value = true;
-    }
-    isLoading.value = false;
+    const result=await Promise.race([countedScope(capturedScope(),force),new Promise((resolve,reject)=>{ deadline=setTimeout(()=>reject(new Error('No se pudieron actualizar los indicadores a tiempo. Reintentá cuando haya conexión.')),15000); countDeadlines.add(deadline); })]);
+    if(token===revision && request===countRequest) { counts.value=result; countError.value=''; countUpdated.value=Date.now(); }
+  } catch(failure) { if(token===revision && request===countRequest) countError.value=message(failure); }
+  finally { clearTimeout(deadline); countDeadlines.delete(deadline); if(token===revision && request===countRequest) countLoading.value=false; }
+}
+function scheduleCounts(token) { clearTimeout(countTimer); countTimer=setTimeout(()=>refreshCounts(token),1200); }
+function subscribe() {
+  clearStreams(); const token=++revision; streams.value={}; counts.value=null; countError.value=''; countUpdated.value=null; scopeError.value=''; page.value=1;
+  if(sectors.value!==null && !sectors.value.length) { scopeError.value='No hay sectores autorizados para consultar.'; return; }
+  for(const definition of DASHBOARD_STREAMS) {
+    streams.value[definition.key]={ records:[],loading:true,error:'',hasMore:false };
+    const timeout=setTimeout(()=>{ if(token===revision && (streams.value[definition.key]?.loading || streams.value[definition.key]?.waitingServer)) streams.value[definition.key]={ ...streams.value[definition.key],loading:false,error:`${definition.kind==='fault' ? 'Fallas':'Intervenciones'}: la carga demoró demasiado.` }; },15000); timers.push(timeout);
+    try { const stop=subscribeDashboard(capturedScope(),definition,windowSize.value,result=>{ if(token!==revision) return; if(!result.fromCache) clearTimeout(timeout); streams.value[definition.key]={ ...result,loading:false,error:'',waitingServer:!!result.fromCache }; scheduleCounts(token); },failure=>{ if(token!==revision) return; clearTimeout(timeout); streams.value[definition.key]={ records:[],loading:false,error:message(failure),hasMore:false }; }); stops.push(stop); }
+    catch(failure) { clearTimeout(timeout); streams.value[definition.key]={ records:[],loading:false,error:message(failure),hasMore:false }; }
   }
-};
-
-onMounted(() => {
-  // Cargamos los datos directamente. Al estar protegida por el router y tener el delay 
-  // en el router guard, el usuario y su rol ya deberían estar listos.
-  cargarDatos();
-  cargarAnalisisIA();
-  cargarResumenEjecutivo();
-
-  // Registrar servicios de notificación si hay usuario
-  if (auth.currentUser) {
-    notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid)
-      .then(() => notificationService.escucharMensajesEnPrimerPlano())
-      .catch(err => console.warn('FCM no disponible:', err));
-  } else {
-    // Si el usuario aún no está listo (race conditions), nos suscribimos al estado de auth
-    authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        notificationService.solicitarPermisosYRegistrarToken(user.uid)
-          .then(() => notificationService.escucharMensajesEnPrimerPlano())
-          .catch(err => console.warn('FCM no disponible:', err));
-        // Una vez registrado, nos desuscribimos
-        if (authUnsubscribe) {
-          authUnsubscribe();
-          authUnsubscribe = null;
-        }
-      }
-    });
-  }
-});
-
-onUnmounted(() => {
-  // Limpieza completa de recursos
-  if (unsubscribe && typeof unsubscribe === 'function') {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  if (authUnsubscribe && typeof authUnsubscribe === 'function') {
-    authUnsubscribe();
-    authUnsubscribe = null;
-  }
-  if (timeoutId) {
-    clearTimeout(timeoutId);
-    timeoutId = null;
-  }
-});
-
-const getCardColorClass = (novedad) => {
-  if (novedad.critico && novedad.estado === 'pendiente') {
-    return 'bg-red-500 text-white border-red-600 shadow-red-200';
-  } else if (novedad.estado === 'en proceso') {
-    return 'bg-yellow-400 text-yellow-900 border-yellow-500 shadow-yellow-200';
-  } else if (novedad.estado === 'resuelto') {
-    return 'bg-green-200 text-green-900 border-green-300 shadow-green-100'; // Though they shouldn't appear by default due to query, just in case
-  } else {
-    // Pendiente NO critico
-    return 'bg-white text-gray-800 border-gray-200 shadow-gray-100';
-  }
-};
-
-const formatDate = (timestamp) => {
-  if (!timestamp) return 'Justo ahora...';
-  const date = timestamp.toDate();
-  return date.toLocaleString();
-};
-
-const abrirModal = (novedad) => {
-  novedadActual.value = novedad;
-  feedback.value = '';
-  modalAprobacion.value = true;
-};
-
-const cerrarModal = () => {
-  modalAprobacion.value = false;
-  novedadActual.value = null;
-};
-
-const aprobarNovedad = async (estado) => {
-  if (!novedadActual.value) return;
-  try {
-    await mantenimientoService.aprobarNovedad(novedadActual.value.id, estado, feedback.value);
-    cerrarModal();
-    Swal.fire({ icon: 'success', title: '¡Estado actualizado!', timer: 1800, showConfirmButton: false, toast: true, position: 'top-end' });
-  } catch (error) {
-    Swal.fire({ icon: 'error', title: 'Error al actualizar', text: 'No se pudo cambiar el estado de la novedad.' });
-  }
-};
-
-const cargarAnalisisIA = async (forceRegenerate = false) => {
-  isIaLoading.value = true;
-  iaError.value = false;
-  try {
-    const response = await aiService.generarResumenDiario(forceRegenerate, null, sectoresVisibles.value);
-    iaSummaryRaw.value = response.text;
-    iaSummary.value = formatMarkdown(response.text);
-    iaFromCache.value = response.fromCache;
-  } catch (error) {
-    console.error("No se pudo cargar análisis de IA", error);
-    iaError.value = true;
-  } finally {
-    isIaLoading.value = false;
-  }
-};
-
-const cargarResumenEjecutivo = async (forceRegenerate = false) => {
-  isExecLoading.value = true;
-  execError.value = false;
-  try {
-    const opts = {};
-    if (execModo.value === 'custom' && execFechaDesde.value && execFechaHasta.value) {
-      opts.fechaDesde = execFechaDesde.value;
-      opts.fechaHasta = execFechaHasta.value;
-    }
-    if (execTurno.value) opts.turno = execTurno.value;
-    const response = await aiService.generarResumenEjecutivo(forceRegenerate, execPeriodo.value, sectoresVisibles.value, opts);
-    execSummaryRaw.value = response.text;
-    execSummary.value = formatMarkdown(response.text);
-    execFromCache.value = response.fromCache;
-  } catch (error) {
-    console.error("No se pudo cargar resumen ejecutivo", error);
-    execError.value = true;
-  } finally {
-    isExecLoading.value = false;
-  }
-};
-
-const copiarWhatsAppExec = () => {
-  if (!execSummaryRaw.value) return;
-  navigator.clipboard.writeText(execSummaryRaw.value).then(() => {
-    Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'El informe semanal está listo para pegar en WhatsApp.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
-  }).catch(err => {
-    console.error('Error copiando:', err);
-    Swal.fire({ icon: 'error', title: 'Oops...', text: 'No se pudo copiar al portapapeles.' });
-  });
-};
-
-const copiarWhatsApp = () => {
-  if (!iaSummaryRaw.value) return;
-  navigator.clipboard.writeText(iaSummaryRaw.value).then(() => {
-    Swal.fire({ icon: 'success', title: '¡Copiado!', text: 'El reporte está listo para pegar en WhatsApp.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
-  }).catch(err => {
-    console.error('Error copiando:', err);
-    Swal.fire({ icon: 'error', title: 'Oops...', text: 'No se pudo copiar al portapapeles.' });
-  });
-};
-
-// Novedades filtradas por sector primero, luego por tipo
-const novedadesPorSector = computed(() => {
-  if (filtroSector.value === 'Todos') return novedades.value;
-  return novedades.value.filter(n => normalizeSectorValue(n.sector || DEFAULT_SECTOR) === filtroSector.value);
-});
-
-const novedadesFiltradas = computed(() => {
-  const base = novedadesPorSector.value;
-  if (filtroTipo.value === 'Todos') return base;
-  return base.filter(n => (n.tipoProblema || 'Mecánico') === filtroTipo.value);
-});
-
-const mecanicasCount = computed(() => novedadesPorSector.value.filter(n => (n.tipoProblema || 'Mecánico') === 'Mecánico').length);
-const electricasCount = computed(() => novedadesPorSector.value.filter(n => n.tipoProblema === 'Eléctrico').length);
+  refreshCounts(token,true);
+}
+function pickMetric(key) { tab.value='attention'; quick.value=quick.value===key ? '':key; kind.value=''; category.value=''; search.value=''; page.value=1; }
+function more() { if(loading.value) return; const next=page.value+1; windowSize.value+=50; subscribe(); page.value=next; }
+function age(time) { if(time==null) return 'Sin fecha'; const minutes=Math.floor((clock.value-time)/60000); if(minutes<0) return 'Fecha futura'; if(minutes<60) return `${minutes} min`; if(minutes<1440) return `${Math.floor(minutes/60)} h ${minutes%60} min`; return `${Math.floor(minutes/1440)} d ${Math.floor(minutes%1440/60)} h`; }
+function date(value) { const time=dashboardTime(value); return time==null ? 'Sin fecha':new Intl.DateTimeFormat('es-AR',{ day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:PLANT_TIME_ZONE }).format(time); }
+watch([kind,category,quick,search],()=>{ page.value=1; }); watch([pageCount,loading],([count,busy])=>{ if(!busy && page.value>count) page.value=count; });
+const stopDate=ref(shiftSlot().fecha),stopRecords=ref([]),stopLoading=ref(false),stopError=ref(''); let stopSubscription,stopVersion=0,stopTimeout;
+const canReadStops=computed(()=>sectors.value===null || sectors.value.includes('TEJEDURIA'));
+const openStops=computed(()=>stopRecords.value.filter(record=>!record.horaFinAnudado));
+function loadStops() { stopSubscription?.(); clearTimeout(stopTimeout); const token=++stopVersion; stopRecords.value=[]; stopError.value=''; stopLoading.value=canReadStops.value; if(!canReadStops.value) return;
+  stopTimeout=setTimeout(()=>{ if(token===stopVersion && stopLoading.value) { stopLoading.value=false; stopError.value='La carga de paros demoró demasiado. Reintentá.'; } },15000);
+  try { stopSubscription=suscribirParos(stopDate.value,records=>{ if(token!==stopVersion) return; clearTimeout(stopTimeout); stopRecords.value=records; stopLoading.value=false; stopError.value=''; },failure=>{ if(token!==stopVersion) return; clearTimeout(stopTimeout); stopLoading.value=false; stopError.value=message(failure); }); } catch(failure) { stopError.value=message(failure); stopLoading.value=false; }
+}
+watch([canReadStops,stopDate],loadStops,{ immediate:true });
+const modalType=ref(''),selected=ref(null),requestId=ref(null),modal=ref(null),feedback=ref(''),initialFeedback=ref(''),saving=ref(false),detailError=ref('');
+const feedbackDirty=computed(()=>modalType.value==='fault' && feedback.value!==initialFeedback.value);
+const canManage=computed(()=>canAccessViewForUser(userRole.value,'jefe',userProfile.value?.vistasPersonalizadas));
+const hasModal=computed(()=>!!modalType.value || !!requestId.value);
+function open(item) { previousFocus=globalThis.document?.activeElement; if(item.kind==='intervention') { requestId.value=item.id; return; } selected.value=item; feedback.value=item.feedbackJefe || ''; initialFeedback.value=feedback.value; detailError.value=''; modalType.value='fault'; focusModal(); }
+function openStop(item) { previousFocus=globalThis.document?.activeElement; selected.value=item; modalType.value='stop'; focusModal(); }
+function focusModal() { nextTick(()=>modal.value?.focus?.()); }
+async function closeModal(force=false) { if(saving.value && force!==true) return false; if(feedbackDirty.value && !(await Swal.fire({ title:'¿Descartar instrucciones?',text:'El texto todavía no se guardó.',icon:'warning',showCancelButton:true,confirmButtonText:'Descartar',cancelButtonText:'Seguir editando' })).isConfirmed) return false; aiVersion++; aiLoading.value=false; modalType.value=''; selected.value=null; detailError.value=''; nextTick(()=>previousFocus?.isConnected && previousFocus.focus()); return true; }
+function closeRequest() { requestId.value=null; nextTick(()=>previousFocus?.isConnected && previousFocus.focus()); }
+async function manage(state) { if(saving.value || !selected.value || !canManage.value) return; const target=selected.value,text=feedback.value,owner=sessionUid(); saving.value=true; detailError.value=''; try { await manageDashboardFault(target,state,text); if(sessionUid()!==owner) return; for(const [key,source] of Object.entries(streams.value)) if(key.startsWith('fault')) source.records=state==='resuelto' ? source.records.filter(item=>item.id!==target.id) : source.records.map(item=>item.id===target.id ? { ...item,estado:state,feedbackJefe:text }:item); initialFeedback.value=text; await closeModal(true); refreshCounts(revision,true); } catch(failure) { detailError.value=message(failure); } finally { saving.value=false; } }
+const trendDays=ref(7),trends=ref(null),trendLoading=ref(false),trendError=ref(''); let trendVersion=0;
+async function loadTrends() { if(trendLoading.value) return; const token=++trendVersion,from=addDays(plantDate(),1-Number(trendDays.value)),to=plantDate(),captured=capturedScope(); trendLoading.value=true; trendError.value=''; trends.value=null; try { const guard=()=>{ if(token!==trendVersion) throw new Error('Cambió el sector o período.'); }; const [faults,requests]=await Promise.all([loadDashboardPeriod(captured,'fault',from,to,guard),loadDashboardPeriod(captured,'intervention',from,to,guard)]); guard(); trends.value=dashboardTrends(faults,requests,from,to); } catch(failure) { if(token===trendVersion) trendError.value=message(failure); } finally { if(token===trendVersion) trendLoading.value=false; } }
+watch(trendDays,()=>{ trendVersion++; trendLoading.value=false; trends.value=null; trendError.value=''; });
+const aiMode=ref('daily'),aiDate=ref(plantDate()),aiFrom=ref(addDays(plantDate(),-6)),aiTo=ref(plantDate()),aiTurn=ref(''),aiText=ref(''),aiLoading=ref(false),aiError=ref(''),aiCached=ref(false); let aiVersion=0;
+const aiHtml=computed(()=>formatSummary(aiText.value));
+function openAI() { previousFocus=globalThis.document?.activeElement; modalType.value='ai'; focusModal(); }
+watch([aiMode,aiDate,aiFrom,aiTo,aiTurn],()=>{ aiVersion++; aiLoading.value=false; aiText.value=''; aiError.value=''; });
+async function askAI(force=false) { if(aiLoading.value) return; if(aiMode.value==='period' && (aiFrom.value>aiTo.value || (Date.parse(aiTo.value)-Date.parse(aiFrom.value))/86400000>30)) { aiError.value='Seleccioná un período de hasta 31 días.'; return; } const token=++aiVersion,captured=capturedScope(); aiLoading.value=true; aiError.value=''; try { const response=aiMode.value==='daily' ? await aiService.generarResumenDiario(force,aiDate.value,captured):await aiService.generarResumenEjecutivo(force,7,captured,{ fechaDesde:aiFrom.value,fechaHasta:aiTo.value,turno:aiTurn.value }); if(token!==aiVersion) return; aiText.value=response.text; aiCached.value=!!response.fromCache; } catch(failure) { if(token===aiVersion) aiError.value=message(failure); } finally { if(token===aiVersion) aiLoading.value=false; } }
+async function copyAI() { try { await navigator.clipboard.writeText(aiText.value); Swal.fire({ title:'Informe copiado',icon:'success',timer:1200,showConfirmButton:false }); } catch { aiError.value='No se pudo copiar el informe.'; } }
+function keyboard(event) { if(event.key==='Escape') { event.stopPropagation(); closeModal(); } if(event.key!=='Tab') return; const nodes=[...(modal.value?.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)') || [])].filter(node=>node.getClientRects().length); const first=nodes[0],last=nodes.at(-1),active=globalThis.document?.activeElement; if(!first) { event.preventDefault(); return; } if(event.shiftKey && (active===first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if(!event.shiftKey && (active===last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
+function beforeUnload(event) { if(saving.value || feedbackDirty.value) { event.preventDefault(); event.returnValue=''; } }
+const notificationsBusy=ref(false);
+async function enableNotifications() { if(notificationsBusy.value) return; notificationsBusy.value=true; try { if(!auth.currentUser || typeof Notification==='undefined') throw new Error('Este navegador no permite habilitar alertas.'); const token=await notificationService.solicitarPermisosYRegistrarToken(auth.currentUser.uid); if(!token || Notification.permission!=='granted') throw new Error('Las notificaciones no quedaron habilitadas.'); notificationStop?.(); notificationStop=notificationService.escucharMensajesEnPrimerPlano(); Swal.fire('Alertas habilitadas','Se recibirán notificaciones en este navegador.','success'); } catch(failure) { Swal.fire('Alertas',failure.message,'info'); } finally { notificationsBusy.value=false; } }
+watch(()=>JSON.stringify([userProfile.value,sector.value]),()=>{ if(sector.value && !allowed.value.includes(sector.value)) { sector.value=''; return; } windowSize.value=50; trendVersion++; trendLoading.value=false; trends.value=null; aiVersion++; aiLoading.value=false; aiText.value=''; subscribe(); },{ immediate:true });
+watch(sessionUid,(uid,previous)=>{ if(uid!==previous) { modalType.value=''; selected.value=null; requestId.value=null; feedback.value=''; initialFeedback.value=''; aiVersion++; aiLoading.value=false; aiText.value=''; } });
+onMounted(()=>{ poll=setInterval(()=>{ clock.value=Date.now(); if(globalThis.document?.visibilityState!=='hidden') refreshCounts(); },60000); globalThis.window?.addEventListener('beforeunload',beforeUnload); });
+onUnmounted(()=>{ revision++; aiVersion++; trendVersion++; clearStreams(); countDeadlines.forEach(deadline=>clearTimeout(deadline)); countDeadlines.clear(); clearInterval(poll); stopSubscription?.(); clearTimeout(stopTimeout); if(typeof notificationStop==='function') notificationStop(); globalThis.window?.removeEventListener('beforeunload',beforeUnload); });
+onBeforeRouteLeave(async()=>saving.value ? false : modalType.value ? await closeModal():true);
 </script>
-
 <template>
-  <div class="min-h-screen bg-gray-100 pb-10">
-    <!-- Alerta Crítica Flotante (Opcional, ahora que el header es global) -->
-    <div v-if="novedades.some(n => n.critico && n.estado === 'pendiente')" 
-      class="bg-red-600 text-white text-[10px] font-black py-1 px-4 text-center tracking-widest sticky top-16 z-40 shadow-md">
-      ¡Hay fallas críticas pendientes!
-    </div>
-
-
-    <!-- Portal para Navbar (Mobile) -->
-    <Teleport to="#navbar-mobile-portal">
-      <div v-if="novedades.length > 0" class="flex items-center gap-2">
-        <h1 class="text-xs font-black text-white tracking-tighter shrink-0">Panel</h1>
-        <div class="flex items-center gap-1">
-          <span v-if="mecanicasCount > 0" class="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md shrink-0 border border-blue-400">
-             <Wrench class="w-2.5 h-2.5 inline mr-0.5" />{{ mecanicasCount }}
-          </span>
-          <span v-if="electricasCount > 0" class="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md shrink-0 border border-amber-300">
-             <Zap class="w-2.5 h-2.5 inline mr-0.5" />{{ electricasCount }}
-          </span>
-        </div>
-      </div>
-    </Teleport>
-
-    <main class="px-2 max-w-5xl mx-auto pt-2 lg:pt-4">
-      
-      <!-- Estado de Carga (Solo si no hay datos) -->
-      <div v-if="isLoading && novedades.length === 0" class="text-center py-20 flex flex-col items-center animate-in fade-in duration-500">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p class="text-gray-500 font-medium mb-4">Cargando novedades...</p>
-        <div class="space-y-2">
-          <button @click="cargarDatos" class="text-[10px] font-black tracking-widest text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all">
-            Forzar reintento
-          </button>
-          <p class="text-[8px] text-gray-300 font-bold tracking-widest">Build: {{ BUILD_TIME }}</p>
-        </div>
-      </div>
-
-      <!-- Error de Carga (Solo si no hay datos y falló) -->
-      <div v-else-if="errorCarga && novedades.length === 0" class="text-center py-20 animate-in zoom-in duration-300">
-        <AlertTriangle class="w-16 h-16 text-red-500 mx-auto mb-4" />
-        <h2 class="text-2xl font-bold text-gray-800 tracking-tight">Error de conexión</h2>
-        <p class="text-gray-500 mb-6 font-medium">No se pudieron obtener datos. Verifica tu red.</p>
-        <button 
-          @click="cargarDatos" 
-          class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all uppercase tracking-widest text-sm">
-          Reintentar Ahora
-        </button>
-      </div>
-
-      <!-- Panel de Inteligencia Artificial -->
-      <div v-if="novedades.length > 0 && !errorCarga" class="mb-4 bg-linear-to-r from-indigo-50 to-purple-50 rounded-xl p-3 md:p-4 border border-indigo-100 shadow-sm relative overflow-hidden">
-         <div class="absolute top-0 right-0 p-4 opacity-10">
-            <Sparkles class="w-24 h-24 text-indigo-600" />
-         </div>
-         
-         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-indigo-100/50 pb-2">
-           <!-- Titulo -->
-           <h3 class="flex items-center text-lg md:text-xl font-black text-indigo-900 truncate pr-2" @click="iaCollapsed = !iaCollapsed">
-             <Sparkles class="w-5 h-5 md:w-6 md:h-6 mr-1.5 md:mr-2 text-indigo-600 shrink-0" /> 
-             <span class="truncate cursor-pointer select-none hover:opacity-80 transition-opacity">Análisis IA (Ayer)</span>
-           </h3>
-           
-           <!-- Acciones -->
-           <div class="flex items-center gap-1.5 shrink-0">
-             <div v-if="!isIaLoading && iaSummary" class="flex items-center gap-1.5">
-               <button @click="copiarWhatsApp" title="Copiar para WhatsApp" class="bg-green-500 text-white font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-green-600 transition shadow-md border border-green-600 flex items-center shrink-0">
-                 <Copy class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                 <span class="hidden md:inline text-[10px] uppercase tracking-wider">WhatsApp</span>
-               </button>
-               
-               <template v-if="iaFromCache">
-                 <button @click="cargarAnalisisIA(true)" title="Regenerar Análisis" class="bg-white border border-indigo-200 text-indigo-600 font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-indigo-50 transition shadow-sm shrink-0 flex items-center">
-                   <Sparkles class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                   <span class="hidden md:inline text-[10px] uppercase tracking-wider">Regenerar</span>
-                 </button>
-               </template>
-             </div>
-             
-             <!-- Separador Vertical -->
-             <div class="w-px h-5 bg-indigo-200 mx-0.5 md:mx-1"></div>
-             
-             <!-- Colapsar -->
-             <button 
-               @click="iaCollapsed = !iaCollapsed" 
-               class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-indigo-200"
-               title="Expandir/Contraer"
-             >
-               <ChevronUp v-if="!iaCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-             </button>
-           </div>
-         </div>
-
-         <div v-show="!iaCollapsed" class="overflow-hidden transition-all duration-300">
-           <div v-if="isIaLoading" class="flex flex-col items-center justify-center py-4 z-10 relative">
-             <div class="animate-pulse flex gap-2 w-full max-w-sm">
-                <div class="h-2 bg-indigo-200 rounded w-full"></div>
-                <div class="h-2 bg-indigo-200 rounded w-1/2"></div>
-             </div>
-             <p class="text-xs text-indigo-600 font-bold mt-2 uppercase tracking-wide">Generando Resumen...</p>
-           </div>
-           
-           <div v-else-if="iaError" class="text-indigo-800 text-sm font-semibold z-10 relative">
-             No se pudo generar el resumen automáticamente hoy.
-             <button @click="cargarAnalisisIA" class="underline ml-2">Reintentar</button>
-           </div>
-
-           <div v-else class="text-indigo-950 text-base md:text-lg leading-relaxed z-10 relative font-medium space-y-2 p-3 bg-white/70 rounded-2xl border border-white max-w-none" v-html="iaSummary">
-           </div>
-         </div>
-      </div>
-
-      <!-- Panel Resumen Ejecutivo Semanal -->
-      <div v-if="!errorCarga" class="mb-4 bg-linear-to-r from-emerald-50 to-teal-50 rounded-xl p-3 md:p-4 border border-emerald-100 shadow-sm relative overflow-hidden">
-         <div class="absolute top-0 right-0 p-4 opacity-10">
-            <TrendingUp class="w-24 h-24 text-emerald-600" />
-         </div>
-         
-         <div class="flex items-center justify-between mb-2 z-10 relative border-b border-emerald-100/50 pb-2 flex-wrap gap-2">
-           <h3 class="flex items-center text-lg md:text-xl font-black text-emerald-900 truncate pr-2" @click="execCollapsed = !execCollapsed">
-             <TrendingUp class="w-5 h-5 md:w-6 md:h-6 mr-1.5 md:mr-2 text-emerald-600 shrink-0" /> 
-             <span class="truncate cursor-pointer select-none hover:opacity-80 transition-opacity">Informe Ejecutivo</span>
-             <span class="ml-2 text-xs font-bold bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
-               {{ execModo === 'custom' && execFechaDesde && execFechaHasta ? 'Personalizado' : execPeriodo + 'd' }}
-             </span>
-             <span v-if="execTurno" class="ml-1 text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full shrink-0">T{{ execTurno }}</span>
-           </h3>
-           
-           <div class="flex items-center gap-1.5 shrink-0 flex-wrap">
-             <!-- Selector de período preset -->
-             <div v-if="!isExecLoading" class="flex items-center bg-white rounded-lg border border-emerald-200 shadow-sm overflow-hidden">
-               <button v-for="p in [7, 15, 30]" :key="p" 
-                 @click="execModo = 'preset'; execPeriodo = p; cargarResumenEjecutivo(true)"
-                 :class="execModo === 'preset' && execPeriodo === p ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
-                 class="px-2 py-1 text-[10px] font-black transition">
-                 {{ p }}d
-               </button>
-               <button 
-                 @click="execModo = execModo === 'custom' ? 'preset' : 'custom'"
-                 :class="execModo === 'custom' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
-                 class="px-2 py-1 text-[10px] font-black transition flex items-center gap-0.5">
-                 <Calendar class="w-3 h-3" /> Rango
-               </button>
-             </div>
-
-             <!-- Filtro de turno -->
-             <div v-if="!isExecLoading" class="flex items-center bg-white rounded-lg border border-emerald-200 shadow-sm overflow-hidden">
-               <button @click="execTurno = ''; cargarResumenEjecutivo(true)"
-                 :class="!execTurno ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
-                 class="px-2 py-1 text-[10px] font-black transition">
-                 Todos
-               </button>
-               <button v-for="t in TURNOS" :key="t.id"
-                 @click="execTurno = t.id; cargarResumenEjecutivo(true)"
-                 :class="execTurno === t.id ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'"
-                 class="px-2 py-1 text-[10px] font-black transition">
-                 T{{ t.id }}
-               </button>
-             </div>
-             
-             <div v-if="!isExecLoading && execSummary" class="flex items-center gap-1.5">
-               <button @click="copiarWhatsAppExec" title="Copiar para WhatsApp" class="bg-green-500 text-white font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-green-600 transition shadow-md border border-green-600 flex items-center shrink-0">
-                 <Copy class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                 <span class="hidden md:inline text-[10px] uppercase tracking-wider">WhatsApp</span>
-               </button>
-               
-               <template v-if="execFromCache">
-                 <button @click="cargarResumenEjecutivo(true)" title="Regenerar Informe" class="bg-white border border-emerald-200 text-emerald-600 font-black px-2 md:px-3 py-1 md:py-1.5 rounded-lg md:rounded-full hover:bg-emerald-50 transition shadow-sm shrink-0 flex items-center">
-                   <RefreshCw class="w-4 h-4 md:w-3.5 md:h-3.5 md:mr-1" />
-                   <span class="hidden md:inline text-[10px] uppercase tracking-wider">Regenerar</span>
-                 </button>
-               </template>
-             </div>
-             
-             <div class="w-px h-5 bg-emerald-200 mx-0.5 md:mx-1"></div>
-             
-             <button 
-               @click="execCollapsed = !execCollapsed" 
-               class="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 p-1 md:p-1.5 rounded-lg transition-colors shadow-sm shrink-0 border border-emerald-200"
-               title="Expandir/Contraer"
-             >
-               <ChevronUp v-if="!execCollapsed" class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-               <ChevronDown v-else class="w-4 h-4 md:w-5 md:h-5 stroke-3" />
-             </button>
-           </div>
-         </div>
-
-         <!-- Datepickers para rango personalizado -->
-         <div v-if="execModo === 'custom' && !execCollapsed && !isExecLoading" class="flex flex-wrap items-end gap-3 mb-3 z-10 relative bg-white/60 rounded-xl p-3 border border-emerald-200">
-           <div class="flex-1 min-w-[140px]">
-             <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Desde</label>
-             <input type="date" v-model="execFechaDesde"
-               class="w-full border border-emerald-200 rounded-lg px-3 py-1.5 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none bg-white" />
-           </div>
-           <div class="flex-1 min-w-[140px]">
-             <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">Hasta</label>
-             <input type="date" v-model="execFechaHasta"
-               class="w-full border border-emerald-200 rounded-lg px-3 py-1.5 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-emerald-400 focus:outline-none bg-white" />
-           </div>
-           <button @click="cargarResumenEjecutivo(true)"
-             :disabled="!execFechaDesde || !execFechaHasta"
-             class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-black rounded-lg transition shadow-sm flex items-center gap-1.5">
-             <TrendingUp class="w-4 h-4" /> Generar
-           </button>
-         </div>
-
-         <div v-show="!execCollapsed" class="overflow-hidden transition-all duration-300">
-           <div v-if="isExecLoading" class="flex flex-col items-center justify-center py-6 z-10 relative">
-             <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-3"></div>
-             <p class="text-xs text-emerald-600 font-bold uppercase tracking-wide">
-               Analizando {{ execModo === 'custom' ? 'rango personalizado' : `últimos ${execPeriodo} días` }}{{ execTurno ? ` · Turno ${execTurno}` : '' }}...
-             </p>
-             <p class="text-[10px] text-emerald-400 mt-1">Novedades + Intervenciones</p>
-           </div>
-           
-           <div v-else-if="execError" class="text-emerald-800 text-sm font-semibold z-10 relative py-3">
-             No se pudo generar el informe ejecutivo.
-             <button @click="cargarResumenEjecutivo()" class="underline ml-2">Reintentar</button>
-           </div>
-
-           <div v-else-if="execSummary" class="text-emerald-950 text-base md:text-lg leading-relaxed z-10 relative font-medium space-y-2 p-3 bg-white/70 rounded-2xl border border-white max-w-none" v-html="execSummary">
-           </div>
-           
-           <div v-else class="text-emerald-700 text-sm py-3 z-10 relative">
-             <button @click="cargarResumenEjecutivo()" class="bg-emerald-600 text-white font-black px-4 py-2 rounded-xl hover:bg-emerald-700 transition shadow-md flex items-center mx-auto">
-               <TrendingUp class="w-4 h-4 mr-2" /> Generar Informe Ejecutivo
-             </button>
-           </div>
-         </div>
-      </div>
-
-      <!-- Título y Filtros SIEMPRE VISIBLES si hay datos cargados (incluso si los filtrados dan 0) -->
-      <div v-if="!errorCarga && novedades.length > 0" class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
-        <div class="flex items-center gap-3">
-           <h2 class="text-2xl font-black text-gray-800 tracking-tight hidden lg:block">Panel de control</h2>
-        </div>
-        
-        <div class="flex flex-wrap items-center gap-2 self-start md:self-auto">
-           <!-- Filtro por Sector -->
-           <div v-if="mostrarFiltroSector" class="flex items-center bg-white rounded-xl shadow-sm border border-gray-200 p-1">
-             <button @click="filtroSector = 'Todos'" :class="filtroSector === 'Todos' ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
-                <Building2 class="w-3.5 h-3.5 mr-1" /> Todos
-             </button>
-             <button v-for="s in opcionesSectorFiltro" :key="s" @click="filtroSector = s" :class="filtroSector === s ? 'bg-emerald-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition uppercase tracking-wider">
-                {{ s === 'HILANDERIA' ? 'Hil.' : 'Tej.' }}
-             </button>
-           </div>
-
-           <!-- Filtro por Tipo -->
-           <div class="flex items-center bg-white rounded-xl shadow-sm border border-gray-200 p-1">
-             <button @click="filtroTipo = 'Todos'" :class="filtroTipo === 'Todos' ? 'bg-gray-800 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
-                <Filter class="w-3.5 h-3.5 mr-1" /> Todos
-             </button>
-             <button @click="filtroTipo = 'Mecánico'" :class="filtroTipo === 'Mecánico' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
-                <Wrench class="w-3.5 h-3.5 mr-1" /> Mec. ({{mecanicasCount}})
-             </button>
-             <button @click="filtroTipo = 'Eléctrico'" :class="filtroTipo === 'Eléctrico' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'" class="px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center">
-                <Zap class="w-3.5 h-3.5 mr-1" /> Eléc. ({{electricasCount}})
-             </button>
-           </div>
-        </div>
-      </div>
-
-      <!-- Sin Novedades en el filtro actual -->
-      <div v-if="!isLoading && !errorCarga && novedadesFiltradas.length === 0 && novedades.length > 0" class="text-center py-20">
-        <CheckCircle class="w-16 h-16 text-green-400 mx-auto mb-4" />
-        <h2 class="text-2xl font-bold text-gray-600">¡Todo en orden!</h2>
-        <p class="text-gray-500">No hay novedades pendientes para la vista seleccionada.</p>
-      </div>
-
-      <!-- Listado con Novedades -->
-      <div v-if="!errorCarga && novedadesFiltradas.length > 0">
-        <!-- Grid de Novedades -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div 
-            v-for="novedad in novedadesFiltradas" 
-            :key="novedad.id" 
-            class="rounded-xl border p-4 shadow-md flex flex-col justify-between transition-transform transform hover:-translate-y-1 relative"
-            :class="getCardColorClass(novedad)">
-            
-            <!-- Badge Tipo Problema -->
-            <div class="absolute -top-3 -right-3 flex">
-               <span v-if="(novedad.tipoProblema || 'Mecánico') === 'Mecánico'" class="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white" title="Falla Mecánica">
-                  <Wrench class="w-5 h-5" />
-               </span>
-               <span v-else class="bg-amber-500 text-white p-2 rounded-full shadow-lg border-2 border-white" title="Falla Eléctrica">
-                  <Zap class="w-5 h-5" />
-               </span>
-            </div>
-
-            <div>
-              <div class="flex justify-between items-start mb-4 pr-8">
-                <div>
-                    <h3 class="text-3xl font-black flex items-center">
-                      <AlertTriangle v-if="novedad.critico" class="w-6 h-6 mr-2" />
-                      ID: {{ novedad.numeroMaquina }}
-                    </h3>
-                    <div class="flex items-center gap-2 mt-1">
-                      <p class="text-base font-bold opacity-80 tracking-widest">{{ novedad.tipoMaquina }} (Lado {{ novedad.lado }})</p>
-                      <span v-if="novedad.motivo" class="text-[10px] font-black bg-white/20 px-2 py-0.5 rounded border border-white/20 uppercase tracking-widest">{{ novedad.motivo }}</span>
-                    </div>
-                  </div>
-                  <span class="text-sm font-black px-3 py-1.5 rounded-lg bg-black/10">{{ novedad.estado }}</span>
-              </div>
-              
-              <div v-if="novedad.seccion || novedad.denominacion" class="bg-black/5 border border-black/10 p-3 rounded-xl mb-4">
-                 <span class="block text-xs font-black tracking-widest leading-none mb-1 opacity-60">PUNTO DE CONTROL AFECTADO</span>
-                 <div class="flex flex-col gap-1">
-                   <span class="text-sm font-bold opacity-90">{{ novedad.denominacion || novedad.seccion }} <span v-if="novedad.grupo" class="opacity-60 font-medium">({{ novedad.grupo }})</span></span>
-                   <div v-if="novedad.numeroArticulo && novedad.numeroArticulo !== '-'" class="flex gap-2 mt-1">
-                     <span class="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm">Art: {{ novedad.numeroArticulo }}</span>
-                     <span v-if="novedad.numeroCatalogo && novedad.numeroCatalogo !== '-'" class="bg-white text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded border border-indigo-200 shadow-sm">Cat: {{ novedad.numeroCatalogo }}</span>
-                   </div>
-                 </div>
-              </div>
-
-              <p class="text-lg font-bold mb-5 p-4 bg-black/5 rounded-2xl border border-black/5 leading-snug">
-                "{{ novedad.observaciones }}"
-              </p>
-
-              <button type="button" v-if="novedad.fotoUrl" @click="showOperationalImage(novedad.fotoUrl)" class="inline-flex items-center text-base font-black underline underline-offset-4 mb-4 hover:opacity-70 transition p-2 bg-black/5 rounded-xl">
-                <ImageIcon class="w-5 h-5 mr-2" /> Ver Foto Evidencia
-              </button>
-            </div>
-
-            <div class="mt-4 flex flex-col gap-4">
-              <span class="text-sm font-bold flex items-center opacity-70">
-                <Clock class="w-4 h-4 mr-1.5" /> {{ formatDate(novedad.createdAt) }}
-              </span>
-              <button 
-                @click="abrirModal(novedad)"
-                class="w-full bg-black/10 hover:bg-black/20 text-current font-black text-lg py-4 rounded-xl transition border border-black/10 flex items-center justify-center active:scale-95 shadow-sm">
-                <CheckSquare class="w-6 h-6 mr-2" />
-                Gestionar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Modal de Gestión -->
-    <div v-if="modalAprobacion" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div class="bg-white rounded-xl p-8 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
-        <h3 class="text-3xl font-black text-gray-900 mb-2">Gestionar Novedad</h3>
-        <p class="text-xl text-gray-500 mb-6">Máquina: <span class="font-black border-b-4 border-orange-400 text-gray-800">{{ novedadActual.numeroMaquina }}</span></p>
-        
-        <div class="space-y-6">
-          <div>
-            <label class="block text-base font-bold text-gray-700 mb-2 tracking-tight">Instrucciones / feedback (Opcional)</label>
-            <textarea 
-              v-model="feedback" 
-              rows="4" 
-              class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-lg rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-4 transition shadow-inner" 
-              placeholder="Ej: Repuestos en pañol, proceder con reparación..."></textarea>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4 pt-4">
-            <button 
-              @click="aprobarNovedad('en proceso')"
-              class="py-4 px-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-black text-lg rounded-2xl transition shadow-md active:scale-95">
-              En proceso
-            </button>
-            <button 
-              @click="aprobarNovedad('resuelto')"
-              class="py-4 px-4 bg-green-500 hover:bg-green-600 text-white font-black text-lg rounded-2xl transition shadow-md active:scale-95">
-              Resuelto
-            </button>
-          </div>
-          <button @click="cerrarModal" class="w-full mt-4 py-4 text-gray-500 hover:bg-gray-100 font-bold text-lg rounded-2xl transition">
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+<section class="plant-dashboard" :inert="hasModal || undefined"><header class="dashboard-header"><div><h1>Situación de planta</h1><p>{{ scopeLabel }} · {{ countUpdated ? `Indicadores actualizados ${date(countUpdated)}`:'Consultando indicadores…' }}</p></div><div class="actions"><button class="btn" :disabled="loading" @click="subscribe();loadStops()"><RefreshCw />Actualizar</button><button class="btn" :disabled="notificationsBusy" @click="enableNotifications"><Bell />Alertas</button><button class="btn" @click="openAI"><Sparkles />Informes IA</button></div></header><div class="dashboard-controls"><label>Sector<select v-model="sector"><option value="">Todos los autorizados</option><option v-for="option in allowed" :key="option">{{ option }}</option></select></label><div class="tabs"><button v-for="option in [{key:'attention',label:'Atención operativa'},{key:'stops',label:'Paros / Anudados'},{key:'trends',label:'Tendencias'}]" :key="option.key" :class="{ chosen:tab===option.key }" @click="tab=option.key">{{ option.label }}</button></div><span class="sources-note">Reportes y solicitudes son registros distintos.</span></div><div v-if="scopeError || countError || sourceErrors.length" class="dashboard-error" role="alert"><span>{{ scopeError || countError || sourceErrors[0] }}</span><button @click="subscribe();loadStops()">Reintentar</button><small v-if="sourceErrors.length">{{ sourceErrors.length }} consultas no disponibles; la lista puede estar incompleta.</small></div><p v-if="cachedSources" class="footnote local-data" role="status">Hay datos locales en pantalla; se está esperando confirmación del servidor.</p><div class="metrics"><button v-for="metric in metrics" :key="metric.key" :class="{ metricActive:quick===metric.key && tab==='attention',priorityMetric:metric.key==='critical' && metric.value>0 }" v-tippy="metric.tip" @click="pickMetric(metric.key)"><strong>{{ metric.value ?? '—' }}</strong><span>{{ metric.label }}</span></button><button :disabled="!canReadStops" @click="tab='stops'"><strong>{{ !canReadStops || stopLoading || stopError ? '—':openStops.length }}</strong><span>Paros sin finalizar · {{ stopDate }}</span></button></div>
+<template v-if="tab==='attention'"><div class="queue-filters"><div class="search"><input v-model="search" aria-label="Buscar en registros cargados" placeholder="Buscar máquina, problema o responsable…" /></div><select v-model="kind" aria-label="Filtrar origen"><option value="">Ambos orígenes</option><option value="fault">Fallas</option><option value="intervention">Intervenciones</option></select><select v-model="category" aria-label="Filtrar especialidad"><option value="">Todas las especialidades</option><option>Mecánico</option><option>Eléctrico</option><option>Calidad</option><option>Otra</option></select><button v-if="quick" class="btn" @click="quick=''">Quitar filtro del indicador</button></div><div class="table-panel"><div class="table-scroll"><table class="attention-table"><colgroup><col class="priority-col" /><col class="machine-col" /><col /><col class="state-col" /><col class="assigned-col" /><col class="age-col" /><col class="action-col" /></colgroup><thead><tr><th>Prioridad</th><th>Máquina / sector</th><th>Problema / origen</th><th>Estado</th><th>Responsable</th><th>Antigüedad</th><th>Detalle</th></tr></thead><tbody><tr v-for="item in pageItems" :key="item.key" :class="{ critical:item.priority<=1 }"><td><span class="badge" :class="{ danger:item.priority<=1 }">{{ item.priority===0 ? 'Parada informada':item.priority===1 ? 'Crítica':item.priority===2 ? 'Con problema':'Normal' }}</span></td><td><strong class="machine" v-tippy="`Código completo: ${item.number}`">{{ item.shortNumber }}</strong><small>{{ item.tipoMaquina || 'Máquina' }} · {{ item.sector }}</small></td><td><strong>{{ item.description }}</strong><small>{{ item.kind==='fault' ? 'Reporte de falla':'Solicitud de intervención' }} · {{ item.category }} · {{ item.creadoPorNombre || 'Sin reportante' }}</small></td><td><span class="badge">{{ item.status }}</span></td><td><span>{{ item.assigned }}</span><small v-if="item.started">En atención: {{ age(item.started) }}</small></td><td><strong>{{ age(item.created) }}</strong><small>{{ date(item.createdAt) }}</small></td><td><button class="icon-btn" v-tippy="item.kind==='fault' ? 'Gestionar reporte de falla':'Abrir detalle de intervención'" aria-label="Abrir detalle" @click="open(item)"><Eye /></button></td></tr></tbody></table><p v-if="!pageItems.length" class="empty">{{ loading ? 'Cargando registros…':countError || sourceErrors.length ? 'No se pudo completar la consulta.':totalActive===0 && !queue.length ? 'No hay reportes ni solicitudes abiertas en los sectores consultados.':'No hay coincidencias entre los registros cargados. Podés ampliar la consulta.' }}</p></div><footer class="table-footer"><span>{{ visible.length }} coincidencias · {{ queue.length }} registros cargados · {{ totalActive ?? '—' }} abiertos en el sector</span><div class="actions"><button class="btn" :disabled="page<=1" @click="page--">Anterior</button><span>{{ page }} / {{ pageCount }}</span><button class="btn" :disabled="page>=pageCount" @click="page++">Siguiente</button><button v-if="moreAvailable" class="btn" :disabled="loading" @click="more">Cargar 50 más por consulta</button></div></footer></div><p class="footnote">Orden: prioridad y antigüedad. La búsqueda y especialidad filtran los registros cargados; los indicadores abarcan todos los abiertos del sector. No se fusionan fallas y solicitudes sin un vínculo explícito.</p></template>
+<template v-else-if="tab==='stops'"><div class="queue-filters"><PlantDatePicker v-model="stopDate" label="Fecha operativa de paros" /><span class="footnote">Tejeduría · Fecha del día de inicio del turno C. Incluye registros finalizados y sin finalizar de ese día.</span><button class="btn" @click="loadStops">Actualizar paros</button><button v-if="canAccessViewForUser(userRole,'paros-anudado',userProfile?.vistasPersonalizadas)" class="btn" @click="router.push('/paros-anudado')"><ArrowUpRight />Abrir Paros / Anudados</button></div><p v-if="!canReadStops" class="empty">Los paros de anudado están disponibles para Tejeduría. Seleccioná ese sector si está autorizado.</p><p v-else-if="stopError" class="dashboard-error">{{ stopError }}</p><div v-else class="table-panel"><div class="table-scroll"><table class="stops-table"><thead><tr><th>Telar</th><th>Turno / código</th><th>Paro</th><th>Inicio</th><th>Fin</th><th>Artículo / partida</th><th>Personal / supervisor</th><th>Detalle</th></tr></thead><tbody><tr v-for="stop in stopRecords" :key="`${stop.fechaDocumento}-${stop.id}`"><td><strong class="machine">{{ String(Number(String(stop.telar || '').slice(-2))) }}</strong></td><td>{{ stop.turno }} · {{ stop.codigo }}<small>{{ stop.horaFinAnudado ? 'Finalizado':'Sin finalizar' }}</small></td><td>{{ stop.horaParo || '—' }}</td><td>{{ stop.horaInicioAnudado || '—' }}</td><td>{{ stop.horaFinAnudado || '—' }}</td><td>{{ stop.articulo || '—' }}<small>{{ stop.partida || '—' }}</small></td><td>{{ (stop.anudadores || []).join(', ') || '—' }}<small>{{ stop.supervisorNombre || '—' }}</small></td><td><button class="icon-btn" aria-label="Ver paro" v-tippy="'Consultar registro completo de paro'" @click="openStop(stop)"><Eye /></button></td></tr></tbody></table><p v-if="!stopRecords.length" class="empty">{{ stopLoading ? 'Cargando paros…':'No hay paros registrados para esta fecha.' }}</p></div><footer class="table-footer">{{ openStops.length }} registros sin finalizar · No representa disponibilidad física de toda la planta.</footer></div></template>
+<template v-else><div class="queue-filters"><label>Período<select v-model="trendDays"><option :value="7">Últimos 7 días</option><option :value="30">Últimos 30 días</option></select></label><button class="btn" :disabled="trendLoading" @click="loadTrends"><RefreshCw />{{ trendLoading ? 'Consultando…':'Consultar tendencias' }}</button></div><p v-if="trendError" class="dashboard-error">{{ trendError }}</p><p v-if="!trends" class="empty">Consultá el período para analizar reportes e intervenciones de los sectores seleccionados.</p><div v-else class="trend-content"><div class="trend-summary"><span><strong>{{ trends.reports }}</strong> reportes creados</span><span><strong>{{ trends.resolved }}</strong> de esos reportes hoy resueltos</span><span><strong>{{ trends.requests }}</strong> solicitudes creadas</span><span><strong>{{ trends.completed }}</strong> de esas solicitudes completadas</span><span><strong>{{ trends.medianMinutes==null ? '—':Math.round(trends.medianMinutes)+' min' }}</strong> mediana solicitud → cierre ({{ trends.durationSamples }} con fechas completas)</span></div><div class="trend-columns"><section><h2>Máquinas con más reportes de falla</h2><table><thead><tr><th>Máquina / sector</th><th>Reportes</th><th>Críticos</th></tr></thead><tbody><tr v-for="machine in trends.machines" :key="machine.key"><td>{{ machine.number }} · {{ machine.type }}<small>{{ machine.sector }}</small></td><td>{{ machine.count }}</td><td>{{ machine.critical }}</td></tr></tbody></table></section><section><h2>Reportes de falla por día</h2><div v-for="[day,total] in trends.days" :key="day" class="trend-day"><span>{{ day }}</span><div><i :style="{ width:Math.max(3,total/Math.max(1,...trends.days.map(item=>item[1]))*100)+'%' }" /></div><strong>{{ total }}</strong></div></section></div><p class="footnote">Período {{ trends.from }} a {{ trends.to }}. Se cuentan registros creados en ese período y su estado actual; no cierres efectuados durante el período ni incidentes únicos. Los tiempos son transcurridos, no horas efectivas de trabajo.</p></div></template>
+</section>
+<IntervencionDetalle v-if="requestId" :id="requestId" @close="closeRequest" />
+<Teleport to="body"><div v-if="modalType" class="dashboard-backdrop" @click.self="closeModal"><section ref="modal" class="dashboard-modal" role="dialog" aria-modal="true" aria-label="Detalle de gestión" tabindex="-1" @keydown="keyboard"><header><div><h2>{{ modalType==='ai' ? 'Informes de gestión':modalType==='stop' ? 'Detalle de paro':'Gestionar reporte de falla' }}</h2><p>{{ modalType==='ai' ? scopeLabel:modalType==='stop' ? `Telar ${selected?.telar} · ${stopDate}`:`Máquina ${selected?.number} · ${selected?.sector}` }}</p></div><button class="icon-btn" :disabled="saving" aria-label="Cerrar detalle" v-tippy="'Cerrar'" @click="closeModal"><X /></button></header><div class="modal-body"><template v-if="modalType==='fault'"><p v-if="detailError" class="dashboard-error" role="alert">{{ detailError }}</p><div class="detail-columns"><section><h3>{{ selected.description }}</h3><dl><div><dt>Especialidad / estado</dt><dd>{{ selected.category }} · {{ selected.status }}</dd></div><div><dt>Reportante</dt><dd>{{ selected.creadoPorNombre || '—' }}</dd></div><div><dt>Fecha</dt><dd>{{ date(selected.createdAt) }}</dd></div><div><dt>Máquina / lado</dt><dd>{{ selected.tipoMaquina }} · {{ selected.lado || '—' }}</dd></div><div><dt>Catálogo / artículo</dt><dd>{{ selected.numeroCatalogo || '—' }} · {{ selected.numeroArticulo || '—' }}</dd></div><div><dt>Sección / denominación</dt><dd>{{ selected.seccion || '—' }} · {{ selected.denominacion || '—' }}</dd></div></dl><template v-if="selected.fotoUrl"><OperationalImage :src="selected.fotoUrl" alt="Foto del reporte" class="report-photo" /><button class="btn" v-tippy="'Ampliar foto del reporte'" @click="showOperationalImage(selected.fotoUrl)">Ver foto ampliada</button></template></section><section><label class="field">Instrucciones y seguimiento<textarea v-model="feedback" rows="8" :disabled="saving || !canManage" placeholder="Indicá el próximo paso o el motivo que impide avanzar…" /></label><p class="footnote">Este reporte no tiene responsable técnico vinculado. La asignación y el diagnóstico de solicitudes se gestionan en Intervenciones.</p></section></div></template><template v-else-if="modalType==='stop'"><dl class="stop-detail"><div v-for="field in ['turno','codigo','horaParo','horaInicioAnudado','horaFinAnudado','tiempoTotal','articulo','color','partida','plegador','revisor','supervisorNombre']" :key="field"><dt>{{ { turno:'Turno',codigo:'Código',horaParo:'Hora de paro',horaInicioAnudado:'Inicio de anudado',horaFinAnudado:'Fin de anudado',tiempoTotal:'Tiempo registrado (min)',articulo:'Artículo',color:'Color',partida:'Partida',plegador:'Plegador',revisor:'Revisor',supervisorNombre:'Supervisor' }[field] }}</dt><dd>{{ selected[field] ?? '—' }}</dd></div><div><dt>Anudadores</dt><dd>{{ (selected.anudadores || []).join(', ') || '—' }}</dd></div><div><dt>Hilos cruzados</dt><dd>{{ selected.hilosCruzados ? 'Sí':'No' }}</dd></div></dl></template><template v-else><div class="ai-controls"><label>Informe<select v-model="aiMode"><option value="daily">Diario</option><option value="period">Ejecutivo por período</option></select></label><PlantDatePicker v-if="aiMode==='daily'" v-model="aiDate" label="Fecha del informe" /><template v-else><PlantDatePicker v-model="aiFrom" label="Desde" /><PlantDatePicker v-model="aiTo" label="Hasta" /><select v-model="aiTurn" aria-label="Turno del informe"><option value="">Todos los turnos</option><option>A</option><option>B</option><option>C</option></select></template></div><p class="footnote">Incluye los sectores seleccionados y el período indicado. Los filtros locales de búsqueda, especialidad y prioridad de la bandeja no se aplican al informe.</p><p v-if="aiError" class="dashboard-error">{{ aiError }}</p><p v-if="aiLoading" class="empty">Generando informe…</p><div v-else-if="aiText" class="ai-result" v-html="aiHtml" /><p v-else class="empty">Consultá el informe cuando lo necesites.</p><small v-if="aiText">{{ aiCached ? 'Informe recuperado de caché':'Informe generado' }}</small></template></div><footer><span v-if="modalType==='fault'">{{ feedbackDirty ? 'Instrucciones sin guardar':selected.status }}</span><button class="btn" :disabled="saving" @click="closeModal">Cerrar</button><template v-if="modalType==='fault' && canManage"><button class="btn" :disabled="saving" @click="manage('en proceso')"><Save />Guardar / En proceso</button><button class="btn primary" :disabled="saving" @click="manage('resuelto')">Marcar resuelto</button></template><template v-if="modalType==='ai'"><button class="btn" :disabled="!aiText || aiLoading" @click="copyAI"><Copy />Copiar</button><button class="btn" :disabled="aiLoading" @click="askAI(true)">Regenerar</button><button class="btn primary" :disabled="aiLoading" @click="askAI(false)"><Sparkles />Consultar</button></template></footer></section></div></Teleport>
 </template>
+<style scoped>
+.plant-dashboard{height:100%;min-height:0;display:flex;flex-direction:column;gap:8px;padding:12px 16px;color:#334155;font-size:13px}.dashboard-header,.actions,.dashboard-controls,.queue-filters,.tabs,.table-footer{display:flex;align-items:center;gap:8px}.dashboard-header{justify-content:space-between;flex-wrap:wrap}.dashboard-header h1{font-size:19px;font-weight:700;color:#0f172a}.dashboard-header p{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5}.btn,.icon-btn,.tabs button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #cbd5e1;background:white;color:#475569;border-radius:5px;min-height:32px;padding:0 9px;font-weight:600}.btn svg,.icon-btn svg{width:15px;height:15px}.btn:hover,.icon-btn:hover,.tabs button:hover{background:#f1f5f9}.primary{background:#2563eb;color:white;border-color:#2563eb}.primary:hover{background:#1d4ed8}.icon-btn{width:28px;min-height:28px;padding:0;border-color:transparent}button:disabled{opacity:.4;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.dashboard-controls{flex-wrap:wrap;padding:8px;background:white;border:1px solid #e2e8f0;border-radius:6px}.dashboard-controls label,.queue-filters label,.ai-controls label{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b}.tabs{gap:4px}.tabs button{border-color:transparent;font-size:12px}.tabs .chosen{background:#eff6ff;color:#2563eb;border-color:#93c5fd}.sources-note{font-size:10px;color:#64748b;margin-left:auto}.metrics{display:flex;gap:8px;flex-wrap:wrap}.metrics button{display:flex;align-items:center;gap:8px;flex:1;min-width:120px;min-height:46px;padding:7px 9px;border:1px solid #e2e8f0;border-radius:6px;background:white;text-align:left}.metrics strong{font-size:22px;line-height:1;font-weight:700;font-variant-numeric:tabular-nums;color:#0f172a}.metrics span{font-size:11px;color:#64748b;line-height:1.3}.metrics .metricActive{background:#eff6ff;border-color:#93c5fd}.metrics .priorityMetric{border-color:#fca5a5;background:#fff7f7}.priorityMetric strong{color:#b91c1c}.queue-filters{flex-wrap:wrap}.search{flex:1;min-width:190px}.search input{width:100%}input,select,textarea{border:1px solid #cbd5e1;background:white;color:#334155;border-radius:5px;padding:7px 9px;font-size:13px;min-width:0}.table-panel{display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid #e2e8f0;background:white;border-radius:6px;overflow:hidden}.table-scroll{flex:1;min-height:0;overflow:auto}table{width:100%;border-collapse:separate;border-spacing:0}.attention-table{table-layout:fixed}.attention-table .priority-col{width:110px}.machine-col{width:130px}.state-col{width:110px}.assigned-col{width:180px}.age-col{width:140px}.action-col{width:65px}th{position:sticky;top:0;z-index:1;text-align:left;background:#f1f5f9;color:#475569;font-size:11px;font-weight:700;border-bottom:1px solid #cbd5e1}th,td{padding:9px 12px;overflow-wrap:anywhere}td{border-bottom:1px solid #eef2f6;vertical-align:middle}tbody tr:nth-child(even){background:#fafbfd}tbody tr:hover{background:#eff6ff}td strong{font-weight:600;color:#334155}td small{display:block;font-size:11px;color:#64748b;line-height:1.45;margin-top:4px}.machine{font-size:16px!important;color:#1d4ed8!important;font-weight:700!important}.badge{display:inline-block;padding:3px 6px;border-radius:4px;background:#f1f5f9;color:#475569;font-size:11px}.badge.danger{background:#fef2f2;color:#b91c1c;font-weight:600}.critical td:first-child{border-left:3px solid #ef4444}.table-footer{justify-content:space-between;flex-wrap:wrap;padding:7px 10px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:11px;color:#64748b}.footnote{font-size:11px;color:#64748b;line-height:1.5}.empty{padding:40px 16px;text-align:center;color:#64748b}.dashboard-error{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fef2f2;color:#b91c1c;padding:9px;border-radius:5px;font-size:12px;line-height:1.5}.dashboard-error button{text-decoration:underline}.dashboard-error small{flex-basis:100%}.trend-content{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px}.trend-summary{display:flex;gap:12px;flex-wrap:wrap;padding:12px;background:white;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#64748b}.trend-summary strong{color:#334155;font-weight:700}.trend-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}.trend-columns>section{min-width:0;background:white;border:1px solid #e2e8f0;border-radius:6px;overflow:auto}.trend-columns h2{padding:12px;font-size:14px;font-weight:600;border-bottom:1px solid #e2e8f0}.trend-day{display:flex;align-items:center;gap:10px;padding:7px 12px;font-size:12px}.trend-day>div{flex:1;height:8px;background:#f1f5f9;border-radius:3px}.trend-day i{display:block;height:8px;background:#60a5fa;border-radius:3px}.trend-day strong{width:30px;text-align:right}.dashboard-backdrop{position:fixed;inset:0;z-index:110;background:#0f172a66;display:flex;align-items:center;justify-content:center;padding:16px}.dashboard-modal{width:min(1050px,100%);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;background:white;color:#334155;border-radius:9px;box-shadow:0 20px 60px #0f172a33;font-size:13px;min-height:0}.dashboard-modal>header,.dashboard-modal>footer{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #e2e8f0}.dashboard-modal>header{justify-content:space-between}.dashboard-modal h2{font-size:17px;font-weight:700}.dashboard-modal header p{font-size:12px;color:#64748b;margin-top:3px}.modal-body{padding:16px;min-height:0;overflow:auto}.detail-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.detail-columns h3{font-size:15px;font-weight:600;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}.detail-columns dl{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}.detail-columns dt,.stop-detail dt{font-size:11px;color:#64748b;margin-bottom:4px}.detail-columns dd,.stop-detail dd{font-size:13px;color:#334155;overflow-wrap:anywhere}.field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}.field textarea{resize:vertical;min-height:180px;line-height:1.5;font-weight:400}.detail-columns .footnote{margin-top:12px}.report-photo{max-width:100%;max-height:350px;object-fit:contain}.stop-detail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.ai-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.ai-result{font-size:13px;line-height:1.8;margin:16px 0}.dashboard-modal>footer{justify-content:flex-end;flex-wrap:wrap;border-top:1px solid #e2e8f0;border-bottom:0}.dashboard-modal footer>span{margin-right:auto;font-size:11px;color:#64748b}
+@media(max-width:1200px){.sources-note{display:none}.attention-table .priority-col{width:90px}.machine-col{width:95px}.state-col{width:90px}.assigned-col{width:110px}.age-col{width:95px}.action-col{width:45px}.plant-dashboard{padding:10px;gap:7px}th,td{padding:7px}.attention-table{min-width:680px}.stops-table{min-width:720px}.table-footer .btn{font-size:11px;min-height:28px}.metrics span{font-size:10px}}
+@media(max-width:767px){.plant-dashboard{height:auto;min-height:100%}.table-panel{flex:none;min-height:300px}.table-scroll{max-height:65vh}.dashboard-header h1{font-size:17px}.actions{flex-wrap:wrap}.dashboard-controls{gap:5px}.tabs{flex-wrap:wrap}.queue-filters .search{flex-basis:100%}.queue-filters select{flex:1}.metrics button{min-width:140px}.trend-columns{grid-template-columns:1fr}.dashboard-backdrop{padding:10px}.dashboard-modal{max-height:calc(100dvh - 20px)}.detail-columns{grid-template-columns:1fr}.stop-detail{grid-template-columns:1fr 1fr}.dashboard-modal footer .btn{font-size:12px}.trend-content{overflow:visible}}
+</style>

@@ -65,10 +65,10 @@ export const getEffectiveVistas = (role) => {
 
 export const getEffectivePermisos = (role) => {
   if (!role) return {};
-  if (role === 'admin') return { verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: true };
+  if (role === 'admin') return { coordinarAtencion:true,verCalidad: true, crearFalla: true, cerrarOrden: true, configSistema: true };
   const override = profileOverrides.value[role];
-  if (override?.permisos) return override.permisos;
-  return ROLE_PROFILES[role]?.permisos || {};
+  const coordinationDefault=['admin','supervisor','supervisor_mecanico','supervisor_electrico','jefe_sector','jefe_electricos','jefe_produccion','gerente_produccion'].includes(role);
+  return { coordinarAtencion:coordinationDefault,...(override?.permisos || ROLE_PROFILES[role]?.permisos || {}) };
 };
 
 // ── Access checks ──

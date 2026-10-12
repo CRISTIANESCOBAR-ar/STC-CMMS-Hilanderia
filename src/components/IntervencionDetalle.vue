@@ -6,6 +6,7 @@ import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
+import AttentionPanel from './AttentionPanel.vue';
 import { userProfile, userRole } from '../services/authService';
 import { getEffectivePermisosForUser } from '../services/profileService';
 import { canExecuteIntervention } from '../utils/interventionAccess';
@@ -26,22 +27,25 @@ const dialog = ref(null);
 const errorCarga = ref(false);
 const fotoAmpliada = ref(false);
 const baseline = ref('');
+const showAttention = ref(false);
+const attentionBusy = ref(false);
+const attentionDirty = ref(false);
 const dirty = computed(() => baseline.value && baseline.value !== JSON.stringify(diagnostico.value));
 let previousFocus;
 let alive = true;
 const close = async () => {
-  if (guardando.value || tomando.value) return;
-  if (dirty.value) {
+  if (guardando.value || tomando.value || attentionBusy.value) return;
+  if (dirty.value || attentionDirty.value) {
     const result = await Swal.fire({ title:'¿Descartar cambios sin guardar?', text:'El diagnóstico tiene cambios pendientes.', icon:'question', showCancelButton:true, confirmButtonText:'Descartar', cancelButtonText:'Seguir editando' });
     if (!result.isConfirmed) return;
     baseline.value = JSON.stringify(diagnostico.value);
   }
   if (props.id) emit('close'); else router.push('/intervenciones');
 };
-function beforeUnload(event) { if (dirty.value || guardando.value || tomando.value) { event.preventDefault(); event.returnValue = ''; } }
+function beforeUnload(event) { if (dirty.value || attentionDirty.value || guardando.value || tomando.value || attentionBusy.value) { event.preventDefault(); event.returnValue = ''; } }
 onBeforeRouteLeave(async () => {
-  if (guardando.value || tomando.value) return false;
-  if (!dirty.value) return true;
+  if (guardando.value || tomando.value || attentionBusy.value) return false;
+  if (!dirty.value && !attentionDirty.value) return true;
   const result = await Swal.fire({ title:'¿Descartar cambios sin guardar?', showCancelButton:true, confirmButtonText:'Descartar', cancelButtonText:'Seguir editando' });
   return result.isConfirmed;
 });
@@ -297,14 +301,14 @@ const esElMecanico = computed(() => {
 });
 
 const puedeEditar = computed(() =>
-  intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value && puedeEjecutar.value
+  !intervencion.value?.atencionVersion && intervencion.value?.estado === 'EN_PROCESO' && esElMecanico.value && puedeEjecutar.value
 );
 
 const puedeEjecutar = computed(() => canExecuteIntervention(userRole.value,
   getEffectivePermisosForUser(userRole.value, userProfile.value?.permisosPersonalizados), intervencion.value));
 
 const puedeTomarIntervencion = computed(() =>
-  intervencion.value?.estado === 'PENDIENTE' && puedeEjecutar.value
+  !intervencion.value?.atencionVersion && intervencion.value?.estado === 'PENDIENTE' && puedeEjecutar.value
 );
 
 const tomando = ref(false);
@@ -324,7 +328,7 @@ const tomarIntervencion = async () => {
 
 // ── Guardar diagnóstico ───────────────────────────────────────────────────────
 const guardarDiagnostico = async () => {
-  if (guardando.value || tomando.value || !puedeEditar.value) return;
+  if (guardando.value || tomando.value || attentionBusy.value || !puedeEditar.value) return;
   guardando.value = true;
   const payload = { ...diagnostico.value };
   try {
@@ -338,7 +342,7 @@ const guardarDiagnostico = async () => {
 
 // ── Completar ─────────────────────────────────────────────────────────────────
 const completar = async () => {
-  if (guardando.value || tomando.value || !puedeEditar.value) return;
+  if (guardando.value || tomando.value || attentionBusy.value || !puedeEditar.value) return;
   const confirm = await Swal.fire({
     title: '¿Completar intervención?',
     text: 'El problema fue resuelto.',
@@ -367,7 +371,7 @@ const completar = async () => {
   <Teleport to="body">
     <div class="detail-overlay" @click.self="close">
       <section ref="dialog" class="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="intervention-detail-title" tabindex="-1" @keydown="dialogKeydown">
-        <header class="detail-header"><div><h2 id="intervention-detail-title">Detalle de intervención<span v-if="intervencion"> · Máquina {{ eventView(intervencion).numeroMaquinaDisplay }}</span></h2><p v-if="intervencion">{{ tipoConfig[intervencion.tipoIntervencion]?.label || intervencion.tipoIntervencion }} · {{ intervencion.sector }} · Prioridad {{ prioridadLabel }} · {{ intervencion.estado === 'PENDIENTE' ? 'Pendiente' : intervencion.estado === 'EN_PROCESO' ? 'En proceso' : 'Completada' }}<span v-if="intervencion.critico" class="detail-critical"> · Crítica</span></p></div><button class="detail-button" aria-label="Cerrar detalle" :disabled="guardando || tomando" @click="close" v-tippy="'Cerrar detalle'"><X :size="18" /></button></header>
+        <header class="detail-header"><div><h2 id="intervention-detail-title">Detalle de intervención<span v-if="intervencion"> · Máquina {{ eventView(intervencion).numeroMaquinaDisplay }}</span></h2><p v-if="intervencion">{{ tipoConfig[intervencion.tipoIntervencion]?.label || intervencion.tipoIntervencion }} · {{ intervencion.sector }} · Prioridad {{ prioridadLabel }} · {{ intervencion.estado === 'PENDIENTE' ? 'Pendiente' : intervencion.estado === 'EN_PROCESO' ? 'En proceso' : 'Completada' }}<span v-if="intervencion.critico" class="detail-critical"> · Crítica</span></p></div><button class="detail-button" aria-label="Cerrar detalle" :disabled="guardando || tomando || attentionBusy" @click="close" v-tippy="'Cerrar detalle'"><X :size="18" /></button></header>
         <div v-if="loading" class="detail-message" role="status">Cargando intervención…</div>
         <div v-else-if="errorCarga" class="detail-message" role="alert">No se pudo cargar la intervención. <button class="detail-button" @click="subscribe">Reintentar</button></div>
         <div v-else-if="!intervencion" class="detail-message">Intervención no encontrada.</div>
@@ -385,9 +389,11 @@ const completar = async () => {
             </fieldset>
             <div v-if="diagnostico.piezaNombre" class="detail-piece"><strong>{{ diagnostico.piezaNombre }}</strong><p>Catálogo: {{ diagnostico.numeroCatalogo || '—' }} · Artículo: {{ diagnostico.numeroArticulo || '—' }}</p></div>
             <button v-if="denominacionSeleccionada" class="detail-button" :disabled="!denominacionSeleccionada.procedimiento?.length" @click="showProcedimientoViewer = true" v-tippy="denominacionSeleccionada.procedimiento?.length ? 'Consultar procedimiento de la pieza' : 'La pieza no tiene procedimiento'">Procedimiento</button>
+            <button v-if="userRole==='admin' && !intervencion.atencionVersion && !showAttention" class="detail-button" @click="showAttention=true">Circuito de atención · piloto</button>
+            <AttentionPanel v-if="intervencion.atencionVersion || showAttention" :key="intervencion.id" :item="intervencion" @busy="attentionBusy=$event" @dirty="attentionDirty=$event" />
           </section>
         </div>
-        <footer class="detail-actions"><span role="status">{{ guardando ? 'Guardando…' : tomando ? 'Tomando intervención…' : dirty ? 'Cambios sin guardar' : '' }}</span><div><button class="detail-button" :disabled="guardando || tomando" @click="close">Cerrar</button><button v-if="puedeTomarIntervencion" class="detail-button primary" :disabled="guardando || tomando" @click="tomarIntervencion">Tomar intervención</button><template v-if="puedeEditar"><button class="detail-button primary" :disabled="guardando || tomando" @click="guardarDiagnostico"><Save :size="16" />Guardar diagnóstico</button><button class="detail-button complete" :disabled="guardando || tomando" @click="completar"><CheckCircle2 :size="16" />Completar</button></template></div></footer>
+        <footer class="detail-actions"><span role="status">{{ guardando ? 'Guardando…' : tomando ? 'Tomando intervención…' : dirty ? 'Cambios sin guardar' : '' }}</span><div><button class="detail-button" :disabled="guardando || tomando || attentionBusy" @click="close">Cerrar</button><button v-if="puedeTomarIntervencion" class="detail-button primary" :disabled="guardando || tomando || attentionBusy" @click="tomarIntervencion">Tomar intervención</button><template v-if="puedeEditar"><button class="detail-button primary" :disabled="guardando || tomando || attentionBusy" @click="guardarDiagnostico"><Save :size="16" />Guardar diagnóstico</button><button class="detail-button complete" :disabled="guardando || tomando || attentionBusy" @click="completar"><CheckCircle2 :size="16" />Completar</button></template></div></footer>
         <div v-if="showProcedimientoViewer || fotoAmpliada" class="detail-nested-overlay" @click.self="showProcedimientoViewer = false; fotoAmpliada = false"><section class="detail-nested" role="dialog" aria-modal="true" aria-label="Información adjunta"><header><h3>{{ fotoAmpliada ? 'Foto adjunta' : 'Procedimiento · ' + denominacionSeleccionada?.denominacion }}</h3><button class="detail-button" aria-label="Cerrar información adjunta" @click="showProcedimientoViewer = false; fotoAmpliada = false"><X :size="18" /></button></header><div class="detail-nested-body"><OperationalImage v-if="fotoAmpliada" :src="intervencion.fotoUrl" /><ol v-else><li v-for="(step, index) in denominacionSeleccionada?.procedimiento" :key="index"><strong>{{ index + 1 }}.</strong> {{ step.texto }}<img v-if="step.imagenUrl" :src="step.imagenUrl" alt="Imagen del paso" /></li></ol></div></section></div>
       </section>
     </div>

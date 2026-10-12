@@ -5,6 +5,9 @@ import { getAuth } from 'firebase/auth';
 import { intervencionService } from '../services/intervencionService';
 import OperationalImage from './OperationalImage.vue';
 import IntervencionDetalle from './IntervencionDetalle.vue';
+import AttentionRehearsal from './AttentionRehearsal.vue';
+import { attentionLabel,attentionQueueMatches } from '../utils/attentionQueue';
+import { getSectorScope } from '../utils/sectorScope';
 import { userProfile, userRole } from '../services/authService';
 import { getEffectivePermisosForUser } from '../services/profileService';
 import { canExecuteIntervention } from '../utils/interventionAccess';
@@ -31,6 +34,7 @@ const filtroSector = ref('');
 const filtroAsignacion = ref('');
 const errorCarga = ref(false);
 const detalleId = ref(null);
+const ensayo = ref(false);
 let detalleTrigger;
 const abrirDetalle = item => { detalleTrigger = globalThis.document?.activeElement; detalleId.value = item.id; };
 const cerrarDetalle = async () => { detalleId.value = null; await nextTick(); if (detalleTrigger?.isConnected) detalleTrigger.focus(); };
@@ -54,8 +58,8 @@ const toggleMaqGroup = (key) => {
 
 // ── Sectores ───────────────────────────────────────────────────────────────────
 const sectoresUsuario = computed(() => {
-  if (!userProfile.value) return [DEFAULT_SECTOR];
-  return sanitizeSectorList(userProfile.value.sectoresAsignados, userProfile.value.sectorDefault);
+  try { return getSectorScope(userProfile.value) || ['HILANDERIA','TEJEDURIA']; }
+  catch { return []; }
 });
 
 // ── Suscripción realtime ───────────────────────────────────────────────────────
@@ -68,6 +72,7 @@ function cargarIntervenciones(sectores = sectoresUsuario.value) {
   intervenciones.value = [];
   loading.value = true;
   errorCarga.value = false;
+  if(!sectores.length) { loading.value=false; errorCarga.value=true; return; }
   unsubscribe = intervencionService.suscribirActivas(sectores, (docs) => {
     if (version !== subscriptionVersion) return;
     intervenciones.value = docs;
@@ -86,7 +91,7 @@ const countCompletado = computed(() => intervenciones.value.filter(i => i.estado
 const tabs = computed(() => [
   { id: 'PENDIENTE',  label: 'Pend.',    count: countPendiente.value },
   { id: 'EN_PROCESO', label: 'Proceso',  count: countEnProceso.value },
-  { id: 'COMPLETADO', label: 'Cerradas', count: countCompletado.value || null },
+  { id: 'COMPLETADO', label: 'Finaliz.', count: countCompletado.value || null },
   { id: 'TODO',       label: 'Todo',     count: null },
 ]);
 
@@ -97,12 +102,13 @@ const intervencionesFiltered = computed(() => {
   const term = busqueda.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   return list.filter(item => (presentacion.value === 'specialty' || !filtroTipo.value || item.tipoIntervencion === filtroTipo.value)
     && (!filtroSector.value || item.sector === filtroSector.value)
-    && (!filtroAsignacion.value || (filtroAsignacion.value === 'mine' ? isAssignedToMe(item) : !item.asignadoA))
+    && attentionQueueMatches(item,filtroAsignacion.value,currentUid())
     && (!term || [item.numeroMaquina, nombreMaquina(item), item.sintomaNombre, item.observaciones, item.asignadoNombre, item.creadoPorNombre, item.sector]
       .join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(term)))
     .sort((a, b) => calcPrioridad(a).score - calcPrioridad(b).score);
 });
 const limpiarFiltros = () => { busqueda.value = ''; filtroTipo.value = ''; filtroSector.value = ''; filtroAsignacion.value = ''; };
+const elegirBandeja = value => { filtroAsignacion.value=value; filtroEstado.value='TODO'; };
 const numeroCorto = item => eventView(item).numeroMaquinaDisplay;
 const fechaCompleta = ts => ts?.seconds ? new Date(ts.seconds * 1000).toLocaleString('es-AR') : 'Fecha pendiente';
 
@@ -218,6 +224,7 @@ const isAssignedToMe = (item) => item.asignadoA === currentUid();
 
 // Inspector solo puede tomar intervenciones de CALIDAD
 const canTomarItem = (item) => {
+  if(item.atencionVersion) return false;
   return canExecuteIntervention(userRole.value,
     getEffectivePermisosForUser(userRole.value, userProfile.value?.permisosPersonalizados), item);
 };
@@ -274,7 +281,7 @@ const onTomarGrupo = async (grupo) => {
 </script>
 
 <template>
-  <div class="interventions-page min-h-screen bg-gray-50 pb-8" :inert="detalleId !== null">
+  <div class="interventions-page min-h-screen bg-gray-50 pb-8" :inert="detalleId !== null || ensayo">
     <header class="management-header"><div><h1>Intervenciones</h1><p>Gestión de solicitudes · Prioridad más alta primero</p></div><button v-if="canDespacharIntervencion(userRole)" class="management-button primary" @click="router.push('/llamar')" v-tippy="'Registrar una nueva solicitud de intervención'"><Plus :size="16" />Nueva solicitud</button></header>
 
     <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -313,10 +320,11 @@ const onTomarGrupo = async (grupo) => {
     </div>
     </div>
     <div class="management-filters">
+      <button v-if="userRole==='admin'" class="management-button" @click="ensayo=true" v-tippy="'Probar asignación, aceptación, espera y relevo con datos ficticios'">Ensayar atención</button>
       <label class="management-search">Buscar<input v-model="busqueda" type="search" placeholder="Máquina, síntoma o persona…" /></label>
       <label v-if="presentacion === 'table'">Categoría<select v-model="filtroTipo"><option value="">Todas</option><option v-for="(config, key) in tipoConfig" :key="key" :value="key">{{ config.label }}</option></select></label>
       <label v-if="sectoresUsuario.length > 1">Sector<select v-model="filtroSector"><option value="">Todos los permitidos</option><option v-for="sector in sectoresUsuario" :key="sector" :value="sector">{{ sector }}</option></select></label>
-      <label>Asignación<select v-model="filtroAsignacion"><option value="">Todas</option><option value="mine">Asignadas a mí</option><option value="free">Sin asignar</option></select></label>
+      <label>Bandeja<select :value="filtroAsignacion" @change="elegirBandeja($event.target.value)"><option value="">Todas</option><option value="mine">Mi trabajo abierto</option><option value="free">Sin asignar</option><option value="accept">Sin aceptar · piloto</option><option value="waiting">En espera · piloto</option><option value="review">Por validar · piloto</option></select></label>
       <button class="management-button" @click="limpiarFiltros" v-tippy="'Limpiar búsqueda, categoría, sector y asignación'">Limpiar</button>
     </div>
 
@@ -357,7 +365,7 @@ const onTomarGrupo = async (grupo) => {
                 <tr v-for="item in group.items" :key="item.id" :class="{ 'specialty-stopped': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
                   <td><strong>{{ numeroCorto(item) }}</strong><small v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</small></td>
                   <td><span class="specialty-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span><small v-if="item.critico" class="text-red-600">Crítica</small></td>
-                  <td><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ estadoConfig[item.estado]?.label || item.estado }}</span><small>{{ item.asignadoNombre || 'Sin asignar' }}</small></td>
+                  <td><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="specialty-badge" :class="estadoConfig[item.estado]?.bg">{{ attentionLabel(item) }}</span><small>{{ item.asignadoNombre || 'Sin asignar' }}</small></td>
                   <td><button class="management-button specialty-detail-button" :aria-label="'Detalle de máquina ' + numeroCorto(item)" @click="abrirDetalle(item)" v-tippy="'Abrir detalle y acciones'"><ChevronRight :size="16" /></button></td>
                 </tr>
               </tbody></table>
@@ -371,9 +379,9 @@ const onTomarGrupo = async (grupo) => {
         <tr v-for="item in g.items" :key="item.id" :class="{ 'stopped-row': item.estadoMaquina === 'PARADA' && item.estado !== 'COMPLETADO' }">
           <td><span class="management-badge" :class="prioConfig[calcPrioridad(item).level].bg">{{ prioConfig[calcPrioridad(item).level].label }}</span><small v-if="item.critico">Crítica</small></td>
           <td><strong>{{ numeroCorto(item) }}</strong><small>{{ item.tipoMaquina }} · {{ item.sector }}</small><small v-if="item.grupoTelar">GP {{ item.grupoTelar }}<span v-if="item.gmTelar"> · GM {{ item.gmTelar }}</span></small></td>
-          <td><span class="management-badge" :class="tipoConfig[item.tipoIntervencion]?.bg">{{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }}</span><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="management-badge" :class="estadoConfig[item.estado]?.bg">{{ estadoConfig[item.estado]?.label || item.estado }}</span></td>
+          <td><span class="management-badge" :class="tipoConfig[item.tipoIntervencion]?.bg">{{ tipoConfig[item.tipoIntervencion]?.label || item.tipoIntervencion }}</span><small :class="estadoMaqConfig[item.estadoMaquina]?.color">{{ estadoMaqConfig[item.estadoMaquina]?.label }}</small><span class="management-badge" :class="estadoConfig[item.estado]?.bg">{{ attentionLabel(item) }}</span></td>
           <td class="request-description"><strong>{{ item.sintomaNombre || item.motivoDescripcion || 'Solicitud de asistencia' }}</strong><p>{{ item.observaciones }}</p><small v-if="item.fotoUrl">Foto adjunta</small></td>
-          <td>{{ item.asignadoNombre || 'Sin asignar' }}<small>Solicita: {{ item.creadoPorNombre || 'Sin identificar' }}</small></td>
+          <td>{{ item.asignadoNombre || 'Sin asignar' }}<small v-if="item.proximaAccion">{{ item.proximaAccion }}</small><small>Solicita: {{ item.creadoPorNombre || 'Sin identificar' }}</small></td>
           <td><span v-tippy="fechaCompleta(item.createdAt)">{{ timeAgo(item.createdAt) }}</span></td>
           <td><div class="management-row-actions"><button class="management-button" @click="abrirDetalle(item)" v-tippy="'Abrir detalle, diagnóstico y acciones'">Detalle</button><button v-if="item.estado === 'PENDIENTE' && canTomarItem(item)" class="management-button primary" :disabled="!!actualizando" @click="onTomar(item)">{{ actualizando === item.id ? 'Tomando…' : 'Tomar' }}</button></div></td>
         </tr>
@@ -442,7 +450,7 @@ const onTomarGrupo = async (grupo) => {
                   </span>
                   <span class="ml-auto inline-flex px-2 py-0.5 rounded-full text-[10px] font-black"
                     :class="estadoConfig[item.estado]?.bg || 'bg-gray-100 text-gray-600'"
-                  >{{ estadoConfig[item.estado]?.label || item.estado }}</span>
+                  >{{ attentionLabel(item) }}</span>
                 </div>
 
                 <!-- Síntoma + obs -->
@@ -607,6 +615,7 @@ const onTomarGrupo = async (grupo) => {
     </div>
   </div>
   <IntervencionDetalle v-if="detalleId" :key="detalleId" :id="detalleId" @close="cerrarDetalle" />
+  <AttentionRehearsal v-if="ensayo" @close="ensayo=false" />
 </template>
 
 <style scoped>

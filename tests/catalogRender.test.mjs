@@ -9,6 +9,9 @@ import { catalogColumnLayout } from '../src/utils/catalogColumnLayout.js';
 import { createLatestLoad } from '../src/utils/latestLoad.js';
 import { eventView, filterFaultEvents, faultEventWindow } from '../src/utils/faultEvents.js';
 import { canExecuteIntervention } from '../src/utils/interventionAccess.js';
+import { attentionLabel,attentionQueueMatches } from '../src/utils/attentionQueue.js';
+import * as attentionPolicy from '../functions/attentionPolicy.js';
+import * as attentionQueue from '../src/utils/attentionQueue.js';
 import { formatSummary } from '../src/utils/formatSummary.js';
 import { plantDate, addDays, PLANT_TIME_ZONE } from '../src/utils/plantTime.js';
 
@@ -51,6 +54,46 @@ function host({ missingDesktopPortal = false } = {}) {
   });
   return { renderer, root: node('root'), body };
 }
+
+function attentionComponent(name,dependencies) {
+  const { descriptor }=parse(fs.readFileSync(new URL(`../src/components/${name}.vue`,import.meta.url),'utf8'));
+  const script=compileScript(descriptor,{ id:'attention-'+name }),template=compileTemplate({ id:'attention-'+name,source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
+  assert.deepEqual(template.errors,[]);
+  const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies); return component;
+}
+test('attention panel preserves drafts and retries the same operation after uncertain confirmation and rejects stale edits',async()=>{
+  const data=new Map(),previousStorage=globalThis.localStorage;
+  globalThis.localStorage={ getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value),removeItem:key=>data.delete(key) };
+  const record=Vue.reactive({ id:'task-one',sector:'TEJEDURIA',tipoIntervencion:'MECANICO',estado:'PENDIENTE',atencionVersion:1,atencionEstado:'ASIGNADA',atencionRevision:1,asignadoA:'tech' });
+  const calls=[]; let fail=true,unsubscribed=false;
+  const dependencies={ vue:Vue,'../../functions/attentionPolicy.js':attentionPolicy,'../utils/attentionQueue':attentionQueue,'../utils/tooltipDirective':{ vTippy },'../services/attentionService':{
+    loadAttentionContext:async()=>({ enabled:true,uid:'tech',profile:{ role:'mecanico',sectoresAsignados:['TEJEDURIA'] },organization:{} }),
+    subscribeAttentionEvents:(id,receive)=>{ receive([]); return ()=>unsubscribed=true; },
+    transitionAttention:async command=>{ calls.push({ ...command }); if(fail) throw Object.assign(new Error('Respuesta no confirmada'),{ code:'functions/unavailable' }); return { revision:2,replayed:true }; },
+  } };
+  const component=attentionComponent('AttentionPanel',dependencies),{ renderer,root }=host(),app=renderer.createApp(component,{ item:record }),errors=[];
+  app.config.errorHandler=error=>errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
+  try {
+    await new Promise(resolve=>setImmediate(resolve)); assert.deepEqual(state.actions,['aceptar']);
+    state.draft.action='aceptar'; await Vue.nextTick(); await state.submit(); assert.equal(state.dirty,true); assert.match(state.error,/confirmada/); assert.ok(data.size);
+    record.atencionRevision=2; record.atencionEstado='ACEPTADA'; await Vue.nextTick(); fail=false; await state.submit();
+    assert.equal(calls.length,2); assert.equal(calls[0].operationId,calls[1].operationId); assert.equal(calls[1].expectedRevision,1); assert.equal(state.dirty,false); assert.equal(data.size,0);
+    state.draft.action='iniciar'; await Vue.nextTick(); record.atencionRevision=3; await Vue.nextTick(); assert.equal(state.stale,true); await state.submit(); assert.equal(calls.length,2);
+    state.draftRevision=3; await state.submit(); assert.equal(calls[2].expectedRevision,3); assert.equal(state.busy,false); assert.deepEqual(errors,[]);
+  } finally { app.unmount(); globalThis.localStorage=previousStorage; }
+  assert.equal(unsubscribed,true);
+});
+test('attention rehearsal renders real panels without calling live services and protects unsaved actor changes',async()=>{
+  let calls=0,confirm=false;
+  const panel=attentionComponent('AttentionPanel',{ vue:Vue,'../../functions/attentionPolicy.js':attentionPolicy,'../utils/attentionQueue':attentionQueue,'../utils/tooltipDirective':{ vTippy },'../services/attentionService':{ loadAttentionContext:async()=>{calls++;},subscribeAttentionEvents:()=>{calls++;},transitionAttention:()=>{calls++;} } });
+  const component=attentionComponent('AttentionRehearsal',{ vue:Vue,sweetalert2:{ fire:async()=>({ isConfirmed:confirm }) },'./AttentionPanel.vue':panel,'../utils/attentionQueue':attentionQueue,'../../functions/attentionPolicy.js':attentionPolicy,'../utils/tooltipDirective':{ vTippy } });
+  const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error=>errors.push(error); app.mount(root);
+  const state=root._vnode.component.setupState;
+  assert.equal(state.visible.length,3); state.dirty=true; await state.switchActor({ target:{ value:'demo-electrician' } }); assert.equal(state.actorId,'demo-coordinator');
+  confirm=true; await state.switchActor({ target:{ value:'demo-electrician' } }); await Vue.nextTick(); assert.deepEqual(attentionPolicy.attentionSpecialties(state.actor),['ELECTRICO']);
+  state.filter='mine'; assert.equal(state.visible.length,0); state.filter=''; await state.reset(); await Vue.nextTick(); assert.equal(state.actorId,'demo-coordinator');
+  assert.equal(calls,0); assert.deepEqual(errors,[]); app.unmount();
+});
 
 test('history uses bounded pages, ignores stale responses, opens detail and generates safe AI only on demand', async () => {
   const { descriptor } = parse(fs.readFileSync(new URL('../src/components/HistoricoNovedades.vue', import.meta.url), 'utf8'));
@@ -157,9 +200,11 @@ test('intervention management filters grouped requests and only takes permitted 
   const dependencies = {
     vue: Vue, 'lucide-vue-next': icons, 'vue-router': { useRouter: () => ({ push() {} }) },
     'firebase/auth': { getAuth: () => ({ currentUser: { uid:'inspector', displayName:'Inspector' } }) },
-    '../services/authService': { userRole:Vue.ref('inspector'), userProfile:Vue.ref({ sectoresAsignados:['TEJEDURIA'] }) },
+    '../services/authService': { userRole:Vue.ref('inspector'), userProfile:Vue.ref({ role:'inspector',sectoresAsignados:['TEJEDURIA'] }) },
     '../services/profileService': { getEffectivePermisosForUser: () => ({}) },
     '../utils/interventionAccess': { canExecuteIntervention }, '../utils/faultEvents': { eventView },
+    '../utils/attentionQueue': { attentionLabel,attentionQueueMatches }, '../utils/sectorScope': { getSectorScope:profile=>profile.sectoresAsignados },
+    './AttentionRehearsal.vue': { render:()=>Vue.h('div') },
     '../utils/tooltipDirective': { vTippy },
     '../constants/organization': { DEFAULT_SECTOR:'TEJEDURIA', normalizeSectorValue:v => v,
       sanitizeSectorList:v => v, canDespacharIntervencion: () => true },
@@ -995,18 +1040,18 @@ test('user administration renders all tabs and keeps role/sector drafts isolated
   const template=compileTemplate({ id:'users-test',source:descriptor.template.content,compilerOptions:{ bindingMetadata:script.bindings } });
   assert.deepEqual(template.errors,[]);
   const role=Vue.ref('admin'),writes=[],override=Vue.ref({}); let failWrite=true,confirm=false,leave,failLoad=false;
-  const employee={ id:'legacy',email:'legacy@example.test',displayName:'José Operador',role:'mecanico',sectorDefault:'TEJEDURIA',sectoresAsignados:['TEJEDURIA'] };
+  const employee={ id:'legacy',email:'legacy@example.test',displayName:'José Operador',role:'mecanico',sectorDefault:'TEJEDURIA',sectoresAsignados:['TEJEDURIA'],especialidades:['MECANICO'] };
   const dependencies={ vue:Vue,'vue-router':{ onBeforeRouteLeave:callback => { leave=callback; } },'lucide-vue-next':icons,'../firebase/config':{ db:{} },'../services/authService':{ userRole:role },'../constants/organization':organization,'../utils/tooltipDirective':{ vTippy },sweetalert2:{ fire:async () => ({ isConfirmed:confirm }) },'../services/profileService':{ profileOverrides:override,loadProfiles:async () => {},saveProfiles:async () => {},getEffectiveVistas:r => organization.ROLE_PROFILES[r]?.vistas || [],getEffectivePermisos:r => organization.ROLE_PROFILES[r]?.permisos || {},getDefaultRoute:() => '/',getEffectiveDescripcion:r => organization.ROLE_PROFILES[r]?.descripcion || '',getEffectiveNivel:r => organization.ROLE_PROFILES[r]?.nivel || 'operativo',getEffectiveSectorDefault:() => 'TEJEDURIA' },'firebase/firestore':{ collection:() => 'usuarios',doc:(db,...path) => path.join('/'),query:() => assert.fail('User listing must include documents without createdAt'),orderBy:() => assert.fail('No date-only listing'),getDoc:async () => { if(failLoad) throw new Error('Config offline'); return { exists:() => true,data:() => ({ roles:organization.ROLE_OPTIONS,sectores:['TEJEDURIA','HILANDERIA'] }) }; },getDocs:async () => ({ docs:[{ id:employee.id,data:() => employee },{ id:'unapproved',data:() => ({ displayName:'Sin rol' }) }] }),setDoc:async () => {},updateDoc:async (path,data) => { writes.push({ path,data }); if(failWrite) throw new Error('Write failed'); } } };
   const component=evaluate(script.content,dependencies); component.render=evaluate(template.code,dependencies);
   const { renderer,root }=host(),app=renderer.createApp(component),errors=[]; app.config.errorHandler=error => errors.push(error); app.mount(root); const state=root._vnode.component.setupState;
   await new Promise(resolve => setImmediate(resolve)); assert.equal(state.isLoading,false); assert.equal(state.usuarios.length,2); assert.equal(state.usuarios.find(user => user.id==='unapproved').role,'pendiente');
   state.searchQuery='jose'; assert.equal(state.filteredUsuarios.length,1); state.searchQuery=''; state.filterSector='HILANDERIA'; assert.equal(state.filteredUsuarios.length,1); state.filterSector='';
   state.activeTab='perfiles'; await Vue.nextTick(); assert.ok(state.rolesByNivel.length); state.perfilesViewMode='editor'; await Vue.nextTick(); state.activeTab='config'; await Vue.nextTick(); state.activeTab='usuarios'; await Vue.nextTick();
-  const original=state.usuarios.find(user => user.id==='legacy'); state.selectUser(original); state.selectedUser.role='inspector'; state.selectedUser.sectoresAsignados.push('HILANDERIA');
+  const original=state.usuarios.find(user => user.id==='legacy'); state.selectUser(original); state.selectedUser.role='inspector'; state.selectedUser.sectoresAsignados.push('HILANDERIA'); state.selectedUser.especialidades.push('CALIDAD'); assert.deepEqual(original.especialidades,['MECANICO']);
   assert.equal(original.role,'mecanico'); assert.deepEqual(original.sectoresAsignados,['TEJEDURIA']); assert.equal(state.isDirty,true);
   assert.equal(await state.closeUser(),false); assert.equal(await leave(),false);
   await state.guardarConfiguracion(state.selectedUser); assert.equal(state.saveError,'Write failed'); assert.equal(original.role,'mecanico'); assert.equal(state.selectedUser.role,'inspector');
-  failWrite=false; await state.guardarConfiguracion(state.selectedUser); assert.equal(original.role,'inspector'); assert.deepEqual(original.sectoresAsignados,['TEJEDURIA','HILANDERIA']); assert.equal(state.isDirty,false);
+  failWrite=false; await state.guardarConfiguracion(state.selectedUser); assert.equal(original.role,'inspector'); assert.deepEqual(original.sectoresAsignados,['TEJEDURIA','HILANDERIA']); assert.deepEqual(original.especialidades,['MECANICO','CALIDAD']); assert.equal(state.isDirty,false);
   await state.closeUser(); assert.equal(state.selectedUser,null); state.selectUser(original); role.value='mecanico'; const count=writes.length; await state.guardarConfiguracion(state.selectedUser); assert.equal(writes.length,count); await state.closeUser(); role.value='admin';
   failLoad=true; await state.reloadAll(); assert.equal(state.isLoading,false); assert.match(state.loadError,/configuración/); failLoad=false; await state.reloadAll(); assert.equal(state.loadError,'');
   assert.deepEqual(errors,[]); app.unmount();

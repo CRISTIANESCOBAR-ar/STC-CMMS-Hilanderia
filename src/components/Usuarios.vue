@@ -431,6 +431,7 @@ const getUserSnapshot = (user) => {
     jefeDeSectores: [...(user.jefeDeSectores || [])].sort(),
     vistasPersonalizadas: user.vistasPersonalizadas ? [...user.vistasPersonalizadas].sort() : null,
     permisosPersonalizados: user.permisosPersonalizados ? { ...user.permisosPersonalizados } : null,
+    especialidades: Array.isArray(user.especialidades) ? [...user.especialidades].sort() : null,
   };
 };
 
@@ -440,7 +441,7 @@ const isDirty = computed(() => {
   return JSON.stringify(currentSnap) !== editSnapshot.value;
 });
 
-const structuredCloneUser = user => ({ ...user, sectoresAsignados:[...(user.sectoresAsignados || [])],jefeDeSectores:[...(user.jefeDeSectores || [])],vistasPersonalizadas:Array.isArray(user.vistasPersonalizadas) ? [...user.vistasPersonalizadas]:null,permisosPersonalizados:user.permisosPersonalizados ? { ...user.permisosPersonalizados }:null });
+const structuredCloneUser = user => ({ ...user, ...(Array.isArray(user.especialidades) ? { especialidades:[...user.especialidades] }:{}),sectoresAsignados:[...(user.sectoresAsignados || [])],jefeDeSectores:[...(user.jefeDeSectores || [])],vistasPersonalizadas:Array.isArray(user.vistasPersonalizadas) ? [...user.vistasPersonalizadas]:null,permisosPersonalizados:user.permisosPersonalizados ? { ...user.permisosPersonalizados }:null });
 const selectUser = (user) => {
   if(savingUser.value) return;
   previousFocus=globalThis.document?.activeElement; saveError.value='';
@@ -462,6 +463,7 @@ const discardChanges = () => {
   selectedUser.value.jefeDeSectores = [...original.jefeDeSectores];
   selectedUser.value.vistasPersonalizadas = original.vistasPersonalizadas ? [...original.vistasPersonalizadas] : null;
   selectedUser.value.permisosPersonalizados = original.permisosPersonalizados ? { ...original.permisosPersonalizados } : null;
+  selectedUser.value.especialidades = original.especialidades ? [...original.especialidades] : null;
   editSnapshot.value = JSON.stringify(getUserSnapshot(selectedUser.value));
 };
 
@@ -487,6 +489,7 @@ const guardarConfiguracion = async (user) => {
     jefeDeSectores,
     vistasPersonalizadas: Array.isArray(user.vistasPersonalizadas) ? user.vistasPersonalizadas : null,
     permisosPersonalizados: (user.permisosPersonalizados && typeof user.permisosPersonalizados === 'object') ? user.permisosPersonalizados : null,
+    ...(Array.isArray(user.especialidades) ? { especialidades:[...new Set(user.especialidades)].filter(value=>['MECANICO','ELECTRICO','CALIDAD'].includes(value)) } : user.especialidades===null ? { especialidades:null } : {}),
   };
 
   savingUser.value=true; saveError.value='';
@@ -1113,6 +1116,15 @@ onMounted(reloadAll);
                 <p v-if="saveError" class="user-error" role="alert">{{ saveError }}</p>
 
                 <!-- Section: Identidad -->
+                <div class="space-y-3">
+                  <h4 class="text-xs font-semibold text-indigo-600">Especialidad de atención · piloto</h4>
+                  <p class="text-xs text-gray-500">Complementa el rol y los sectores. Se aplica al nuevo circuito cuando se habilite el piloto.</p>
+                  <label class="text-xs flex items-center gap-2"><input type="checkbox" :checked="Array.isArray(selectedUser.especialidades)" @change="selectedUser.especialidades=$event.target.checked ? [] : null" />Definir especialidades para esta persona</label>
+                  <div v-if="Array.isArray(selectedUser.especialidades)" class="flex flex-wrap gap-3">
+                    <label v-for="specialty in [{ id:'MECANICO',label:'Mecánica' },{ id:'ELECTRICO',label:'Electricidad' },{ id:'CALIDAD',label:'Calidad' }]" :key="specialty.id" class="text-xs flex items-center gap-2"><input type="checkbox" v-model="selectedUser.especialidades" :value="specialty.id" />{{ specialty.label }}</label>
+                  </div>
+                  <p class="text-xs text-gray-500">Sin selección personalizada se usa la especialidad del rol. Una lista personalizada vacía impide ejecutar tareas del piloto.</p>
+                </div>
                 <div class="space-y-3">
                   <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Información Personal</h4>
                   <div class="grid grid-cols-2 gap-3">

@@ -49,6 +49,7 @@ export const VISTA_OPTIONS = [
 export const VISTA_LABEL = Object.fromEntries(VISTA_OPTIONS.map(v => [v.slug, v.label]));
 
 export const PERMISO_LABELS = {
+  coordinarAtencion: 'Coordinar atención (piloto)',
   verCalidad: 'Ver Calidad',
   crearFalla: 'Crear Falla',
   cerrarOrden: 'Cerrar Orden',

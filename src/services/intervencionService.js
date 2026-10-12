@@ -5,6 +5,7 @@ import { getAuth } from 'firebase/auth';
 import { DEFAULT_SECTOR, normalizeSectorValue } from '../constants/organization';
 import { sectorConstraints } from './accessScope';
 import { finalizeOperationalUpload } from './operationalImageService';
+import { subscribeActiveInterventions } from './interventionLiveQueue';
 
 const COLLECTION_NAME = 'intervenciones';
 
@@ -123,34 +124,9 @@ export const intervencionService = {
    * Acepta string o array de sectores.
    */
   suscribirActivas(sector, callback, onError) {
-    const sectores = (Array.isArray(sector) ? sector : [sector])
-      .map(s => normalizeSectorValue(s))
-      .filter(Boolean);
-    const q = sectores.length === 1
-      ? query(collection(db, COLLECTION_NAME), where('sector', '==', sectores[0]))
-      : query(collection(db, COLLECTION_NAME), where('sector', 'in', sectores));
-    return onSnapshot(q, (snap) => {
-      const ahora = Date.now() / 1000;
-      const docs = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(d => {
-          if (['PENDIENTE', 'EN_PROCESO'].includes(d.estado)) return true;
-          // Mostrar COMPLETADO de las últimas 24h
-          if (d.estado === 'COMPLETADO') {
-            const fin = d.fechaFin?.seconds || 0;
-            return (ahora - fin) < 86400;
-          }
-          return false;
-        })
-        .sort((a, b) => {
-          const order = { PENDIENTE: 0, EN_PROCESO: 1, COMPLETADO: 2 };
-          if (a.estado !== b.estado) return (order[a.estado] ?? 9) - (order[b.estado] ?? 9);
-          return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-        });
-      callback(docs);
-    }, onError);
+    const sectores=(Array.isArray(sector) ? sector:[sector]).map(s=>normalizeSectorValue(s));
+    return subscribeActiveInterventions(db,sectores,callback,onError);
   },
-
   /**
    * Suscripción en tiempo real a intervenciones pendientes de un sector.
    */

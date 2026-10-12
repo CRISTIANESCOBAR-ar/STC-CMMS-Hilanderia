@@ -71,6 +71,7 @@ test('linking requires an explicit fault id and matching full machine identity a
   const result=planAttention({ record:base,actor:chief,actorUid:'chief',command:{ action:'preparar',sourceId:'fault' },source,timestamp:'server' });
   assert.equal(result.patch.reporteOrigenId,'fault');
   assert.throws(()=>planAttention({ record:base,actor:chief,actorUid:'chief',command:{ action:'preparar',sourceId:'fault' },source:{ ...source,numeroMaquina:165001 },timestamp:'server' }),/cambió/);
+  assert.throws(()=>planAttention({ record:{ ...base,numeroMaquina:undefined,tipoMaquina:undefined },actor:chief,actorUid:'chief',command:{ action:'preparar',sourceId:'fault' },source:{ ...source,numeroMaquina:undefined,tipoMaquina:undefined },timestamp:'server' }),/cambió/);
 });
 test('command boundary rejects privilege injection, unsafe document ids and invalid revision',()=>{
   const valid={ interventionId:'one',operationId:'op-1',expectedRevision:0,action:'aceptar' };

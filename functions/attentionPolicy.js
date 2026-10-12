@@ -60,7 +60,7 @@ export function planAttention({ record,actor,actorUid,organization={},command,ta
       if (record.atencionVersion || record.estado!=='PENDIENTE' || record.asignadoA) fail();
       patch.atencionEstado='REPORTADA';
       if (command.sourceId) {
-        if (!source || source.sector!==record.sector || String(source.numeroMaquina)!==String(record.numeroMaquina) || source.tipoMaquina!==record.tipoMaquina || source.estado==='resuelto') fail();
+        if (!source || !['string','number'].includes(typeof record.numeroMaquina) || !String(record.numeroMaquina).trim() || typeof record.tipoMaquina!=='string' || !record.tipoMaquina.trim() || source.sector!==record.sector || String(source.numeroMaquina)!==String(record.numeroMaquina) || source.tipoMaquina!==record.tipoMaquina || source.estado==='resuelto') fail();
         patch.reporteOrigenId=command.sourceId;
       }
       break;
